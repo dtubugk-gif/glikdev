@@ -1,3 +1,11 @@
 [
-  { "day": 1, "date": "2026-11-19", "title": "An empty world", "idea": "Nothing yet. You decide.", "by": null }
+  {
+    "day": 1,
+    "date": "2026-11-19",
+    "title": "An empty world",
+    "headline": "This world is empty.",
+    "idea": "Nothing yet. You decide.",
+    "by": null,
+    "alt": "An empty grey baseplate with a faint grid, stretching away to the horizon under a daylight sky"
+  }
 ]
