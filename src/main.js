@@ -1,10 +1,13 @@
-// Glikdev - Day 1. Glue: URL modes, UI, Day log, the world and the render loop.
+// Glikdev. Glue: URL modes, UI, Day log, the world and the render loop. The title card and the Day log
+// come from days.json at runtime (the newest entry), so a new day only adds an entry there.
 //   ?demo=orbit | ?demo=reveal   scripted camera, driven only by frame time (for filming)
 //   ?ui=0                        hide every piece of UI
 //   ?capture=short               Shorts layout: record at 360x640 CSS with deviceScaleFactor 3
 // window.renderFrame(t) renders the frame at t seconds (used by frame-exact recorders);
 // window.__ready resolves once the world has drawn its first frame.
-import { renderDayLog } from './daylog.js';
+// Cache safety: index.html loads this file as src/main.js?v=<build> and maps every module to the same
+// ?v= through its import map; data and model URLs below get the same stamp (deploy.mjs writes it).
+import { renderDayLog, renderHeadline, latestDay } from './daylog.js';
 import { DEMOS, demoPose } from './demo.js';
 
 // Set this to the channel's URL once it exists (for example 'https://www.youtube.com/@glikdev').
@@ -23,20 +26,34 @@ const $ = (id) => document.getElementById(id);
 const statusEl = $('status');
 const hintEl = $('hint');
 
+const BUILD = new URL(import.meta.url).searchParams.get('v') || '';
+const stamped = (url) => (BUILD ? `${url}${url.includes('?') ? '&' : '?'}v=${encodeURIComponent(BUILD)}` : url);
+// a snapshot lives at days/NN/: its links to other days go back to the site root first
+const SITE_ROOT = /\/days\/\d+\/(?:index\.html)?$/.test(location.pathname) ? '../../' : '';
+
 let resolveReady;
 window.__ready = new Promise((r) => { resolveReady = r; });
+let onCopyChange = () => {};
 
-// ---------------------------------------------------------------- Day log
+// ---------------------------------------------------------------- Day log + title card
 const dialog = $('daylog');
 const list = $('daylog-list');
-fetch('days.json', { cache: 'no-cache' })
+const daysLoaded = fetch(stamped('days.json'), { cache: 'no-cache' })
   .then((r) => { if (!r.ok) throw new Error(`days.json ${r.status}`); return r.json(); })
-  .then((days) => renderDayLog(list, days))
+  .then((days) => {
+    renderDayLog(list, days, { root: SITE_ROOT });
+    renderHeadline({ day: document.querySelector('.title-day'), line: document.querySelector('.title-line'), bubble: document.querySelector('.bubble') }, days);
+    const last = latestDay(days);
+    if (last && typeof last.alt === 'string' && last.alt.trim()) $('world').setAttribute('aria-label', last.alt.trim());
+    onCopyChange();
+    return days;
+  })
   .catch(() => {
     const li = document.createElement('li');
     li.className = 'daylog-empty';
     li.textContent = 'The Day log could not be loaded. Reload to try again.';
     list.replaceChildren(li);
+    return null;
   });
 
 const openBtn = $('daylog-open');
@@ -98,11 +115,12 @@ async function start() {
 
   let world;
   try {
-    world = await createWorld({ renderer, modelUrl: 'models/day1.glb', phone: coarse || innerWidth < 760 });
+    world = await createWorld({ renderer, modelUrl: stamped('models/day1.glb'), phone: coarse || innerWidth < 760 });
   } catch (err) { showLoadError(err); return; }
   const { camera } = world;
   world.setAnimate(demo ? true : !reducedMotion);
 
+  let hinted = false;
   // Orbit the centre of the plate. The start view looks along the grid at a slight angle,
   // so the lines run off toward the horizon in perspective.
   const target = [0, PLATE.topY, 0];
@@ -161,7 +179,10 @@ async function start() {
   layout();
   rig.setPose(home);
   // web fonts change the bubble's height: frame again once they are in
-  document.fonts?.ready.then(() => { layout(); rig.setPose({ az: rig.goal.az, pol: home.pol, dist: home.dist }); });
+  // web fonts and the day's copy change the bubble's height: frame again (unless someone is already looking around)
+  const reframe = () => { layout(); if (!hinted) rig.setPose({ az: rig.goal.az, pol: home.pol, dist: home.dist }); };
+  document.fonts?.ready.then(reframe);
+  onCopyChange = reframe;
   addEventListener('resize', () => {
     const before = home.dist;
     layout();
@@ -175,7 +196,6 @@ async function start() {
     hintEl.textContent = coarse ? 'Drag to look around · Pinch to zoom' : 'Drag to look around · Scroll or W/S to zoom';
     hintEl.hidden = false;
   }
-  let hinted = false;
   function dismissHint() {
     if (hinted) return;
     hinted = true;
@@ -222,7 +242,7 @@ async function start() {
   const ray = new THREE.Raycaster();
   const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   window.__glikdev = {
-    world, rig, home,
+    world, rig, home, daysLoaded, build: BUILD,
     /** Screen height fraction (from the top) of the visible horizon: the plate's far edge. */
     horizonFrac() {
       camera.updateMatrixWorld();
@@ -265,6 +285,7 @@ async function start() {
   statusEl.hidden = true;
   root.classList.add('world-ready');
   requestAnimationFrame(frame);
+  await daysLoaded;                                        // the title card shows the right day before "ready"
   resolveReady(true);
 }
 

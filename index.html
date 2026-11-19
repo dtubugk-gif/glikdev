@@ -16,18 +16,34 @@
   <meta property="og:image:height" content="900">
   <meta property="og:image:alt" content="An empty grey baseplate with a faint grid under a daylight sky">
   <meta name="twitter:card" content="summary_large_image">
-  <link rel="icon" href="logo.svg" type="image/svg+xml">
+  <link rel="icon" href="logo.svg?v=dev" type="image/svg+xml">
   <link rel="preload" href="fonts/fredoka-700.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/rubik-latin.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="modulepreload" href="vendor/three/three.module.js">
-  <link rel="stylesheet" href="style.css">
-  <script type="module" src="src/main.js"></script>
+  <!-- Cache safety: every module is loaded with the same ?v= build stamp (tools/deploy.mjs rewrites
+       "?v=..." everywhere in this file). New modules must be added to this import map. -->
+  <script type="importmap">
+  {
+    "imports": {
+      "./src/main.js": "./src/main.js?v=dev",
+      "./src/daylog.js": "./src/daylog.js?v=dev",
+      "./src/demo.js": "./src/demo.js?v=dev",
+      "./src/world.js": "./src/world.js?v=dev",
+      "./src/controls.js": "./src/controls.js?v=dev",
+      "./vendor/three/three.module.js": "./vendor/three/three.module.js?v=dev",
+      "./vendor/three/addons/loaders/GLTFLoader.js": "./vendor/three/addons/loaders/GLTFLoader.js?v=dev",
+      "./vendor/three/addons/utils/BufferGeometryUtils.js": "./vendor/three/addons/utils/BufferGeometryUtils.js?v=dev"
+    }
+  }
+  </script>
+  <link rel="modulepreload" href="vendor/three/three.module.js?v=dev">
+  <link rel="stylesheet" href="style.css?v=dev">
+  <script type="module" src="src/main.js?v=dev"></script>
 </head>
 <body>
   <!-- shown while the world loads (and as the backdrop when 3D is not available) -->
   <picture class="poster" id="poster">
-    <source media="(orientation: portrait)" srcset="poster-portrait.jpg" width="780" height="1688">
-    <img src="poster.jpg" alt="" width="1440" height="900" fetchpriority="high" decoding="async">
+    <source media="(orientation: portrait)" srcset="poster-portrait.jpg?v=dev" width="780" height="1688">
+    <img src="poster.jpg?v=dev" alt="" width="1440" height="900" fetchpriority="high" decoding="async">
   </picture>
 
   <canvas id="world" role="img" aria-label="An empty grey baseplate with a faint grid, stretching away to the horizon under a daylight sky"></canvas>
@@ -35,10 +51,11 @@
   <div class="ui" id="ui">
     <header class="title">
       <p class="eyebrow">
-        <img class="logo" src="logo.svg" alt="Glikdev" width="36" height="36">
+        <img class="logo" src="logo.svg?v=dev" alt="Glikdev" width="36" height="36">
         <span>A game built by YouTube comments</span>
       </p>
       <h1><span class="title-day">Day 1.</span> <span class="title-line">This world is empty.</span></h1>
+      <!-- static fallback; main.js rewrites the day, the headline and the bubble from the newest days.json entry -->
       <p class="bubble">What should Day 2 add? Comment it.</p>
     </header>
 
