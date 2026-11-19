@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Glikdev – Day 1: an empty world</title>
+  <meta name="description" content="A game built one YouTube comment at a time. Day 1: an empty floating world. Comment what it should become.">
+  <meta name="theme-color" content="#a9c6e2">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Glikdev – Day 1: an empty world">
+  <meta property="og:description" content="A game built one YouTube comment at a time. Comment what it should become.">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preload" href="fonts/rubik-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="modulepreload" href="vendor/three/three.module.js">
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="src/main.js"></script>
+</head>
+<body>
+  <canvas id="world" role="img" aria-label="A floating stone island in a daylight sky, empty except for a wooden signpost that reads Day 1"></canvas>
+
+  <div class="ui" id="ui">
+    <header class="title">
+      <p class="eyebrow">A game built by YouTube comments</p>
+      <h1><span class="title-day">Day 1.</span> <span class="title-line">This world is empty.</span></h1>
+      <p class="cta">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 5.5h15a1.5 1.5 0 0 1 1.5 1.5v8.5a1.5 1.5 0 0 1-1.5 1.5H11l-4.5 3.5V17h-2A1.5 1.5 0 0 1 3 15.5V7a1.5 1.5 0 0 1 1.5-1.5Z"/></svg>
+        <span>Comment what it should become.</span>
+      </p>
+    </header>
+
+    <p class="status" id="status" role="status" aria-live="polite">Loading the world…</p>
+    <p class="hint" id="hint" hidden></p>
+
+    <nav class="corner" aria-label="Glikdev">
+      <button class="chip" id="daylog-open" type="button" aria-haspopup="dialog" aria-controls="daylog">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.5h11.5A2.5 2.5 0 0 1 19 7v12.5H7.5A2.5 2.5 0 0 1 5 17V4.5Z"/><path d="M5 17a2.5 2.5 0 0 1 2.5-2.5H19M9 8.5h6M9 11.5h4"/></svg>
+        <span>Day log</span>
+      </button>
+      <a class="chip" id="channel" href="./" target="_blank" rel="noopener" hidden>
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5.5" width="18" height="13" rx="4"/><path d="m10.5 9.5 4 2.5-4 2.5Z"/></svg>
+        <span>Glikdev on YouTube</span>
+      </a>
+    </nav>
+  </div>
+
+  <dialog class="daylog" id="daylog" aria-labelledby="daylog-title">
+    <div class="sheet">
+      <div class="sheet-head">
+        <div>
+          <h2 id="daylog-title">Day log</h2>
+          <p class="sheet-sub">One new thing every day, picked from the comments.</p>
+        </div>
+        <button class="close" id="daylog-close" type="button" aria-label="Close the Day log">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+      <ol class="daylog-list" id="daylog-list"><li class="daylog-empty">Loading…</li></ol>
+    </div>
+  </dialog>
+
+  <section class="fallback" id="fallback" hidden aria-labelledby="fallback-title">
+    <img class="fallback-art" src="poster.jpg" alt="" width="1440" height="900" loading="lazy" decoding="async">
+    <div class="fallback-card">
+      <h2 id="fallback-title">Your browser can’t show 3D</h2>
+      <p>This world is drawn with WebGL, which is missing or switched off here. Try an up-to-date Chrome, Safari, Firefox or Edge, or turn on hardware acceleration in your browser settings.</p>
+      <p>The Day log still works.</p>
+    </div>
+  </section>
+
+  <noscript><p class="noscript">Glikdev needs JavaScript to show its world. Turn it on and reload.</p></noscript>
+</body>
+</html>
