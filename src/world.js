@@ -1,4 +1,4 @@
-// The Day 1 world: renderer, daylight sky, sun, the Blender-built island (models/day1.glb).
+// The Day 1 world: renderer, daylight sky, sun, the Blender-built empty baseplate (models/day1.glb).
 // Everything that moves is a pure function of the time passed to update(t), so demo
 // recordings are frame exact.
 import * as THREE from '../vendor/three/three.module.js';
@@ -16,8 +16,8 @@ export const PALETTE = {
   hemiGround: new THREE.Color('#c9b9a0'),
 };
 
-// The island's top is the ground at y = 0. Its centre of mass sits a few metres lower.
-export const ISLAND = { radius: 15.5, centreY: -3.2, topY: 0 };
+// The baseplate: 256 x 256 m, its top is the ground at y = 0, centred on the origin.
+export const PLATE = { half: 128, topY: 0 };
 
 const skyVertex = /* glsl */`
   varying vec3 vDir;
@@ -63,7 +63,7 @@ const skyFragment = /* glsl */`
       up = mix(up, mix(up, vec3(1.0), 0.55), c * smoothstep(0.02, 0.25, y) * 0.55);
     }
 
-    // a sea of soft clouds far below the island
+    // a sea of soft clouds far below the plate
     vec3 col = up;
     if (y < 0.04) {
       float depth = max(-y, 0.004);
@@ -113,11 +113,12 @@ export function createRenderer(canvas, { lowPower = false } = {}) {
 
 export async function createWorld({ renderer, modelUrl, phone = false }) {
   const scene = new THREE.Scene();
-  scene.fog = new THREE.Fog(PALETTE.haze, 120, 420);
+  // haze softens the far grid; the plate's far edge still shows, like a real baseplate
+  scene.fog = new THREE.Fog(PALETTE.haze, 60, 360);
 
-  const camera = new THREE.PerspectiveCamera(45, 1, 0.5, 2000);
+  const camera = new THREE.PerspectiveCamera(50, 1, 0.3, 3000);
 
-  // sun: late-morning, from the left behind the viewer's shoulder
+  // sun: late morning, from the left behind the viewer's shoulder
   const sunDir = new THREE.Vector3(-0.62, 0.56, 0.48).normalize();
   const sky = makeSky(sunDir);
   scene.add(sky);
@@ -126,63 +127,58 @@ export async function createWorld({ renderer, modelUrl, phone = false }) {
   scene.add(hemi);
 
   const sun = new THREE.DirectionalLight(PALETTE.sun, 4.0);
-  sun.position.copy(sunDir).multiplyScalar(60);
+  sun.position.copy(sunDir).multiplyScalar(80);
+  // soft shadows stay on for what the comments add; the empty plate itself casts none
   sun.castShadow = true;
   const size = phone ? 1024 : 2048;
   sun.shadow.mapSize.set(size, size);
   const sc = sun.shadow.camera;
-  sc.left = -19; sc.right = 19; sc.top = 19; sc.bottom = -19; sc.near = 20; sc.far = 110;
+  sc.left = -40; sc.right = 40; sc.top = 40; sc.bottom = -40; sc.near = 10; sc.far = 200;
   sun.shadow.bias = -0.0008;
-  sun.shadow.normalBias = 0.09;
+  sun.shadow.normalBias = 0.06;
   sun.shadow.radius = 4;
   scene.add(sun, sun.target);
 
-  // soft cool bounce from the opposite side so the shadowed walls keep their form
   const fill = new THREE.DirectionalLight('#d2e0f0', 0.8);
   fill.position.set(0.6, 0.15, -0.8).multiplyScalar(50);
   scene.add(fill);
 
-  // the sunlit cloud sea below bounces a little light up into the hanging rock
   const bounce = new THREE.DirectionalLight('#eef1f5', 1.1);
   bounce.position.set(-0.3, -1, 0.35).multiplyScalar(50);
   scene.add(bounce);
 
-  // invisible ground for future gameplay (pointer picks, walking): not visible art
-  const ground = new THREE.Mesh(new THREE.CircleGeometry(12, 48).rotateX(-Math.PI / 2),
-    new THREE.MeshBasicMaterial({ visible: false }));
-  ground.name = 'GroundCollider';
-  scene.add(ground);
-
   const gltf = await new GLTFLoader().loadAsync(modelUrl);
   const model = gltf.scene;
-  const rocks = [];
+  const maxAniso = renderer.capabilities.getMaxAnisotropy();
   model.traverse((o) => {
-    if (o.isMesh) {
-      o.castShadow = true;
-      o.receiveShadow = true;
-      const m = o.material;
-      if (m && m.map) m.map.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
-      if (m && o.name === 'Lettering') { m.polygonOffset = true; m.polygonOffsetFactor = -2; }
+    if (!o.isMesh) return;
+    o.castShadow = false;
+    o.receiveShadow = true;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    for (const m of mats) {
+      if (!m.map) continue;
+      // the grid tile repeats 64x across the plate: mipmaps + full anisotropy keep the far lines calm
+      m.map.anisotropy = maxAniso;
+      m.map.wrapS = m.map.wrapT = THREE.RepeatWrapping;
+      m.map.minFilter = THREE.LinearMipmapLinearFilter;
+      m.map.generateMipmaps = true;
+      m.map.needsUpdate = true;
     }
-    if (/^Rock_\d$/.test(o.name)) rocks.push({ obj: o, base: o.position.clone(), phase: rocks.length * 1.7 });
   });
   scene.add(model);
-  const sign = model.getObjectByName('Signpost');
-  const lettering = model.getObjectByName('Lettering');
+  const plate = model.getObjectByName('Baseplate');
 
   let animate = true;
   function update(t) {
     sky.position.copy(camera.position);
     sky.material.uniforms.uTime.value = animate ? t : 0;
-    for (const r of rocks) {
-      const k = animate ? t : 0;
-      r.obj.position.y = r.base.y + Math.sin(k * 0.55 + r.phase) * 0.35;
-      r.obj.rotation.y = Math.sin(k * 0.12 + r.phase) * 0.25;
-    }
+    // the shadow box follows the camera's ground focus, so whatever gets built casts crisp shadows
+    sun.target.position.set(camera.position.x, 0, camera.position.z);
+    sun.position.copy(sun.target.position).addScaledVector(sunDir, 80);
   }
 
   return {
-    scene, camera, model, sign, lettering, sun,
+    scene, camera, model, plate, sun,
     update,
     setAnimate(on) { animate = on; },
     render() { renderer.render(scene, camera); },

@@ -85,7 +85,7 @@ async function start() {
   try {
     mods = await Promise.all([import('./world.js'), import('./controls.js'), import('../vendor/three/three.module.js')]);
   } catch (err) { showLoadError(err); return; }
-  const [{ createRenderer, createWorld, ISLAND }, { OrbitRig, placeCamera }, THREE] = mods;
+  const [{ createRenderer, createWorld, PLATE }, { OrbitRig, placeCamera }, THREE] = mods;
 
   const canvas = $('world');
   const coarse = matchMedia('(pointer: coarse)').matches;
@@ -103,47 +103,27 @@ async function start() {
   const { camera } = world;
   world.setAnimate(demo ? true : !reducedMotion);
 
-  // where the sign stands and which way it faces (the start view looks straight at it)
-  const signPos = [1.9, 3.25, 5.0];
-  let signAz = 0.35;
-  if (world.sign) {
-    world.sign.updateWorldMatrix(true, true);
-    const p = world.sign.getWorldPosition(new THREE.Vector3());
-    signPos[0] = p.x; signPos[1] = p.y + 3.25; signPos[2] = p.z;
-    const d = world.sign.getWorldDirection(new THREE.Vector3());
-    signAz = Math.atan2(d.x, d.z);
+  // Orbit the centre of the plate. The start view looks along the grid at a slight angle,
+  // so the lines run off toward the horizon in perspective.
+  const target = [0, PLATE.topY, 0];
+  const home = { az: 0.32, pol: 1.05, dist: 32, height: 16, target, shift: 0, shiftX: 0, fov: 60, horizon: 0.42 };
+  const rig = new OrbitRig(camera, canvas, { target, minPolar: 0.22, maxPolar: 1.52, minHeight: 1.5, onInteract: dismissHint });
+
+  // Where the horizon lands for a camera pitched down by `pitch` (radians) with vertical fov `fov` (deg),
+  // as a fraction of the height from the top, before any lens shift.
+  const horizonAt = (pitch, fov) => 0.5 - 0.5 * Math.tan(pitch) / Math.tan((fov * Math.PI) / 360);
+  // How far below the true horizon the plate's far edge sits (radians), seen from a camera at
+  // `height` and horizontal distance `back` from the centre, looking along azimuth az toward it.
+  function edgeDip(height, back, az) {
+    const fx = -Math.sin(az), fz = -Math.cos(az);
+    const px = Math.sin(az) * back, pz = Math.cos(az) * back;
+    const tx = fx ? ((Math.sign(fx) * PLATE.half) - px) / fx : Infinity;
+    const tz = fz ? ((Math.sign(fz) * PLATE.half) - pz) / fz : Infinity;
+    return Math.atan2(height, Math.min(tx, tz));
   }
 
-  const target = [0, ISLAND.centreY, 0];
-  const home = { az: signAz + 0.04, pol: 1.2, dist: 50, target, sign: signPos, signDist: 20, shift: 0, shiftX: 0, signShift: 0.05 };
-  const rig = new OrbitRig(camera, canvas, { target, minPolar: 0.42, maxPolar: 1.72, onInteract: dismissHint });
-
-  // ---- framing: solve distance and screen offset so the island lands where the layout wants it
-  const framePts = [];
-  for (let i = 0; i < 36; i++) {
-    const a = (i / 36) * Math.PI * 2;
-    framePts.push(new THREE.Vector3(Math.sin(a) * 12.6, 0.2, Math.cos(a) * 12.6));
-    framePts.push(new THREE.Vector3(Math.sin(a) * 12.4, -2.1, Math.cos(a) * 12.4));
-  }
-  framePts.push(new THREE.Vector3(1.0, -12.0, 0.7)); // tip of the cone
-  const probe = new THREE.PerspectiveCamera();
-  const v = new THREE.Vector3();
-  function extent(pol, d) {
-    placeCamera(probe, target, home.az, pol, d);
-    probe.updateMatrixWorld();
-    let top = 1, bot = 0, left = 1, right = 0;
-    for (const p of framePts) {
-      v.copy(p).project(probe);
-      const x = (v.x + 1) / 2, y = (1 - v.y) / 2;
-      top = Math.min(top, y); bot = Math.max(bot, y); left = Math.min(left, x); right = Math.max(right, x);
-    }
-    return { top, bot, left, right };
-  }
-  function solve(fn, want) {      // fn decreases with distance
-    let lo = 8, hi = 600;
-    for (let i = 0; i < 40; i++) { const mid = (lo + hi) / 2; if (fn(mid) > want) lo = mid; else hi = mid; }
-    return (lo + hi) / 2;
-  }
+  // Frame the plate for the current screen: camera height and pitch, then a vertical lens shift
+  // that puts the horizon below the title (portrait: 38-45% of the height).
   function layout() {
     const w = innerWidth, h = innerHeight;
     world.resize(w, h, dpr());
@@ -151,43 +131,37 @@ async function start() {
     const portrait = aspect < 0.85;
     const wide = aspect >= 1.3;
     const spec = portrait
-      ? { fov: 50, pol: 1.36, top: 0.4, bot: short ? 0.78 : 0.8, maxW: short ? 0.88 : 0.94, cx: short ? 0.47 : 0.5 }
-      : wide ? { fov: 38, pol: 1.24, top: h < 500 ? 0.3 : 0.27, bot: h < 500 ? 0.96 : 0.9, maxW: h < 500 ? 0.56 : 0.62, cx: h < 500 ? 0.66 : 0.6 }
-        : { fov: 44, pol: 1.2, top: 0.33, bot: 0.86, maxW: 0.86, cx: 0.5 };
-    // portrait: the island starts below the title block (its bubble tail included)
-    if (portrait) {
-      const r = document.querySelector('.title').getBoundingClientRect();
-      if (short) spec.top = 0.44;
-      else if (showUI && r.height) spec.top = Math.max(spec.top, (r.bottom + 34) / h);
-      spec.bot = Math.max(spec.bot, spec.top + 0.3);
+      ? { fov: 62, pitch: 30, height: 16, horizon: short ? 0.44 : 0.42 }
+      : wide ? { fov: 46, pitch: 26, height: 15, horizon: h < 500 ? 0.45 : 0.4 }
+        : { fov: 54, pitch: 28, height: 16, horizon: 0.41 };
+    if (portrait && showUI && !short) {
+      const b = document.querySelector('.bubble').getBoundingClientRect();
+      if (b.height) spec.horizon = Math.min(0.45, Math.max(spec.horizon, (b.bottom + 34) / h));
     }
     camera.fov = spec.fov;
-    probe.fov = spec.fov; probe.aspect = aspect; probe.near = camera.near; probe.far = camera.far;
-    probe.clearViewOffset(); probe.updateProjectionMatrix();
-    home.pol = spec.pol;
-    let d = solve((dd) => { const e = extent(spec.pol, dd); return e.bot - e.top; }, spec.bot - spec.top);
-    if ((() => { const e = extent(spec.pol, d); return e.right - e.left; })() > spec.maxW) {
-      d = solve((dd) => { const e = extent(spec.pol, dd); return e.right - e.left; }, spec.maxW);
-    }
-    const e = extent(spec.pol, d);
-    home.dist = d;
-    home.shift = e.top - spec.top;                         // fraction of the height
-    home.shiftX = (e.left + e.right) / 2 - spec.cx;        // fraction of the width
-    // reveal ends with the sign plank filling about a third of the frame width
-    const hf = 2 * Math.atan(Math.tan((spec.fov * Math.PI) / 360) * aspect);
-    home.signDist = 3.75 / (0.36 * 2 * Math.tan(hf / 2));
-    rig.setLimits(12, d * 1.9);
-    setShift(home.shift, home.shiftX);
+    const pitch = (spec.pitch * Math.PI) / 180;
+    home.fov = spec.fov;
+    home.pol = Math.PI / 2 - pitch;
+    home.height = spec.height;
+    home.dist = spec.height / Math.cos(home.pol);
+    home.horizon = spec.horizon;
+    // the visible horizon is the plate's far edge: put that line at spec.horizon
+    home.shift = horizonAt(pitch - edgeDip(spec.height, spec.height / Math.tan(pitch), home.az), spec.fov) - spec.horizon;
+    home.shiftX = 0;
+    rig.setLimits(6, 170);
+    setShift(home.shift, 0);
   }
-  function setShift(sy, sx = home.shiftX) {
+  function setShift(sy, sx = 0) {
     const w = innerWidth, h = innerHeight;
     camera.setViewOffset(w, h, sx * w, sy * h, w, h);
     camera.updateProjectionMatrix();
   }
+  home.horizonAt = horizonAt;
+  home.edgeDip = edgeDip;
   layout();
   rig.setPose(home);
-  // web fonts change the title's height: frame again once they are in
-  document.fonts?.ready.then(() => { layout(); rig.setPose({ az: rig.goal.az, pol: rig.goal.pol, dist: home.dist }); });
+  // web fonts change the bubble's height: frame again once they are in
+  document.fonts?.ready.then(() => { layout(); rig.setPose({ az: rig.goal.az, pol: home.pol, dist: home.dist }); });
   addEventListener('resize', () => {
     const before = home.dist;
     layout();
@@ -213,8 +187,13 @@ async function start() {
   function step(t, dt) {
     if (demo) {
       const pose = demoPose(demo, t, home);
-      setShift(pose.shift, home.shiftX);
-      placeCamera(camera, pose.target, pose.az, pose.pol, pose.dist);
+      setShift(pose.shift, 0);
+      if (pose.position) {
+        camera.position.set(...pose.position);
+        camera.lookAt(...pose.look);
+      } else {
+        placeCamera(camera, pose.target, pose.az, pose.pol, pose.dist);
+      }
     } else {
       rig.update(dt);
     }
@@ -227,7 +206,7 @@ async function start() {
     if (t0 === null) { t0 = ts; last = ts; }
     const dt = Math.min(0.05, Math.max(0, (ts - last) / 1000));
     if (dialog.open) { last = ts; return; }                // nothing to see behind the Day log
-    // when nobody is touching the camera, 30 fps is plenty for the drifting rocks
+    // when nobody is touching the camera, 30 fps is plenty
     if (!demo && rig.idle()) { skip = !skip; if (skip) return; }
     last = ts;
     step((ts - t0) / 1000, dt);
@@ -239,21 +218,46 @@ async function start() {
   };
 
   // handles for tests and for the days to come
-  const box = new THREE.Box3();
+  const v = new THREE.Vector3();
+  const ray = new THREE.Raycaster();
+  const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   window.__glikdev = {
     world, rig, home,
-    /** Screen box (CSS px) of the "DAY 1" lettering in the current view. */
-    signBox() {
-      const l = world.lettering;
-      if (!l) return null;
-      box.setFromObject(l);
-      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-      for (let i = 0; i < 8; i++) {
-        v.set(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z).project(camera);
-        const x = ((v.x + 1) / 2) * innerWidth, y = ((1 - v.y) / 2) * innerHeight;
-        x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
-      }
-      return { x0, y0, x1, y1, width: x1 - x0, height: y1 - y0 };
+    /** Screen height fraction (from the top) of the visible horizon: the plate's far edge. */
+    horizonFrac() {
+      camera.updateMatrixWorld();
+      const f = camera.getWorldDirection(new THREE.Vector3());
+      f.y = 0;
+      if (f.lengthSq() < 1e-8) return null;
+      f.normalize();
+      const p = camera.position;
+      const tx = f.x ? (Math.sign(f.x) * PLATE.half - p.x) / f.x : Infinity;
+      const tz = f.z ? (Math.sign(f.z) * PLATE.half - p.z) / f.z : Infinity;
+      v.set(p.x + f.x * Math.min(tx, tz), 0, p.z + f.z * Math.min(tx, tz)).project(camera);
+      return (1 - v.y) / 2;
+    },
+    /** Screen height fraction (from the top) where the true (sky) horizon is drawn right now. */
+    skyHorizonFrac() {
+      camera.updateMatrixWorld();
+      const f = camera.getWorldDirection(new THREE.Vector3());
+      f.y = 0;
+      if (f.lengthSq() < 1e-8) return null;                // looking straight down
+      f.normalize().multiplyScalar(1e5).add(camera.position);
+      f.y = camera.position.y;
+      v.copy(f).project(camera);
+      return (1 - v.y) / 2;
+    },
+    cameraHeight() { return camera.position.y; },
+    /** Size in CSS px of one 4 m grid cell on the ground at a screen point (fractions 0-1). */
+    gridCellPx(sx = 0.5, sy = 0.8) {
+      camera.updateMatrixWorld();
+      ray.setFromCamera(new THREE.Vector2(sx * 2 - 1, 1 - sy * 2), camera);
+      const hit = ray.ray.intersectPlane(groundPlane, new THREE.Vector3());
+      if (!hit) return 0;
+      const a = hit.clone().project(camera), b = hit.clone().add(new THREE.Vector3(4, 0, 0)).project(camera);
+      const c = hit.clone().add(new THREE.Vector3(0, 0, 4)).project(camera);
+      const px = (p, q) => Math.hypot((p.x - q.x) * innerWidth / 2, (p.y - q.y) * innerHeight / 2);
+      return Math.max(px(a, b), px(a, c));
     },
   };
 

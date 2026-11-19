@@ -1,5 +1,5 @@
 // Orbit camera rig: drag / touch to orbit, wheel / pinch to zoom, WASD and arrow keys.
-// The pivot stays on the island and distance and tilt are clamped, so the slab never leaves the view.
+// The pivot stays on the plate's centre; distance and tilt are clamped and the camera stays above the ground.
 
 const TAU = Math.PI * 2;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -16,6 +16,7 @@ export class OrbitRig {
     this.target = opts.target.slice();
     this.minPolar = opts.minPolar;
     this.maxPolar = opts.maxPolar;
+    this.minHeight = opts.minHeight ?? 1.5;          // never closer than this to the ground
     this.minDist = 12;
     this.maxDist = 120;
     this.onInteract = opts.onInteract || (() => {});
@@ -44,30 +45,17 @@ export class OrbitRig {
       Math.abs(this.goal.dist - this.dist) < 1e-3;
   }
 
-  /**
-   * Largest tilt that keeps the camera outside the rock at this distance: the slab
-   * (radius ~13 m, top at y = 0) and the cone under it, with a margin.
-   */
+  /** Largest tilt that keeps the camera at least `minHeight` above the ground at this distance. */
   safePolar(dist) {
-    // walk down from the top of the orbit; the limit is just before the first point inside,
-    // so the camera can never tilt through the rock to reach the free space under it
-    const ty = this.target[1];
-    let ok = this.minPolar;
-    for (let p = this.minPolar; p <= this.maxPolar + 1e-9; p += 0.01) {
-      const y = ty + dist * Math.cos(p), r = dist * Math.sin(p);
-      const inSlab = y > -2.8 && y < 1.8 && r < 14.2;
-      const inCone = y <= -2.8 && y > -13.5 && r < 13.4 * ((y + 13.5) / 10.7) + 1.2;
-      if (inSlab || inCone) return ok;
-      ok = p;
-    }
-    return this.maxPolar;
+    const c = (this.minHeight - this.target[1]) / Math.max(dist, 1e-6);
+    return Math.min(this.maxPolar, c >= 1 ? this.minPolar : Math.acos(Math.max(-1, c)));
   }
 
   /** Jump (no damping) to a pose. */
   setPose({ az, pol, dist }) {
     this.az = this.goal.az = az;
-    this.pol = this.goal.pol = clamp(pol, this.minPolar, this.maxPolar);
     this.dist = this.goal.dist = clamp(dist, this.minDist, this.maxDist);
+    this.pol = this.goal.pol = Math.min(clamp(pol, this.minPolar, this.maxPolar), this.safePolar(this.dist));
   }
 
   _interact() { this.onInteract(); }
@@ -140,7 +128,7 @@ export class OrbitRig {
       if (k.has('KeyQ')) this.goal.pol = clamp(this.goal.pol - rot * 0.6, this.minPolar, this.maxPolar);
       if (k.has('KeyE')) this.goal.pol = clamp(this.goal.pol + rot * 0.6, this.minPolar, this.maxPolar);
     }
-    // never inside the island: tilt up when close and low
+    // never below the ground: tilt up when close and low
     const safe = Math.min(this.safePolar(this.goal.dist), this.safePolar(this.dist));
     if (this.goal.pol > safe) this.goal.pol = safe;
     const a = 1 - Math.exp(-dt * 9);
