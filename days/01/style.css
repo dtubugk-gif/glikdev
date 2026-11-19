@@ -82,7 +82,7 @@ html.world-ready .poster { opacity: 0; pointer-events: none; }
   text-wrap: balance;
 }
 .title-day { color: var(--accent); }
-.title-line { white-space: nowrap; }
+.title-line { overflow-wrap: anywhere; }   /* long headlines from later days wrap instead of running off a phone */
 
 /* the logo's speech bubble: a caption, not a button */
 .bubble {
@@ -281,7 +281,7 @@ html.capture-short .bubble { font-size: 16px; max-width: 100%; }
   .fallback-card h2 { font-size: 19px; }
   .fallback-card p { font-size: 14px; line-height: 1.4; }
   html.no-webgl .title { max-width: 50%; }
-  html.no-webgl .title-line { white-space: normal; }
+
 }
 
 @media (max-width: 759px) and (orientation: portrait) {
