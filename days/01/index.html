@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="build" content="b610e301bfe66511b8dbe570705a664d78481e86">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Glikdev – Day 1: an empty world</title>
+  <meta name="description" content="A game built one YouTube comment at a time. Day 1: an empty baseplate. Comment what Day 2 should add.">
+  <meta name="theme-color" content="#a9cfee">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Glikdev">
+  <meta property="og:title" content="Glikdev – Day 1: an empty world">
+  <meta property="og:description" content="A game built one YouTube comment at a time. What should Day 2 add?">
+  <meta property="og:url" content="https://dtubugk-gif.github.io/glikdev/">
+  <meta property="og:image" content="https://dtubugk-gif.github.io/glikdev/poster.jpg">
+  <meta property="og:image:width" content="1440">
+  <meta property="og:image:height" content="900">
+  <meta property="og:image:alt" content="An empty grey baseplate with a faint grid under a daylight sky">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="logo.svg" type="image/svg+xml">
+  <link rel="preload" href="fonts/fredoka-700.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/rubik-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="modulepreload" href="vendor/three/three.module.js">
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="src/main.js"></script>
+</head>
+<body>
+  <!-- shown while the world loads (and as the backdrop when 3D is not available) -->
+  <picture class="poster" id="poster">
+    <source media="(orientation: portrait)" srcset="poster-portrait.jpg" width="780" height="1688">
+    <img src="poster.jpg" alt="" width="1440" height="900" fetchpriority="high" decoding="async">
+  </picture>
+
+  <canvas id="world" role="img" aria-label="An empty grey baseplate with a faint grid, stretching away to the horizon under a daylight sky"></canvas>
+
+  <div class="ui" id="ui">
+    <header class="title">
+      <p class="eyebrow">
+        <img class="logo" src="logo.svg" alt="Glikdev" width="36" height="36">
+        <span>A game built by YouTube comments</span>
+      </p>
+      <h1><span class="title-day">Day 1.</span> <span class="title-line">This world is empty.</span></h1>
+      <p class="bubble">What should Day 2 add? Comment it.</p>
+    </header>
+
+    <p class="status" id="status" role="status" aria-live="polite">Loading the world…</p>
+    <p class="hint" id="hint" hidden></p>
+
+    <nav class="corner" aria-label="Glikdev">
+      <button class="chip" id="daylog-open" type="button" aria-haspopup="dialog" aria-controls="daylog">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path class="fill" d="M5 4.5h11.5A2.5 2.5 0 0 1 19 7v8H7.5A2.5 2.5 0 0 0 5 17.5Z"/><path d="M5 4.5h11.5A2.5 2.5 0 0 1 19 7v12.5H7.5A2.5 2.5 0 0 1 5 17V4.5Z"/><path d="M5 17a2.5 2.5 0 0 1 2.5-2.5H19M9 8.5h6"/></svg>
+        <span>Day log</span>
+      </button>
+      <a class="chip" id="channel" href="./" target="_blank" rel="noopener" hidden>
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect class="fill" x="3" y="5.5" width="18" height="13" rx="4"/><path d="m10.5 9.5 4 2.5-4 2.5Z"/></svg>
+        <span>Glikdev on YouTube</span>
+      </a>
+    </nav>
+  </div>
+
+  <dialog class="daylog" id="daylog" aria-labelledby="daylog-title">
+    <div class="sheet">
+      <div class="sheet-head">
+        <div>
+          <h2 id="daylog-title">Day log</h2>
+          <p class="sheet-sub">One new thing every day, picked from the comments.</p>
+        </div>
+        <button class="close" id="daylog-close" type="button" aria-label="Close the Day log">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+      <ol class="daylog-list" id="daylog-list"><li class="daylog-empty">Loading…</li></ol>
+    </div>
+  </dialog>
+
+  <section class="fallback" id="fallback" hidden aria-labelledby="fallback-title">
+    <div class="fallback-card">
+      <h2 id="fallback-title">Your browser can’t show 3D</h2>
+      <p>This world is drawn with WebGL 2, which is missing or switched off here. Try an up-to-date Chrome, Safari, Firefox or Edge, or turn on hardware acceleration in your browser settings.</p>
+      <p>The Day log still works.</p>
+    </div>
+  </section>
+
+  <noscript><p class="noscript">Glikdev needs JavaScript to show its world. Turn it on and reload.</p></noscript>
+</body>
+</html>
