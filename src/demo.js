@@ -4,36 +4,37 @@
 
 export const DEMOS = ['orbit', 'reveal'];
 
-const smooth = (x) => { const c = Math.min(1, Math.max(0, x)); return c * c * c * (c * (c * 6 - 15) + 10); };
 const lerp = (a, b, k) => a + (b - a) * k;
 
 /**
  * @param {string} name   'orbit' | 'reveal'
  * @param {number} t      seconds
- * @param {{az:number, pol:number, dist:number, target:number[], sign:number[]}} home  the default framing
- * @returns {{az:number, pol:number, dist:number, target:number[]}|null}
+ * @param {{az:number, pol:number, dist:number, target:number[], sign:number[], signDist:number,
+ *          shift:number, signShift:number}} home  the default framing (from main.js)
+ * @returns {{az:number, pol:number, dist:number, target:number[], shift:number}|null}
  */
 export function demoPose(name, t, home) {
   if (name === 'orbit') {
     // one full turn every 30 s, gently breathing in height and distance
-    const az = home.az + (t / 30) * Math.PI * 2;
     return {
-      az,
+      az: home.az + (t / 30) * Math.PI * 2,
       pol: home.pol + 0.05 * Math.sin(t * 0.42),
       dist: home.dist * (1.0 + 0.04 * Math.sin(t * 0.3)),
       target: home.target,
+      shift: home.shift,
     };
   }
   if (name === 'reveal') {
-    // 0-9 s: from high and far, a slow push-in that ends close on the signpost; then holds.
-    const k = smooth(t / 9);
-    const near = Math.max(0, (k - 0.55) / 0.45);
-    const tgt = home.target.map((v, i) => lerp(v, home.sign[i], smooth(near)));
+    // 6 s ease-out push-in: from high and wide straight onto the sign, then hold.
+    const u = Math.min(1, Math.max(0, t / 6));
+    const k = 1 - (1 - u) ** 3;
+    const logD = lerp(Math.log(home.dist * 1.5), Math.log(home.signDist), k);
     return {
-      az: home.az - 0.55 + 0.62 * k,
-      pol: lerp(0.62, home.pol + 0.18, k),
-      dist: lerp(home.dist * 1.75, home.dist * 0.34, k),
-      target: tgt,
+      az: home.az - 0.5 + 0.5 * k,
+      pol: lerp(0.95, 1.42, k),
+      dist: Math.exp(logD),
+      target: home.target.map((v, i) => lerp(v, home.sign[i], k)),
+      shift: lerp(home.shift, home.signShift, k),
     };
   }
   return null;

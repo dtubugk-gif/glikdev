@@ -34,6 +34,33 @@ export class OrbitRig {
     this.minDist = minDist;
     this.maxDist = maxDist;
     this.goal.dist = clamp(this.goal.dist, minDist, maxDist);
+    this.dist = clamp(this.dist, minDist, maxDist);
+  }
+
+  /** True when no input is active and the camera has settled. */
+  idle() {
+    return this.pointers.size === 0 && this.keys.size === 0 &&
+      Math.abs(this.goal.az - this.az) < 1e-4 && Math.abs(this.goal.pol - this.pol) < 1e-4 &&
+      Math.abs(this.goal.dist - this.dist) < 1e-3;
+  }
+
+  /**
+   * Largest tilt that keeps the camera outside the rock at this distance: the slab
+   * (radius ~13 m, top at y = 0) and the cone under it, with a margin.
+   */
+  safePolar(dist) {
+    // walk down from the top of the orbit; the limit is just before the first point inside,
+    // so the camera can never tilt through the rock to reach the free space under it
+    const ty = this.target[1];
+    let ok = this.minPolar;
+    for (let p = this.minPolar; p <= this.maxPolar + 1e-9; p += 0.01) {
+      const y = ty + dist * Math.cos(p), r = dist * Math.sin(p);
+      const inSlab = y > -2.8 && y < 1.8 && r < 14.2;
+      const inCone = y <= -2.8 && y > -13.5 && r < 13.4 * ((y + 13.5) / 10.7) + 1.2;
+      if (inSlab || inCone) return ok;
+      ok = p;
+    }
+    return this.maxPolar;
   }
 
   /** Jump (no damping) to a pose. */
@@ -113,10 +140,14 @@ export class OrbitRig {
       if (k.has('KeyQ')) this.goal.pol = clamp(this.goal.pol - rot * 0.6, this.minPolar, this.maxPolar);
       if (k.has('KeyE')) this.goal.pol = clamp(this.goal.pol + rot * 0.6, this.minPolar, this.maxPolar);
     }
+    // never inside the island: tilt up when close and low
+    const safe = Math.min(this.safePolar(this.goal.dist), this.safePolar(this.dist));
+    if (this.goal.pol > safe) this.goal.pol = safe;
     const a = 1 - Math.exp(-dt * 9);
     this.az += (this.goal.az - this.az) * a;
     this.pol += (this.goal.pol - this.pol) * a;
     this.dist += (this.goal.dist - this.dist) * a;
+    if (this.pol > safe) this.pol = safe;
     if (Math.abs(this.az) > TAU * 4) { const w = Math.round(this.az / TAU) * TAU; this.az -= w; this.goal.az -= w; }
     placeCamera(this.camera, this.target, this.az, this.pol, this.dist);
   }

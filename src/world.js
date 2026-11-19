@@ -5,15 +5,15 @@ import * as THREE from '../vendor/three/three.module.js';
 import { GLTFLoader } from '../vendor/three/addons/loaders/GLTFLoader.js';
 
 export const PALETTE = {
-  zenith: new THREE.Color('#8fb4d9'),
-  sky: new THREE.Color('#bcd3e8'),
+  zenith: new THREE.Color('#a9cfee'),
+  sky: new THREE.Color('#c6e0f2'),
   horizon: new THREE.Color('#f1e4cf'),
-  haze: new THREE.Color('#e9e2d6'),
+  haze: new THREE.Color('#d7e6f1'),
   cloud: new THREE.Color('#fbf8f2'),
-  cloudShade: new THREE.Color('#b9c4d2'),
+  cloudShade: new THREE.Color('#c4d3e2'),
   sun: new THREE.Color('#fff1de'),
   hemiSky: new THREE.Color('#d6e5f3'),
-  hemiGround: new THREE.Color('#b8ab98'),
+  hemiGround: new THREE.Color('#c9b9a0'),
 };
 
 // The island's top is the ground at y = 0. Its centre of mass sits a few metres lower.
@@ -53,7 +53,7 @@ const skyFragment = /* glsl */`
 
     // upper sky: zenith blue to a warm horizon, a touch warmer toward the sun
     vec3 up = mix(uSky, uZenith, smoothstep(0.03, 0.5, y));
-    up = mix(uHorizon, up, smoothstep(-0.01, 0.17, y));
+    up = mix(uHorizon, up, smoothstep(-0.01, 0.06, y));   // warm horizon: a thin band only
     up += vec3(0.06, 0.04, 0.01) * pow(sunAmt, 6.0) * (1.0 - smoothstep(0.0, 0.6, y));
 
     // high, thin clouds
@@ -74,7 +74,7 @@ const skyFragment = /* glsl */`
       float lit = clamp(0.55 + 0.45 * dot(normalize(vec2(uSunDir.x, uSunDir.z)), normalize(d.xz + 1e-4)) * 0.4 + (n - 0.5) * 1.6, 0.0, 1.0);
       vec3 cloud = mix(uCloudShade, uCloud, lit);
       vec3 below = mix(uSky * 0.92, cloud, puff);
-      float horizonFade = smoothstep(0.02, 0.3, depth);
+      float horizonFade = smoothstep(0.06, 0.35, depth);  // streaks near the horizon fade into haze
       below = mix(uHaze, below, horizonFade);
       col = mix(below, up, smoothstep(-0.03, 0.04, y));
     }
@@ -104,11 +104,10 @@ function makeSky(sunDir) {
 export function createRenderer(canvas, { lowPower = false } = {}) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: lowPower ? 'low-power' : 'high-performance' });
   renderer.outputColorSpace = THREE.SRGBColorSpace;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.0;
+  renderer.toneMapping = THREE.NeutralToneMapping;
+  renderer.toneMappingExposure = 1.05;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   return renderer;
 }
 
@@ -123,10 +122,10 @@ export async function createWorld({ renderer, modelUrl, phone = false }) {
   const sky = makeSky(sunDir);
   scene.add(sky);
 
-  const hemi = new THREE.HemisphereLight(PALETTE.hemiSky, PALETTE.hemiGround, 1.0);
+  const hemi = new THREE.HemisphereLight(PALETTE.hemiSky, PALETTE.hemiGround, 1.3);
   scene.add(hemi);
 
-  const sun = new THREE.DirectionalLight(PALETTE.sun, 3.3);
+  const sun = new THREE.DirectionalLight(PALETTE.sun, 4.0);
   sun.position.copy(sunDir).multiplyScalar(60);
   sun.castShadow = true;
   const size = phone ? 1024 : 2048;
@@ -139,12 +138,12 @@ export async function createWorld({ renderer, modelUrl, phone = false }) {
   scene.add(sun, sun.target);
 
   // soft cool bounce from the opposite side so the shadowed walls keep their form
-  const fill = new THREE.DirectionalLight('#c8d8ec', 0.45);
+  const fill = new THREE.DirectionalLight('#d2e0f0', 0.8);
   fill.position.set(0.6, 0.15, -0.8).multiplyScalar(50);
   scene.add(fill);
 
   // the sunlit cloud sea below bounces a little light up into the hanging rock
-  const bounce = new THREE.DirectionalLight('#eef1f5', 0.7);
+  const bounce = new THREE.DirectionalLight('#eef1f5', 1.1);
   bounce.position.set(-0.3, -1, 0.35).multiplyScalar(50);
   scene.add(bounce);
 
@@ -169,6 +168,7 @@ export async function createWorld({ renderer, modelUrl, phone = false }) {
   });
   scene.add(model);
   const sign = model.getObjectByName('Signpost');
+  const lettering = model.getObjectByName('Lettering');
 
   let animate = true;
   function update(t) {
@@ -182,11 +182,12 @@ export async function createWorld({ renderer, modelUrl, phone = false }) {
   }
 
   return {
-    scene, camera, model, sign, sun,
+    scene, camera, model, sign, lettering, sun,
     update,
     setAnimate(on) { animate = on; },
     render() { renderer.render(scene, camera); },
-    resize(w, h) {
+    resize(w, h, pixelRatio) {
+      if (pixelRatio && renderer.getPixelRatio() !== pixelRatio) renderer.setPixelRatio(pixelRatio);
       renderer.setSize(w, h, false);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
