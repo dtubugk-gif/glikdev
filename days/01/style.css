@@ -284,7 +284,12 @@ html.capture-short .bubble { font-size: 16px; max-width: 100%; }
 
 }
 
+/* small phones: the channel chip says just "YouTube" so both chips stay on one row */
+@media (max-width: 400px) { .chip-extra { display: none; } }
+@media (max-width: 340px) { .chip { padding: 0 13px 0 11px; gap: 6px; } .corner { gap: 8px; } }
+
 @media (max-width: 759px) and (orientation: portrait) {
+  .title-day { display: block; }      /* "Day N." on its own line, the headline below */
   .hint { right: auto; left: 50%; transform: translateX(-50%); bottom: calc(var(--gutter) + var(--safe-b) + 62px); white-space: nowrap; }
 }
 
