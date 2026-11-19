@@ -11,7 +11,7 @@ import { renderDayLog, renderHeadline, latestDay } from './daylog.js';
 import { DEMOS, demoPose } from './demo.js';
 
 // Set this to the channel's URL once it exists (for example 'https://www.youtube.com/@glikdev').
-const CHANNEL_URL = null;
+const CHANNEL_URL = 'https://www.youtube.com/@glikdev';
 
 const params = new URLSearchParams(location.search);
 const demo = DEMOS.includes(params.get('demo')) ? params.get('demo') : null;
