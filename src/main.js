@@ -152,9 +152,10 @@ async function start() {
       ? { fov: 62, pitch: 30, height: 16, horizon: short ? 0.44 : 0.42 }
       : wide ? { fov: 46, pitch: 26, height: 15, horizon: h < 500 ? 0.45 : 0.4 }
         : { fov: 54, pitch: 28, height: 16, horizon: 0.41 };
-    if (portrait && showUI && !short) {
-      const b = document.querySelector('.bubble').getBoundingClientRect();
-      if (b.height) spec.horizon = Math.min(0.45, Math.max(spec.horizon, (b.bottom + 34) / h));
+    if (portrait && showUI) {
+      // keep the horizon below the bubble, however long the day's headline is
+      const b = document.querySelector('.bubble')?.getBoundingClientRect();
+      if (b && b.height) spec.horizon = Math.min(short ? 0.6 : 0.45, Math.max(spec.horizon, (b.bottom + 34) / h));
     }
     camera.fov = spec.fov;
     const pitch = (spec.pitch * Math.PI) / 180;
