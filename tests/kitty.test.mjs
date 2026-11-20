@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createBrain, KITTY, STEP, rng, headingTo } from '../src/kittybrain.js';
+import { createBrain, KITTY, STEP, YARN, rng, headingTo } from '../src/kittybrain.js';
 import { meow, purr, bell, trill, chirp, mew, yawn, sigh, bite, step, thud, swat } from '../src/kittysound.js';
 
 const run = (b, seconds, onStep) => {
@@ -161,6 +161,77 @@ test('tapping the yarn on the floor starts a new game without a new toss', () =>
   assert.equal(b.yarn, yarn, 'same ball');
   assert.equal(b.yarn.rounds, 0);
   assert.ok(!b.drain().some((e) => e.type === 'yarn'), 'no new toss');
+});
+
+// a yarn ball on the floor in front of her, her game with it over
+function yarnOnFloor(seed = 8) {
+  const b = createBrain({ seed, mode: 'sit', viewer: [0, 40] });
+  b.play();
+  run(b, 40);
+  b.drain();
+  return b;
+}
+
+test('picked up: the yarn lifts into your hand and follows it; she stops and watches', () => {
+  const b = yarnOnFloor();
+  b.play();                                              // she is after it again...
+  run(b, 0.3);
+  assert.ok(b.goal === 'yarn' || ['face', 'pounce', 'standup'].includes(b.mode), `she is after it (${b.mode})`);
+  assert.ok(b.grabYarn());                               // ...until you pick it up
+  assert.equal(b.goal, null);
+  assert.equal(b.face, null);
+  b.holdYarn(10, -6);
+  run(b, 2);                                             // (a leap already under way lands first)
+  assert.ok(Math.hypot(b.yarn.x - 10, b.yarn.z + 6) < 0.05, 'it is where your hand is');
+  assert.ok(b.yarn.y > YARN.radius + YARN.hold * 0.95, 'held up off the floor');
+  assert.ok(!['walk', 'trot', 'pounce', 'bat'].includes(b.mode), `she waits (${b.mode})`);
+  b.play();                                              // tapping Play while you hold it changes nothing
+  assert.ok(b.yarn.held);
+});
+
+test('thrown: it flies, falls, bounces, rolls to a stop, and she chases it, pounces and bats it', () => {
+  const b = yarnOnFloor();
+  b.grabYarn();
+  b.holdYarn(b.yarn.x, b.yarn.z);
+  run(b, 0.5);
+  b.throwYarn(25, 0, 10);
+  const ev = [];
+  let top = 0, flew = 0;
+  run(b, 25, (k) => { ev.push(...k.drain()); top = Math.max(top, k.yarn.y); flew = Math.max(flew, k.yarn.x); });
+  const types = ev.map((e) => e.type);
+  assert.ok(types.includes('toss'), 'a whoosh');
+  assert.ok(types.filter((t) => t === 'thud').length >= 2, 'it bounced');
+  assert.ok(top > YARN.radius + YARN.hold + 1, 'it went up before it came down');
+  assert.ok(flew > 30, `it went far (${flew.toFixed(1)} m)`);
+  assert.ok(types.includes('swat'), 'she caught up with it and batted it');
+  assert.ok(!b.yarn.air && Math.abs(b.yarn.y - YARN.radius) < 1e-6, 'back on the floor');
+});
+
+test('a throw can cross the plate but never leaves it; the hardest throw is capped', () => {
+  const b = yarnOnFloor(3);
+  b.grabYarn();
+  b.holdYarn(500, 0);                                    // your hand off the edge: it stops at the limit
+  run(b, 1);
+  assert.ok(Math.hypot(b.yarn.x, b.yarn.z) <= KITTY.limit + 1e-6);
+  b.throwYarn(900, 300, 12);
+  assert.ok(Math.hypot(b.yarn.vx, b.yarn.vz) <= YARN.maxThrow + 1e-6, 'capped');
+  let far = 0;
+  run(b, 30, (k) => { far = Math.max(far, Math.hypot(k.yarn.x, k.yarn.z)); });
+  assert.ok(far < KITTY.limit + 3, `it stayed on the plate (${far.toFixed(1)} m)`);
+});
+
+test('she never bats a ball that is in your hand', () => {
+  const b = yarnOnFloor(5);
+  b.play();
+  let grabbed = false;
+  const swats = [];
+  run(b, 15, (k) => {
+    if (!grabbed && k.mode === 'pounce') { k.grabYarn(); grabbed = true; }
+    for (const e of k.drain()) if (e.type === 'swat') swats.push(e);
+  });
+  assert.ok(grabbed, 'caught her mid-pounce');
+  assert.equal(swats.length, 0);
+  assert.ok(b.yarn.held);
 });
 
 test('hungry: every so often she asks for food with a little mew', () => {

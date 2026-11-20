@@ -81,6 +81,14 @@ function loadCare() {
   } catch { return null; }
 }
 function saveCare(d) { try { localStorage.setItem(CARE_KEY, JSON.stringify(d)); } catch { /* private mode: fine */ } }
+// the cats you can choose (the ginger kitty is Day 2's own; the other two are the owner's Sketchfab picks)
+const CATS = {
+  ginger: { label: 'Ginger', url: 'models/kitty.glb', fur: 'models/kitty_fur.png' },
+  realistic: { label: 'Realistic', url: 'models/cat_realistic.glb' },
+  tabby: { label: 'Tabby', url: 'models/cat_toti.glb' },
+};
+const THUMB = { ginger: 'models/thumb_ginger.webp', realistic: 'models/thumb_realistic.webp', tabby: 'models/thumb_toti.webp' };
+const catOf = (k) => (Object.hasOwn(CATS, k) ? k : null);
 const filmTag = cleanName(params.get('tag'));
 const filmTagAt = Number(params.get('tagAt')) || 0;
 
@@ -218,7 +226,9 @@ async function start() {
   const care = {
     name: cleanName(saved?.name) || 'Kitty',
     muted: !!saved?.muted,
+    cat: catOf(params.get('cat')) || catOf(saved?.cat) || 'ginger',
   };
+  const catOpts = (k) => ({ url: stamped(CATS[k].url), furUrl: CATS[k].fur ? stamped(CATS[k].fur) : null, furLayers: coarse ? 6 : 10 });
   let needs;
   if (saved && Number.isFinite(saved.hunger) && Number.isFinite(saved.happy)) {
     const away = Math.max(0, Math.min(3600, (Date.now() - (Number(saved.at) || Date.now())) / 1000));
@@ -227,13 +237,16 @@ async function start() {
   try {
     const [{ createKitty }, { createKittyAudio }] = await kittyMods;
     const ground = Math.sin(home.pol) * home.dist;
-    kitty = await createKitty({
-      scene: world.scene, renderer, url: stamped('models/kitty.glb'), toysUrl: stamped('models/toys.glb'),
-      furUrl: stamped('models/kitty_fur.png'), furLayers: coarse ? 6 : 10,
+    const first = { scene: world.scene, renderer, toysUrl: stamped('models/toys.glb'),
       start: kd ? kd.start(home) : { x: 0, z: 0, heading: home.az, mode: 'sit' },
       script: kd ? kd.script : null,
       viewer: kd ? kd.viewer(home) : [Math.sin(home.az) * ground, Math.cos(home.az) * ground],
-      needs: kd ? kd.needs : needs,
+      needs: kd ? kd.needs : needs };
+    kitty = await createKitty({ ...first, ...catOpts(care.cat) }).catch((err) => {
+      if (care.cat === 'ginger') throw err;             // her chosen cat did not load: the ginger kitty instead
+      console.warn('Glikdev: that cat did not load, back to the ginger kitty', err);
+      care.cat = 'ginger';
+      return createKitty({ ...first, ...catOpts('ginger') });
     });
     const focus = new THREE.Vector3();
     world.setShadowFocus(() => kitty.focus(focus));
@@ -263,7 +276,67 @@ async function start() {
     ray.setFromCamera(new THREE.Vector2((cx / innerWidth) * 2 - 1, 1 - (cy / innerHeight) * 2), camera);
     return ray.ray;
   }
+  // the yarn: press on it and drag to carry it (it lifts off the floor), let go while moving to throw it
+  let carry = null, thrownOnce = false;
+  const holdPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  function carryPoint(cx, cy) {
+    holdPlane.constant = -kitty.yarnHoldHeight;            // the plane the carried yarn's centre moves in
+    const p = rayAt(cx, cy).intersectPlane(holdPlane, hit);
+    if (!p) return null;
+    const d = Math.hypot(p.x - camera.position.x, p.z - camera.position.z);
+    if (d > 260) return null;                              // the pointer is up near the horizon: ignore it
+    return { x: p.x, z: p.z };
+  }
   if (kitty && !demo) {
+    // capture phase: this runs before the camera's own drag, so grabbing the yarn never turns the view
+    canvas.addEventListener('pointerdown', (e) => {
+      if (carry || e.button > 0) return;
+      if (kitty.pick(rayAt(e.clientX, e.clientY)) !== 'yarn') return;
+      carry = { id: e.pointerId, x: e.clientX, y: e.clientY, live: false, samples: [] };
+      rig.enabled = false;
+      try { canvas.setPointerCapture(e.pointerId); } catch { /* gone already */ }
+    }, { capture: true });
+    canvas.addEventListener('pointermove', (e) => {
+      if (!carry || e.pointerId !== carry.id) return;
+      if (!carry.live) {
+        if (Math.hypot(e.clientX - carry.x, e.clientY - carry.y) < 6) return;
+        if (!kitty.grabYarn()) { carry = null; rig.enabled = true; return; }
+        carry.live = true;
+        canvas.style.cursor = 'grabbing';
+        audio?.unlock();
+        dismissHint();
+      }
+      const p = carryPoint(e.clientX, e.clientY);
+      if (!p) return;
+      kitty.holdYarn(p.x, p.z);
+      const now = e.timeStamp || performance.now();
+      carry.samples.push({ t: now, x: p.x, z: p.z });
+      while (carry.samples.length > 2 && now - carry.samples[0].t > 110) carry.samples.shift();
+    });
+    const letGo = (e) => {
+      if (!carry || e.pointerId !== carry.id) return;
+      const c = carry;
+      carry = null;
+      rig.enabled = true;
+      canvas.style.cursor = '';
+      if (!c.live) return;                                 // just a tap on it: the tap handler below plays
+      // the throw: how fast the hand was moving over the last ~0.1 s
+      let vx = 0, vz = 0;
+      const s = c.samples, now = e.timeStamp || performance.now();
+      if (s.length >= 2 && now - s[s.length - 1].t < 90) {
+        const a = s[0], b = s[s.length - 1], dt = Math.max(0.016, (b.t - a.t) / 1000);
+        vx = (b.x - a.x) / dt; vz = (b.z - a.z) / dt;
+      }
+      const sp = Math.hypot(vx, vz);
+      // a flick on screen is fast on the ground: tone it down; a lob, higher when harder; a slow let-go just drops it
+      const k = 0.6, f = Math.min(sp * k, 36);
+      kitty.throwYarn(vx * k, vz * k, f < 2 ? 0 : 3 + f * 0.3);
+      thrownOnce = true;
+      hideYarnHint();
+    };
+    canvas.addEventListener('pointerup', letGo);
+    canvas.addEventListener('pointercancel', letGo);
+    canvas.addEventListener('lostpointercapture', letGo);
     canvas.addEventListener('pointerdown', (e) => {
       taps.set(e.pointerId, { x: e.clientX, y: e.clientY, t: performance.now(), multi: taps.size > 0 });
       if (taps.size > 1) for (const v of taps.values()) v.multi = true;
@@ -287,8 +360,9 @@ async function start() {
     canvas.addEventListener('pointercancel', end);
     if (!coarse) {
       canvas.addEventListener('pointermove', (e) => {
-        if (e.buttons) return;
-        canvas.style.cursor = kitty.pick(rayAt(e.clientX, e.clientY)) ? 'pointer' : '';
+        if (e.buttons || carry) return;
+        const what = kitty.pick(rayAt(e.clientX, e.clientY));
+        canvas.style.cursor = what === 'yarn' ? 'grab' : what ? 'pointer' : '';
       });
     }
   }
@@ -303,7 +377,7 @@ async function start() {
   function persist() {
     if (!kitty || !live) return;
     const b = kitty.brain;
-    saveCare({ name: care.name, muted: care.muted, hunger: +b.hunger.toFixed(3), happy: +b.happy.toFixed(3), at: Date.now() });
+    saveCare({ name: care.name, muted: care.muted, cat: care.cat, hunger: +b.hunger.toFixed(3), happy: +b.happy.toFixed(3), at: Date.now() });
   }
   if (kitty && (filmTag || (showUI && !demo))) {
     showName(filmTag || care.name);
@@ -344,6 +418,59 @@ async function start() {
     });
     namer.addEventListener('click', (e) => { if (e.target === namer) namer.close(); });
     namer.addEventListener('close', () => tag.focus());
+
+    // choosing the cat: the new one loads, then takes her place (same name, needs and spot)
+    const picker = $('catpick'), catsEl = $('cats'), catStatus = $('cat-status'), catBtn = $('care-cat');
+    const cards = Object.entries(CATS).map(([k, c]) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'cat-card';
+      b.dataset.cat = k;
+      const img = document.createElement('img');
+      img.src = stamped(THUMB[k]); img.alt = ''; img.width = 480; img.height = 400; img.decoding = 'async';
+      const name = document.createElement('span');
+      name.textContent = c.label;
+      b.append(img, name);
+      catsEl.append(b);
+      return b;
+    });
+    const paintCats = () => cards.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.cat === care.cat)));
+    paintCats();
+    let switching = false;
+    catBtn.addEventListener('click', () => {
+      catStatus.textContent = '';
+      if (typeof picker.showModal === 'function') picker.showModal(); else picker.setAttribute('open', '');
+      (cards.find((b) => b.dataset.cat === care.cat) || cards[0]).focus();
+    });
+    catsEl.addEventListener('click', async (e) => {
+      const card = e.target.closest('.cat-card');
+      if (!card || switching) return;
+      const k = card.dataset.cat;
+      if (k === care.cat) { picker.close(); return; }
+      switching = true;
+      card.classList.add('is-loading');
+      catsEl.setAttribute('aria-busy', 'true');
+      catStatus.textContent = `Bringing the ${CATS[k].label.toLowerCase()} cat…`;
+      try {
+        await kitty.setCat(catOpts(k));
+        care.cat = k;
+        paintCats();
+        persist();
+        catStatus.textContent = '';
+        picker.close();
+        kitty.pet();                                      // hello, new cat
+      } catch (err) {
+        console.warn('Glikdev: that cat did not load', err);
+        catStatus.textContent = 'That cat didn’t load. Check your connection and try again.';
+      } finally {
+        switching = false;
+        card.classList.remove('is-loading');
+        catsEl.removeAttribute('aria-busy');
+      }
+    });
+    $('catpick-close').addEventListener('click', () => picker.close());
+    picker.addEventListener('click', (e) => { if (e.target === picker) picker.close(); });
+    picker.addEventListener('close', () => catBtn.focus());
     setInterval(persist, 4000);
     addEventListener('pagehide', persist);
     document.addEventListener('visibilitychange', () => { if (document.hidden) persist(); });
@@ -390,7 +517,29 @@ async function start() {
   function dismissHint() {
     if (hinted) return;
     hinted = true;
+    if (!hintEl.dataset.yarn) hintEl.classList.add('is-gone');
+  }
+  // the first time the yarn comes out: how to throw it (until you do, or for 9 s)
+  let yarnHinted = false, yarnHintTimer = 0;
+  function hideYarnHint() {
+    clearTimeout(yarnHintTimer);
+    if (!hintEl.dataset.yarn) return;
+    delete hintEl.dataset.yarn;
     hintEl.classList.add('is-gone');
+  }
+  if (kitty && showUI && !demo && !short) {
+    kitty.on((e) => {
+      if (e.type !== 'yarn' || yarnHinted || thrownOnce) return;
+      yarnHinted = true;
+      setTimeout(() => {
+        if (thrownOnce) return;
+        hintEl.textContent = 'Drag the yarn ball and let go to throw it';
+        hintEl.dataset.yarn = '1';
+        hintEl.hidden = false;
+        hintEl.classList.remove('is-gone');
+        yarnHintTimer = setTimeout(hideYarnHint, 9000);
+      }, 1100);
+    });
   }
 
   // ------------------------------------------------------------ loop

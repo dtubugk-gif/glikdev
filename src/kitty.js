@@ -153,12 +153,34 @@ float furHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.545
  *          script?:{t:number,type:string,x?:number,z?:number}[], viewer?:number[], renderer?:THREE.WebGLRenderer,
  *          needs?:{hunger:number, happy:number}}} o
  */
+const CLIPS = ['Idle', 'Walk', 'Trot', 'Sit', 'SitIdle', 'Purr', 'Meow', 'Eat', 'Groom', 'Stretch', 'Sleep', 'Pounce', 'Bat'];
+
+/** Everything a cat model needs; throws (before anything changes) when one is missing. */
+function checkCat(gltf, url) {
+  const clips = Object.fromEntries(gltf.animations.map((c) => [c.name, c]));
+  for (const need of CLIPS) if (!clips[need]) throw new Error(`${url} has no ${need} clip`);
+  for (const b of ['head', 'neck', 'spine', 'chest']) if (!gltf.scene.getObjectByName(b)) throw new Error(`${url} has no ${b} bone`);
+  return clips;
+}
+
+function disposeTree(obj) {
+  const seen = new Set();
+  obj.traverse((m) => {
+    if (!m.isMesh) return;
+    if (!seen.has(m.geometry)) { seen.add(m.geometry); m.geometry.dispose(); }
+    for (const mat of [].concat(m.material)) {
+      if (seen.has(mat)) continue;
+      seen.add(mat);
+      for (const v of Object.values(mat)) if (v?.isTexture && !seen.has(v)) { seen.add(v); v.dispose(); }
+      mat.dispose();
+    }
+  });
+}
+
 export async function createKitty(o) {
   const loader = new GLTFLoader();
-  const [gltf, toys, furMap] = await Promise.all([
-    loader.loadAsync(o.url), loader.loadAsync(o.toysUrl),
-    o.furUrl ? new THREE.TextureLoader().loadAsync(o.furUrl).catch(() => null) : Promise.resolve(null),
-  ]);
+  const loadFur = (url) => (url ? new THREE.TextureLoader().loadAsync(url).catch(() => null) : Promise.resolve(null));
+  const [gltf, toys, furMap] = await Promise.all([loader.loadAsync(o.url), loader.loadAsync(o.toysUrl), loadFur(o.furUrl)]);
   const S = KITTY.scale;
   const aniso = Math.min(8, o.renderer?.capabilities.getMaxAnisotropy() ?? 1);
   const shadowy = (obj) => obj.traverse((m) => {
@@ -169,23 +191,34 @@ export async function createKitty(o) {
 
   const root = new THREE.Group();
   root.name = 'Kitty';
-  const model = gltf.scene;
-  model.scale.setScalar(S);
-  model.position.y = LIFT * S;
-  root.add(model);
-  shadowy(model);
-  let body = null;
-  model.traverse((m) => {
-    if (!m.isMesh) return;
-    m.frustumCulled = false;                     // skinned: the bind-pose bounds do not follow her
-    if (m.name === 'Whiskers') m.castShadow = false;
-    if (m.isSkinnedMesh && m.material?.name === 'M_Kitty') body = m;
-  });
-  if (body && furMap && (o.furLayers ?? 10) > 0) {
-    furMap.flipY = false;                        // same UV convention as the glTF's own textures
-    furMap.colorSpace = THREE.NoColorSpace;
-    addFur(body, furMap, o.furLayers ?? 10);
+  // the cat herself: the Day 2 ginger kitty, or one of the other cats (same skeleton and clips)
+  let model, clips, B;
+  const bone = (n) => model.getObjectByName(n);
+  function mount(g, fur, furLayers) {
+    clips = checkCat(g, 'the cat');
+    model = g.scene;
+    model.name = 'Cat';
+    model.scale.setScalar(S);
+    model.position.y = LIFT * S;
+    root.add(model);
+    shadowy(model);
+    let body = null;
+    model.traverse((m) => {
+      if (!m.isMesh) return;
+      m.frustumCulled = false;                   // skinned: the bind-pose bounds do not follow her
+      if (/whisker/i.test(m.name) || /whisker/i.test(m.material?.name ?? '')) m.castShadow = false;
+      if (m.isSkinnedMesh && m.material?.name === 'M_Kitty') body = m;
+    });
+    if (body && fur && (furLayers ?? 10) > 0) {
+      fur.flipY = false;                         // same UV convention as the glTF's own textures
+      fur.colorSpace = THREE.NoColorSpace;
+      addFur(body, fur, furLayers ?? 10);
+    }
+    B = { head: bone('head'), neck: bone('neck'), spine: bone('spine'), chest: bone('chest'),
+      ears: [bone('ear_L'), bone('ear_R')], paws: ['frontpaw_L', 'frontpaw_R', 'hindpaw_L', 'hindpaw_R'].map(bone) };
   }
+  checkCat(gltf, o.url);
+  mount(gltf, furMap, o.furLayers);
   o.scene.add(root);
 
   // her things
@@ -213,14 +246,6 @@ export async function createKitty(o) {
   shadowy(yarnRoot);
   o.scene.add(yarnRoot);
 
-  const bone = (n) => model.getObjectByName(n);
-  const B = { head: bone('head'), neck: bone('neck'), spine: bone('spine'), chest: bone('chest'),
-    ears: [bone('ear_L'), bone('ear_R')], paws: ['frontpaw_L', 'frontpaw_R', 'hindpaw_L', 'hindpaw_R'].map(bone) };
-  const clips = Object.fromEntries(gltf.animations.map((c) => [c.name, c]));
-  for (const need of ['Idle', 'Walk', 'Trot', 'Sit', 'SitIdle', 'Purr', 'Meow', 'Eat', 'Groom', 'Stretch', 'Sleep', 'Pounce', 'Bat']) {
-    if (!clips[need]) throw new Error(`kitty.glb has no ${need} clip`);
-  }
-
   // ---------------------------------------------------------------- effects
   const fx = new THREE.Group();
   fx.name = 'KittyFX';
@@ -243,6 +268,8 @@ export async function createKitty(o) {
     return m;
   };
   const bodyBlob = blob(1, 1, 0.42);
+  const yarnBlob = blob(YARN.radius * 2.6, YARN.radius * 2.6, 0.5);   // under the yarn: shows how high it flies
+  yarnBlob.visible = false;
   const pawBlobs = B.paws.map(() => blob(0.05 * KITTY.scale, 0.06 * KITTY.scale, 0.5));
   const zees = pool(zTexture(), 4);
   const paw = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 4.2), new THREE.MeshBasicMaterial({
@@ -260,18 +287,38 @@ export async function createKitty(o) {
   const startOpts = { seed: o.seed ?? 2, ...o.start, viewer: o.viewer, ...(o.needs || {}) };
   const yq = new THREE.Quaternion(), dq = new THREE.Quaternion(), axis = new THREE.Vector3();
 
-  function reset() {
-    brain = createBrain(startOpts);
-    mixer?.stopAllAction();
+  function newMixer() {
+    if (mixer) { mixer.stopAllAction(); mixer.uncacheRoot(mixer.getRoot()); }
     mixer = new THREE.AnimationMixer(model);
     actions = Object.fromEntries(Object.entries(clips).map(([n, c]) => [n, mixer.clipAction(c)]));
     cur = null; curKey = '';
+  }
+
+  function reset() {
+    brain = createBrain(startOpts);
+    newMixer();
     heartLog = []; callLog = null; bowlLog = null; scriptAt = 0; lastSpin = 0;
     look = { yaw: 0, pitch: 0, w: 0 };
     yq.identity();
     play(brain.anim(), true);
     mixer.update(0);
     place();
+  }
+
+  /** Change cats in place: she keeps her name, needs, spot and whatever she is doing. */
+  async function setCat({ url, furUrl, furLayers }) {
+    const [g, fur] = await Promise.all([loader.loadAsync(url), loadFur(furUrl)]);
+    checkCat(g, url);                            // a broken file leaves the current cat as she is
+    const was = cur ? { name: cur.getClip().name, time: cur.time } : null;
+    const old = model;
+    root.remove(old);
+    mount(g, fur, furLayers);
+    newMixer();
+    play(brain.anim(), true);
+    if (was && cur.getClip().name === was.name) cur.time = Math.min(was.time, cur.getClip().duration);
+    mixer.update(0);
+    look.w = 0;                                  // the head turn eases back in on the new skeleton
+    disposeTree(old);
   }
 
   function play(a, instant = false) {
@@ -367,7 +414,7 @@ export async function createKitty(o) {
   const tgt = new THREE.Vector3();
   function lookTarget(viewer) {
     const y = brain.yarn, bw = brain.bowl;
-    const chasing = y && (brain.goal === 'yarn' || ['pounce', 'bat'].includes(brain.mode) || brain.face?.then === 'pounce');
+    const chasing = y && (y.held || y.air || brain.goal === 'yarn' || ['pounce', 'bat'].includes(brain.mode) || brain.face?.then === 'pounce');
     if (chasing) return tgt.set(y.x, y.y, y.z);
     if (bw && bw.eatenAt == null && (brain.goal === 'eat' || brain.face?.then === 'eat')) return tgt.set(bw.x, 0.6, bw.z);
     if (['walk', 'trot'].includes(brain.mode)) return null;     // walking: eyes ahead
@@ -490,16 +537,23 @@ export async function createKitty(o) {
     // the yarn
     const y = brain.yarn;
     yarnRoot.visible = !!y;
+    yarnBlob.visible = !!y;
     if (y) {
       yarnRoot.position.set(y.x, y.y, y.z);
       yarnRoot.quaternion.copy(yq);
+      const h = Math.max(0, y.y - YARN.radius);          // the higher it is, the smaller and fainter its shadow
+      yarnBlob.position.set(y.x, 0.04, y.z);
+      yarnBlob.scale.setScalar(1 / (1 + h * 0.06));
+      yarnBlob.material.opacity = 0.5 / (1 + h * 0.18);
     }
   }
 
   reset();
   let acc = 0;
   return {
-    root, model,
+    root,
+    get model() { return model; },
+    setCat,
     get brain() { return brain; },
     get t() { return brain.t; },
     /** live play: advance by real time; returns the number of fixed steps taken */
@@ -522,6 +576,12 @@ export async function createKitty(o) {
       if (steps) { lookAt(viewer, steps * STEP); earFlicks(); }
       drawFX();
     },
+    /** carrying and throwing the yarn (main.js turns a drag into these) */
+    yarnHoldHeight: YARN.radius + YARN.hold,
+    grabYarn() { return brain.grabYarn(); },
+    holdYarn(x, z) { brain.holdYarn(x, z); },
+    throwYarn(vx, vz, vy) { brain.throwYarn(vx, vz, vy); },
+    yarnPosition(out = new THREE.Vector3()) { const y = brain.yarn; return y ? out.set(y.x, y.y, y.z) : null; },
     call(x, z) { brain.call(x, z); },
     pet() { brain.pet(); },
     feed() { brain.feed(); },
@@ -534,7 +594,7 @@ export async function createKitty(o) {
         b.getWorldPosition(v1);
         if (ray.distanceSqToPoint(v1) < rad * rad) return 'kitty';
       }
-      if (brain.yarn && ray.distanceSqToPoint(yarnRoot.position) < (YARN.radius * 1.5) ** 2) return 'yarn';
+      if (brain.yarn && !brain.yarn.flying && ray.distanceSqToPoint(yarnRoot.position) < (YARN.radius * 1.9) ** 2) return 'yarn';
       return null;
     },
     headPosition(out = new THREE.Vector3()) { root.updateMatrixWorld(true); return B.head.getWorldPosition(out); },
@@ -544,10 +604,18 @@ export async function createKitty(o) {
       out.set(brain.x, 0, brain.z);
       const y = brain.yarn, bw = brain.bowl;
       if (bw && bw.eatenAt == null) out.lerp(v2.set(bw.x, 0, bw.z), 0.35);
-      else if (y && (brain.goal === 'yarn' || ['face', 'pounce', 'bat'].includes(brain.mode) || y.flying > 0)) out.lerp(v2.set(y.x, 0, y.z), 0.4);
+      else if (y && (y.held || y.air || brain.goal === 'yarn' || ['face', 'pounce', 'bat'].includes(brain.mode) || y.flying > 0)) {
+        // lean toward the ball, but never more than ~5 m ahead of her: she stays in the picture
+        const d = Math.hypot(y.x - brain.x, y.z - brain.z);
+        out.lerp(v2.set(y.x, 0, y.z), Math.min(0.4, 5 / Math.max(d, 1)));
+      }
       return out;
     },
     /** true while something is moving (the page then renders every frame) */
-    busy() { return !['sit', 'idle', 'sleep'].includes(brain.mode) || heartLog.length > 0 || !!brain.yarn?.flying || bowl.visible; },
+    busy() {
+      const y = brain.yarn;
+      return !['sit', 'idle', 'sleep'].includes(brain.mode) || heartLog.length > 0 || bowl.visible
+        || !!(y && (y.flying || y.held || y.air || y.vx || y.vz));
+    },
   };
 }
