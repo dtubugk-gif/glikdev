@@ -3,7 +3,7 @@
 // deterministic: kittybrain.js is seeded and stepped at a fixed rate), so a recorder that controls
 // requestAnimationFrame / performance.now gets identical frames on every run.
 
-export const DEMOS = ['orbit', 'reveal', 'kitty', 'kittycall', 'kittypet', 'kittywalk'];
+export const DEMOS = ['orbit', 'reveal', 'kitty', 'kittycall', 'kittypet', 'kittywalk', 'kittyname', 'kittyfeed', 'kittyplay'];
 
 const lerp = (a, b, k) => a + (b - a) * k;
 const DEG = Math.PI / 180;
@@ -35,6 +35,25 @@ export const KITTY_DEMOS = {
     script: [{ t: 0.55, type: 'pet' }, { t: 2.7, type: 'pet' }],
     viewer: () => [Math.sin(0.2) * 20, Math.cos(0.2) * 20],
   },
+  // her name tag pops up (?tag=Name&tagAt=...), she is petted and loves it
+  kittyname: {
+    start: () => ({ x: 0, z: 0, heading: 0.2, mode: 'sit' }),
+    script: [{ t: 1.0, type: 'pet' }],
+    viewer: () => [Math.sin(0.2) * 20, Math.cos(0.2) * 20],
+  },
+  // dinner: the bowl pops down beside her, she runs over, crunches, washes her face
+  kittyfeed: {
+    start: () => ({ x: 0, z: 0, heading: 0.35, mode: 'sit' }),
+    script: [{ t: 0.3, type: 'feed' }],
+    viewer: () => [Math.sin(0.35) * 30, Math.cos(0.35) * 30],
+    needs: { hunger: 0.9, happy: 0.5 },
+  },
+  // the yarn lands beside her: chase, pounce, swat
+  kittyplay: {
+    start: () => ({ x: 0, z: 0, heading: 0.35, mode: 'sit' }),
+    script: [{ t: 0.3, type: 'play' }],
+    viewer: () => [Math.sin(0.35) * 30, Math.cos(0.35) * 30],
+  },
   // she strolls across the plate; the camera tracks alongside
   kittywalk: {
     start: () => ({ x: -16, z: 2, heading: Math.PI / 2, mode: 'idle' }),
@@ -48,7 +67,8 @@ export const KITTY_DEMOS = {
  * @param {number} t      seconds
  * @param {{az:number, pol:number, dist:number, target:number[], shift:number, fov:number,
  *          horizon:number, horizonAt:Function, edgeDip:Function}} home  the default framing (main.js)
- * @param {{x:number, z:number, heading:number, head:number[]}|null} [kitty]  the kitty at t
+ * @param {{x:number, z:number, heading:number, head:number[], bowl:object|null, yarn:object|null}|null} [kitty]
+ *        the kitty at t (with her bowl and yarn, when they are out)
  * @returns {{az:number, pol:number, dist:number, target:number[], shift:number}
  *          | {position:number[], look:number[], shift:number} | null}
  */
@@ -82,9 +102,9 @@ export function demoPose(name, t, home, kitty = null) {
     const k = easeOut(t / 5.4);
     const a = face + lerp(-1.6, 0.42, k) + 0.025 * Math.max(0, t - 5.4);
     const d = lerp(4, 15.5, easeInOut(t / 5.4));
-    const h = lerp(70, 4.2, k);
+    const h = lerp(70, 4.8, k);
     const pos = [kx + Math.sin(a) * d, h, kz + Math.cos(a) * d];
-    const look = [kx, lerp(0, 3.6, easeInOut(t / 4.5)), kz];
+    const look = [kx, lerp(0, 7.0, easeInOut(t / 4.5)), kz];          // she sits low in the frame, under the captions
     return { position: pos, look, shift: 0 };
   }
   if (name === 'kittycall') {
@@ -92,20 +112,37 @@ export function demoPose(name, t, home, kitty = null) {
     const pos = [3 + 0.4 * Math.sin(t * 0.3), 3.2, 24 - 0.4 * t];
     const head = kitty.head;
     const near = clamp01((40 - Math.hypot(kx - pos[0], kz - pos[2])) / 25);
-    const look = [lerp(kx, head[0], near), lerp(2.2, head[1] - 0.6, near), lerp(kz, head[2], near)];
+    const look = [lerp(kx, head[0], near), lerp(2.2, head[1] + 0.8, near), lerp(kz, head[2], near)];
     return { position: pos, look, shift: 0 };
   }
   if (name === 'kittypet') {
     // close and low, pushing in a little while she purrs
     const a = 0.2 + 0.42 - 0.05 * easeInOut(t / 6);
-    const d = lerp(14.5, 11.5, easeInOut(t / 6));
+    const d = lerp(14.5, 12.5, easeInOut(t / 6));
     const pos = [kx + Math.sin(a) * d, 4.0, kz + Math.cos(a) * d];
-    return { position: pos, look: [kx, 3.5, kz], shift: 0 };
+    return { position: pos, look: [kx, 6.4, kz], shift: 0 };
+  }
+  if (name === 'kittyname') {
+    // close and low, like the pet shot; room above her head for the name tag
+    const a = 0.2 + 0.36, d = 14.5 - 0.5 * easeInOut(t / 3);
+    const pos = [kx + Math.sin(a) * d, 4.0, kz + Math.cos(a) * d];
+    return { position: pos, look: [kx, 6.9, kz], shift: 0 };
+  }
+  if (name === 'kittyfeed' || name === 'kittyplay') {
+    // a wider shot that keeps her and the bowl (or the yarn) in frame, eased in once it appears
+    const thing = name === 'kittyfeed' ? kitty.bowl : kitty.yarn;
+    const ramp = easeInOut((t - 0.3) / 1.4) * (name === 'kittyfeed' ? 0.5 : 0.42);
+    const fx = thing ? kx + (thing.x - kx) * ramp : kx, fz = thing ? kz + (thing.z - kz) * ramp : kz;
+    // feeding: wide while she runs over, then in close while she eats; playing: a little wider throughout
+    const k = name === 'kittyfeed' ? easeInOut((t - 1.1) / 1.6) : easeInOut(t / 3) * 0.6;
+    const a = 0.35 + 0.3, dist = lerp(22, 12.5, k);
+    const pos = [fx + Math.sin(a) * dist, lerp(4.6, 3.4, k), fz + Math.cos(a) * dist];
+    return { position: pos, look: [fx, lerp(6.6, 4.4, k), fz], shift: 0 };
   }
   if (name === 'kittywalk') {
     // tracking alongside, a little ahead of her
-    const pos = [kx + 3, 4.0, kz + 23];
-    return { position: pos, look: [kx + 1, 2.9, kz], shift: 0 };
+    const pos = [kx + 3, 3.0, kz + 24];                             // low, so she walks along the lower half
+    return { position: pos, look: [kx + 1, 7.0, kz], shift: 0 };
   }
   return null;
 }

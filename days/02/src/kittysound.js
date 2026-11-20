@@ -115,3 +115,163 @@ export function bell(sr = 48000, v = 0) {
   }
   return normalise(out, 0.55);
 }
+
+// ---------------------------------------------------------------------------------------------
+// More of her voice and the sounds around her (added with the care features).
+//   voice(sr, spec)  the shared engine: a harmonic source with a pitch curve, moving formants,
+//                    optional rolled-R flutter (a trill) and breath noise.
+//   trill: the rolled "brrrp?" cats make to say hello;  chirp: a quick "mrp!" at prey (the yarn)
+//   mew: a tiny, high kitten mew (hungry);  yawn: a long breathy "aaah" falling;  sigh: an out-breath
+//   bite: crunchy kibble;  step: a soft paw pad on the floor;  thud: the yarn landing;  swat: a paw flick
+
+function voice(sr, { dur, f0, formants, flutter = null, breath = 0.06, tilt = 1.1, amp, seed = 1, peak = 0.8 }) {
+  const r = prng(seed);
+  const n = Math.floor(sr * dur);
+  const out = new Float32Array(n);
+  let phase = 0, jitter = 0, hp = 0, lp = 0;
+  for (let i = 0; i < n; i++) {
+    const t = i / sr, u = t / dur;
+    jitter += r() * 0.004 - jitter * 0.02;
+    const f = f0(u) * (1 + jitter);
+    phase += f / sr;
+    const F = formants(u);
+    let s = 0;
+    for (let k = 1; k * f < sr * 0.45 && k <= 24; k++) {
+      const h = k * f;
+      let env = 0;
+      for (const [Fc, bw, g] of F) env += g / (1 + ((h - Fc) / bw) ** 2);
+      s += Math.sin(TAU * k * phase) * env / k ** tilt;
+    }
+    const nz = r();
+    hp = 0.9 * (hp + nz - lp); lp = nz;
+    s += hp * breath;
+    const fl = flutter ? 1 - flutter.depth * (0.5 + 0.5 * Math.sin(TAU * flutter.rate * t)) : 1;
+    out[i] = s * amp(u) * fl;
+  }
+  return normalise(out, peak);
+}
+
+/** "brrrp?": a rolled, rising hello */
+export function trill(sr = 48000, v = 0) {
+  const base = 430 + 60 * (v % 3);
+  return voice(sr, {
+    dur: 0.42 + 0.06 * (v % 2), seed: 41 + v,
+    f0: (u) => base * (1 + 0.38 * smooth(0.15, 0.95, u)),
+    formants: (u) => [[700 + 500 * u, 300, 1], [2300, 420, 0.6], [4000, 600, 0.25]],
+    flutter: { rate: 26, depth: 0.75 }, breath: 0.05, tilt: 1.25,
+    amp: (u) => smooth(0, 0.08, u) * (1 - smooth(0.8, 1, u)),
+  });
+}
+
+/** "mrp!": short, high, quick upward chirp */
+export function chirp(sr = 48000, v = 0) {
+  const base = 780 + 90 * (v % 3);
+  return voice(sr, {
+    dur: 0.17, seed: 61 + v,
+    f0: (u) => base * (1 + 0.55 * smooth(0, 0.7, u)),
+    formants: (u) => [[1300, 320, 1], [2900, 500, 0.7]],
+    breath: 0.04, tilt: 1.0,
+    amp: (u) => smooth(0, 0.12, u) * (1 - smooth(0.6, 1, u)),
+  });
+}
+
+/** a tiny kitten "mew" */
+export function mew(sr = 48000, v = 0) {
+  const base = 980 + 120 * (v % 3);
+  return voice(sr, {
+    dur: 0.36, seed: 71 + v,
+    f0: (u) => base * (1 + 0.2 * smooth(0, 0.3, u) - 0.35 * smooth(0.3, 1, u)),
+    formants: (u) => [[1500 - 300 * u, 340, 1], [3200, 500, 0.6], [5200, 700, 0.2]],
+    breath: 0.07, tilt: 0.95,
+    amp: (u) => smooth(0, 0.1, u) * (1 - smooth(0.65, 1, u)),
+  });
+}
+
+/** a big yawn: breathy, opening wide, pitch sliding down */
+export function yawn(sr = 48000) {
+  return voice(sr, {
+    dur: 1.1, seed: 83, peak: 0.6,
+    f0: (u) => 420 * (1 - 0.45 * smooth(0.1, 1, u)),
+    formants: (u) => [[600 + 700 * Math.sin(Math.PI * Math.min(1, u * 1.3)), 380, 1], [1700, 450, 0.5]],
+    breath: 0.35, tilt: 1.5,
+    amp: (u) => smooth(0, 0.15, u) * (1 - smooth(0.55, 1, u)),
+  });
+}
+
+/** a contented out-breath as she settles down */
+export function sigh(sr = 48000) {
+  const r = prng(91);
+  const n = Math.floor(sr * 0.8);
+  const out = new Float32Array(n);
+  let a = 0, b2 = 0;
+  for (let i = 0; i < n; i++) {
+    const u = i / n;
+    a += (r() - a) * 0.25; b2 += (a - b2) * 0.25;
+    out[i] = (a - b2 * 0.6) * smooth(0, 0.12, u) * (1 - smooth(0.35, 1, u));
+  }
+  return normalise(out, 0.4);
+}
+
+/** crunchy kibble: a few sharp clicks inside a short burst of dry noise */
+export function bite(sr = 48000, v = 0) {
+  const r = prng(101 + v);
+  const n = Math.floor(sr * 0.16);
+  const out = new Float32Array(n);
+  const clicks = [0, 0.018, 0.04, 0.07].map((c) => c + 0.006 * (v % 3));
+  let hp = 0, lp = 0;
+  for (let i = 0; i < n; i++) {
+    const t = i / sr;
+    const nz = r();
+    hp = 0.6 * (hp + nz - lp); lp = nz;
+    let e = 0;
+    for (const c of clicks) if (t >= c) e += Math.exp(-(t - c) * 140);
+    out[i] = hp * e * (1 - smooth(0.08, 0.16, t));
+  }
+  return normalise(out, 0.5);
+}
+
+/** a soft paw pad on the floor */
+export function step(sr = 48000, v = 0) {
+  const r = prng(121 + v);
+  const n = Math.floor(sr * 0.09);
+  const out = new Float32Array(n);
+  let a = 0, b2 = 0;
+  const f = 70 + 12 * (v % 4);
+  for (let i = 0; i < n; i++) {
+    const t = i / sr;
+    a += (r() - a) * 0.08; b2 += (a - b2) * 0.08;
+    out[i] = (b2 * 3 + Math.sin(TAU * f * t) * 0.5) * Math.exp(-t * 55) * (1 - Math.exp(-t * 900));
+  }
+  return normalise(out, 0.5);
+}
+
+/** the yarn landing on the plate */
+export function thud(sr = 48000) {
+  const r = prng(131);
+  const n = Math.floor(sr * 0.25);
+  const out = new Float32Array(n);
+  let a = 0, b2 = 0;
+  for (let i = 0; i < n; i++) {
+    const t = i / sr;
+    a += (r() - a) * 0.05; b2 += (a - b2) * 0.05;
+    out[i] = (b2 * 3 + Math.sin(TAU * 55 * t) * 0.8) * Math.exp(-t * 22) * (1 - Math.exp(-t * 600));
+  }
+  return normalise(out, 0.6);
+}
+
+/** a quick paw flick: a short whoosh with a soft tap at the end */
+export function swat(sr = 48000) {
+  const r = prng(141);
+  const n = Math.floor(sr * 0.22);
+  const out = new Float32Array(n);
+  let bp = 0, lp = 0;
+  for (let i = 0; i < n; i++) {
+    const t = i / sr, u = t / 0.22;
+    const nz = r();
+    const k = 0.05 + 0.25 * smooth(0, 0.6, u);              // the band sweeps up as the paw speeds up
+    lp += (nz - lp) * k; bp = nz - lp;
+    const tap = t > 0.16 ? Math.sin(TAU * 160 * (t - 0.16)) * Math.exp(-(t - 0.16) * 60) : 0;
+    out[i] = bp * Math.sin(Math.PI * Math.min(1, u * 1.25)) * 0.6 + tap;
+  }
+  return normalise(out, 0.5);
+}
