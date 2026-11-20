@@ -37,12 +37,12 @@ test('on her own she wanders, but stays near the middle of the plate', () => {
   for (const m of ['sit', 'standup', 'walk']) assert.ok(modes.has(m), `she did ${m}`);
 });
 
-test('called: she stands, trots there, faces the caller, sits and meows', () => {
+test('called: she stands, comes running, faces the caller, sits and meows', () => {
   const b = createBrain({ seed: 1, x: 0, z: 0, mode: 'sit', viewer: [40, 40] });
   b.call(30, 30);
   const seen = [];
   run(b, 12, (k) => { if (seen[seen.length - 1] !== k.mode) seen.push(k.mode); });
-  assert.deepEqual(seen.slice(0, 2), ['standup', 'trot']);
+  assert.deepEqual(seen.slice(0, 3), ['standup', 'run', 'trot']);   // 42 m: a run, then a trot to finish
   assert.ok(seen.includes('face') && seen.includes('sitdown') && seen.includes('meow'), seen.join(' > '));
   assert.ok(Math.hypot(b.x - 30, b.z - 30) < 5, 'she got there');
   const want = headingTo(b.x, b.z, 40, 40);
@@ -232,6 +232,50 @@ test('she never bats a ball that is in your hand', () => {
   assert.ok(grabbed, 'caught her mid-pounce');
   assert.equal(swats.length, 0);
   assert.ok(b.yarn.held);
+});
+
+test('called from far away she runs, and trots the last stretch before she arrives', () => {
+  const b = createBrain({ seed: 6, mode: 'idle', timer: 99, x: 0, z: 0, viewer: [0, 40] });
+  b.call(0, -60);
+  const modes = [];
+  let top = 0;
+  run(b, 12, (k) => { if (modes[modes.length - 1] !== k.mode) modes.push(k.mode); top = Math.max(top, k.speed); });
+  assert.ok(modes.includes('run'), `she ran (${modes.join(' > ')})`);
+  assert.ok(modes.indexOf('trot') > modes.indexOf('run'), 'and slowed to a trot near the end');
+  assert.ok(top > KITTY.trotSpeed * 1.3 && top <= KITTY.runSpeed + 1e-6, `top speed ${top.toFixed(1)} m/s`);
+  assert.ok(Math.hypot(b.x, b.z + 60) < 6, 'she got there');
+  assert.equal(b.anim().name === 'Run' || modes.at(-1) !== 'run', true);
+});
+
+test('a short call is still a trot, and a stroll is still a walk', () => {
+  const b = createBrain({ seed: 6, mode: 'idle', timer: 99, viewer: [0, 40] });
+  b.call(0, -10);
+  const modes = new Set();
+  run(b, 4, (k) => modes.add(k.mode));
+  assert.ok(modes.has('trot') && !modes.has('run'), [...modes].join(','));
+  const c = createBrain({ seed: 6, mode: 'idle', timer: 99 });
+  c.walkTo(0, -60);
+  const m2 = new Set();
+  run(c, 6, (k) => m2.add(k.mode));
+  assert.ok(m2.has('walk') && !m2.has('run'), [...m2].join(','));
+});
+
+test('a ball thrown far away: she runs after it', () => {
+  const b = yarnOnFloor(4);
+  b.grabYarn();
+  b.holdYarn(b.yarn.x, b.yarn.z);
+  run(b, 0.5);
+  b.throwYarn(0, -34, 12);
+  const modes = new Set();
+  run(b, 6, (k) => modes.add(k.mode));
+  assert.ok(modes.has('run'), [...modes].join(','));
+});
+
+test('the run clip shows while running', () => {
+  const b = createBrain({ seed: 1 });
+  b.mode = 'run'; b.speed = KITTY.runSpeed;
+  assert.equal(b.anim().name, 'Run');
+  assert.ok(Math.abs(b.anim().rate - 1) < 1e-9);
 });
 
 test('hungry: every so often she asks for food with a little mew', () => {

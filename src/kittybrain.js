@@ -5,7 +5,7 @@
 // the same calls at the same times always give the same kitty.
 //
 // On her own she sits, washes her face, wanders, stretches, naps, and asks for food when she is hungry.
-//   call(x, z)   she trots there, turns to whoever called, sits and meows
+//   call(x, z)   she trots there (runs, when it is far), turns to whoever called, sits and meows
 //   pet()        she purrs with her eyes shut (petting a sleeping kitty wakes her with a stretch first)
 //   feed()       a bowl of kibble appears near her; she runs over, eats it all, then washes her face
 //   play()       a ball of yarn lands near her: she chases it, pounces, bats it away - three rounds
@@ -16,16 +16,19 @@ export const STEP = 1 / 60;
 
 /** Real cat sizes from the Blender build times this scale = metres in the world. */
 export const KITTY_SCALE = 14;
-const REAL = { walk: 0.3427, trot: 0.9694 };            // m/s at real size: paws stay planted at these
+const REAL = { walk: 0.3427, trot: 0.9694, run: 1.6667 }; // m/s at real size: paws stay planted at these
 export const KITTY = {
   scale: KITTY_SCALE,
   walkSpeed: REAL.walk * KITTY_SCALE,                    // 4.8 m/s
   trotSpeed: REAL.trot * KITTY_SCALE,                    // 13.6 m/s
+  runSpeed: REAL.run * KITTY_SCALE,                      // 23.3 m/s: the gallop
+  runFrom: 18,                                           // a trip longer than this (m) is run...
+  runTo: 7,                                              // ...and the last stretch trotted again
   roam: 24,                                              // she wanders within this radius of the centre
   limit: 110,                                            // nothing is ever placed past this (the plate is 128)
   mouth: 0.193 * KITTY_SCALE,                            // nose ahead of her centre while eating (Eat clip)
   pounce: 4.8,                                           // metres covered by a pounce
-  clips: { Idle: 4, Walk: 0.8, Trot: 0.4667, Sit: 0.9, SitIdle: 4, Purr: 3, Meow: 1.2,
+  clips: { Idle: 4, Walk: 0.8, Trot: 0.4667, Run: 0.4, Sit: 0.9, SitIdle: 4, Purr: 3, Meow: 1.2,
     Eat: 1.6, Groom: 3, Stretch: 2.2, Sleep: 4, Pounce: 1.3, Bat: 0.7 },
 };
 export const EAT = { seconds: 5.4, bite: 1.6 / 3 };      // three bites per Eat loop
@@ -116,8 +119,15 @@ export function createBrain(o = {}) {
     if (lying()) { wake(null); return; }
     if (b.mode === 'stretch') return;                    // she sets off when the stretch is done
     if (sitting()) { enter('standup', KITTY.clips.Sit / 1.25); return; }
-    enter(fast ? 'trot' : 'walk');
+    enter(gait());
     if (fast) emit('jingle');
+  }
+
+  /** How she sets off: a walk for a stroll; in a hurry a trot, or a run when it is far. */
+  function gait() {
+    if (!b.fast) return 'walk';
+    const d = b.target ? Math.hypot(b.target.x - b.x, b.target.z - b.z) : 0;
+    return d > KITTY.runFrom ? 'run' : 'trot';
   }
 
   function wake(after) {                                 // a nap ends with a big stretch
@@ -376,7 +386,7 @@ export function createBrain(o = {}) {
   }
 
   function setOff() {                                    // after standing up or a stretch
-    if (b.target) { enter(b.fast ? 'trot' : 'walk'); if (b.fast) emit('jingle'); return true; }
+    if (b.target) { enter(gait()); if (b.fast) emit('jingle'); return true; }
     return false;
   }
 
@@ -428,14 +438,20 @@ export function createBrain(o = {}) {
         }
         break;
       case 'walk':
-      case 'trot': {
-        const fast = b.mode === 'trot';
+      case 'trot':
+      case 'run': {
         if (b.goal === 'yarn' && b.yarn && b.yarn.flying === 0) {   // keep after it while it rolls
           const y = b.yarn, dx = b.x - y.x, dz = b.z - y.z, d = Math.hypot(dx, dz) || 1;
           b.target = { x: y.x + (dx / d) * standOff(), z: y.z + (dz / d) * standOff() };
         }
+        // in a hurry: a long way to go turns the trot into a run; near the end she trots again
+        const left = Math.hypot(b.target.x - b.x, b.target.z - b.z);
+        if (b.mode === 'trot' && left > KITTY.runFrom) { enter('run'); emit('jingle'); }
+        else if (b.mode === 'run' && left < KITTY.runTo) enter('trot');
+        const fast = b.mode !== 'walk';
         const exact = b.goal === 'eat' || b.goal === 'yarn';
-        const dist = steer(dt, fast ? KITTY.trotSpeed : KITTY.walkSpeed, fast ? 3.2 : 2.0);
+        const top = b.mode === 'run' ? KITTY.runSpeed : fast ? KITTY.trotSpeed : KITTY.walkSpeed;
+        const dist = steer(dt, top, b.mode === 'run' ? 2.6 : fast ? 3.2 : 2.0);
         if (dist < (exact ? 0.5 : fast ? 4.5 : 3.0)) arrive();
         break;
       }
@@ -526,6 +542,7 @@ export function createBrain(o = {}) {
     switch (b.mode) {
       case 'walk': return { name: 'Walk', rate: clamp(b.speed / KITTY.walkSpeed, 0.35, 1.4) };
       case 'trot': return { name: 'Trot', rate: clamp(b.speed / KITTY.trotSpeed, 0.45, 1.3) };
+      case 'run': return { name: 'Run', rate: clamp(b.speed / KITTY.runSpeed, 0.6, 1.25), fade: 0.3 };
       case 'face': return { name: 'Walk', rate: 0.55 };
       case 'sitdown': return { name: 'Sit', rate: 1, once: true };
       case 'standup': return { name: 'Sit', rate: -1.25, once: true };

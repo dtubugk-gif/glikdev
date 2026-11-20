@@ -14,7 +14,7 @@ import { createBrain, KITTY, STEP, YARN } from './kittybrain.js';
 const FADE = 0.28;                 // seconds of crossfade between clips (a clip may ask for its own)
 const LIFT = 0.0008;               // the paw pads' depth below the toe joints at real size (m)
 const LOOK = { idle: 1, sit: 1, face: 0.8, sitdown: 0.45, meow: 0.35, purr: 0.2, standup: 0.3, groom: 0.1,
-  trot: 0.35, walk: 0.25, pounce: 0.6, bat: 0.5, stretch: 0 };
+  trot: 0.35, walk: 0.25, run: 0.15, pounce: 0.6, bat: 0.5, stretch: 0 };
 
 function blobTexture() {                       // a soft round contact shadow
   const c = document.createElement('canvas');
@@ -30,8 +30,9 @@ function blobTexture() {                       // a soft round contact shadow
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
 }
-// footfalls within each gait clip (fraction of the loop): walk = one paw at a time, trot = diagonal pairs
-const FOOTFALLS = { Walk: [0, 0.25, 0.5, 0.75], Trot: [0, 0.5] };
+// footfalls within each gait clip (fraction of the loop): walk = one paw at a time, trot = diagonal pairs,
+// run = the gallop's four beats (left hind, left fore, right fore, right hind)
+const FOOTFALLS = { Walk: [0, 0.25, 0.5, 0.75], Trot: [0, 0.5], Run: [0, 0.44, 0.53, 0.91] };
 
 function spriteTexture(draw, size = 128) {
   const c = document.createElement('canvas');
@@ -153,7 +154,7 @@ float furHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.545
  *          script?:{t:number,type:string,x?:number,z?:number}[], viewer?:number[], renderer?:THREE.WebGLRenderer,
  *          needs?:{hunger:number, happy:number}}} o
  */
-const CLIPS = ['Idle', 'Walk', 'Trot', 'Sit', 'SitIdle', 'Purr', 'Meow', 'Eat', 'Groom', 'Stretch', 'Sleep', 'Pounce', 'Bat'];
+const CLIPS = ['Idle', 'Walk', 'Trot', 'Run', 'Sit', 'SitIdle', 'Purr', 'Meow', 'Eat', 'Groom', 'Stretch', 'Sleep', 'Pounce', 'Bat'];
 
 /** Everything a cat model needs; throws (before anything changes) when one is missing. */
 function checkCat(gltf, url) {
@@ -376,7 +377,7 @@ export async function createKitty(o) {
     const a = (prevT % d) / d, b2 = (cur.time % d) / d;
     for (const m of marks) {
       const hit = a <= b2 ? (m > a && m <= b2) : (m > a || m <= b2);
-      if (hit) emitOut({ t: brain.t, type: 'step', strong: name === 'Trot' });
+      if (hit) emitOut({ t: brain.t, type: 'step', strong: name !== 'Walk' });
     }
   }
 
@@ -417,7 +418,7 @@ export async function createKitty(o) {
     const chasing = y && (y.held || y.air || brain.goal === 'yarn' || ['pounce', 'bat'].includes(brain.mode) || brain.face?.then === 'pounce');
     if (chasing) return tgt.set(y.x, y.y, y.z);
     if (bw && bw.eatenAt == null && (brain.goal === 'eat' || brain.face?.then === 'eat')) return tgt.set(bw.x, 0.6, bw.z);
-    if (['walk', 'trot'].includes(brain.mode)) return null;     // walking: eyes ahead
+    if (['walk', 'trot', 'run'].includes(brain.mode)) return null;   // on the move: eyes ahead
     return viewer;
   }
   function lookAt(viewer, dt) {
