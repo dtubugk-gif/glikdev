@@ -12,8 +12,24 @@ import { GLTFLoader } from '../vendor/three/addons/loaders/GLTFLoader.js';
 import { createBrain, KITTY, STEP, YARN } from './kittybrain.js';
 
 const FADE = 0.28;                 // seconds of crossfade between clips (a clip may ask for its own)
-const LIFT = 0.0028;               // the paw pads' depth below the toe joints at real size (m)
-const LOOK = { idle: 1, sit: 1, face: 0.7, sitdown: 0.45, meow: 0.35, purr: 0.2, standup: 0.3, groom: 0.1 };
+const LIFT = 0.0008;               // the paw pads' depth below the toe joints at real size (m)
+const LOOK = { idle: 1, sit: 1, face: 0.8, sitdown: 0.45, meow: 0.35, purr: 0.2, standup: 0.3, groom: 0.1,
+  trot: 0.35, walk: 0.25, pounce: 0.6, bat: 0.5, stretch: 0 };
+
+function blobTexture() {                       // a soft round contact shadow
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d');
+  const r = g.createRadialGradient(64, 64, 4, 64, 64, 62);
+  r.addColorStop(0, 'rgba(38,32,28,0.9)');
+  r.addColorStop(0.55, 'rgba(38,32,28,0.45)');
+  r.addColorStop(1, 'rgba(38,32,28,0)');
+  g.fillStyle = r;
+  g.fillRect(0, 0, 128, 128);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
 // footfalls within each gait clip (fraction of the loop): walk = one paw at a time, trot = diagonal pairs
 const FOOTFALLS = { Walk: [0, 0.25, 0.5, 0.75], Trot: [0, 0.5] };
 
@@ -65,13 +81,84 @@ const pawTexture = () => spriteTexture((g) => {
 const easeOutBack = (k) => { const x = Math.min(1, Math.max(0, k)) - 1; return 1 + 2.7 * x ** 3 + 1.7 * x ** 2; };
 
 /**
+ * Fur: `layers` thin shells of her body, each pushed out along the (skinned) normal and drawing only
+ * the strands that reach that height. Strands are cells on a UV grid with their own length and lean;
+ * they taper to the tip, are darker at the root and a touch lighter at the tip, and lean back and down
+ * with gravity. kitty_fur.png says how long the fur is everywhere (none on the nose, round the eyes,
+ * inside the ears or under the paws). Shells use a plain standard material and cast no shadows.
+ */
+function addFur(body, furMap, layers) {
+  const base = body.material;
+  const shells = [];
+  for (let i = 1; i <= layers; i++) {
+    const h = i / layers;
+    const m = new THREE.MeshStandardMaterial({
+      map: base.map, normalMap: base.normalMap, normalScale: base.normalScale, roughness: 1,
+      roughnessMap: base.roughnessMap, alphaTest: 0.5, alphaToCoverage: true,
+    });
+    const uni = { uFurH: { value: h }, uFurLen: { value: 0.0072 }, uFurMap: { value: furMap }, uDensity: { value: 240 } };
+    m.onBeforeCompile = (sh) => {
+      Object.assign(sh.uniforms, uni);
+      sh.vertexShader = sh.vertexShader
+        .replace('#include <common>', `#include <common>
+uniform float uFurH; uniform float uFurLen; uniform sampler2D uFurMap; varying float vFurL;`)
+        .replace('#include <skinning_vertex>', `#include <skinning_vertex>
+{
+  float L = texture2D(uFurMap, uv).r * 1.5;
+  vFurL = L;
+  float d = uFurLen * L * uFurH;
+  vec3 n = normalize(objectNormal);
+  // combed back and down a little more toward the tips (model space: +Z is her front, +Y up)
+  vec3 comb = normalize(vec3(0.0, -0.55, -1.0));
+  transformed += n * d + comb * d * uFurH * 0.55;
+}`);
+      sh.fragmentShader = sh.fragmentShader
+        .replace('#include <common>', `#include <common>
+uniform float uFurH; uniform float uDensity; varying float vFurL;
+float furHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }`)
+        .replace('#include <map_fragment>', `#include <map_fragment>
+{
+  vec2 g = vMapUv * uDensity;
+  vec2 c = floor(g);
+  vec2 f = fract(g) - 0.5;
+  vec2 off = (vec2(furHash(c), furHash(c + 17.3)) - 0.5) * 0.45;
+  float len = 0.45 + 0.55 * furHash(c + 5.1);           // every strand its own length
+  float rad = 0.5 * (1.0 - uFurH / max(len, 0.01));      // tapering to a point
+  float dist = length(f - off);
+  float a = (uFurH > len || vFurL < 0.03) ? 0.0 : smoothstep(rad, rad * 0.4, dist);
+  // fur reads at the outline: full strength where the surface turns away, faint where it faces you
+  float facing = abs(dot(normalize(vNormal), normalize(vViewPosition)));
+  a *= mix(1.0, 0.22, smoothstep(0.15, 0.85, facing));
+  diffuseColor.a *= a;
+  diffuseColor.rgb *= mix(0.74, 0.97, uFurH);            // shade at the roots, never brighter than the coat
+}`);
+    };
+    m.customProgramCacheKey = () => 'kitty-fur';
+    const shell = new THREE.SkinnedMesh(body.geometry, m);
+    shell.name = `Fur${i}`;
+    shell.bind(body.skeleton, body.bindMatrix);
+    shell.position.copy(body.position); shell.quaternion.copy(body.quaternion); shell.scale.copy(body.scale);
+    shell.castShadow = false;
+    shell.receiveShadow = true;
+    shell.frustumCulled = false;
+    shell.renderOrder = i;
+    body.parent.add(shell);
+    shells.push(shell);
+  }
+  return shells;
+}
+
+/**
  * @param {{scene:THREE.Scene, url:string, toysUrl:string, start?:object, seed?:number,
  *          script?:{t:number,type:string,x?:number,z?:number}[], viewer?:number[], renderer?:THREE.WebGLRenderer,
  *          needs?:{hunger:number, happy:number}}} o
  */
 export async function createKitty(o) {
   const loader = new GLTFLoader();
-  const [gltf, toys] = await Promise.all([loader.loadAsync(o.url), loader.loadAsync(o.toysUrl)]);
+  const [gltf, toys, furMap] = await Promise.all([
+    loader.loadAsync(o.url), loader.loadAsync(o.toysUrl),
+    o.furUrl ? new THREE.TextureLoader().loadAsync(o.furUrl).catch(() => null) : Promise.resolve(null),
+  ]);
   const S = KITTY.scale;
   const aniso = Math.min(8, o.renderer?.capabilities.getMaxAnisotropy() ?? 1);
   const shadowy = (obj) => obj.traverse((m) => {
@@ -87,11 +174,18 @@ export async function createKitty(o) {
   model.position.y = LIFT * S;
   root.add(model);
   shadowy(model);
+  let body = null;
   model.traverse((m) => {
     if (!m.isMesh) return;
     m.frustumCulled = false;                     // skinned: the bind-pose bounds do not follow her
     if (m.name === 'Whiskers') m.castShadow = false;
+    if (m.isSkinnedMesh && m.material?.name === 'M_Kitty') body = m;
   });
+  if (body && furMap && (o.furLayers ?? 10) > 0) {
+    furMap.flipY = false;                        // same UV convention as the glTF's own textures
+    furMap.colorSpace = THREE.NoColorSpace;
+    addFur(body, furMap, o.furLayers ?? 10);
+  }
   o.scene.add(root);
 
   // her things
@@ -120,7 +214,8 @@ export async function createKitty(o) {
   o.scene.add(yarnRoot);
 
   const bone = (n) => model.getObjectByName(n);
-  const B = { head: bone('head'), neck: bone('neck'), spine: bone('spine'), chest: bone('chest') };
+  const B = { head: bone('head'), neck: bone('neck'), spine: bone('spine'), chest: bone('chest'),
+    ears: [bone('ear_L'), bone('ear_R')], paws: ['frontpaw_L', 'frontpaw_R', 'hindpaw_L', 'hindpaw_R'].map(bone) };
   const clips = Object.fromEntries(gltf.animations.map((c) => [c.name, c]));
   for (const need of ['Idle', 'Walk', 'Trot', 'Sit', 'SitIdle', 'Purr', 'Meow', 'Eat', 'Groom', 'Stretch', 'Sleep', 'Pounce', 'Bat']) {
     if (!clips[need]) throw new Error(`kitty.glb has no ${need} clip`);
@@ -137,6 +232,18 @@ export async function createKitty(o) {
     return s;
   });
   const hearts = pool(heartTexture(), 12);
+  // contact shadows: one soft blob under her body, one under each paw (they fade as a paw lifts)
+  const blobTex = blobTexture();
+  const blob = (w, d, o) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshBasicMaterial({
+      map: blobTex, transparent: true, opacity: o, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, fog: true }));
+    m.rotation.x = -Math.PI / 2;
+    m.renderOrder = 1;
+    fx.add(m);
+    return m;
+  };
+  const bodyBlob = blob(1, 1, 0.42);
+  const pawBlobs = B.paws.map(() => blob(0.05 * KITTY.scale, 0.06 * KITTY.scale, 0.5));
   const zees = pool(zTexture(), 4);
   const paw = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 4.2), new THREE.MeshBasicMaterial({
     map: pawTexture(), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2,
@@ -255,18 +362,31 @@ export async function createKitty(o) {
     for (const e of brain.drain()) onEvent(e);
   }
 
-  // head and neck turn toward the viewer (after the clip has posed the skeleton)
+  // head and neck turn toward what she is interested in: the bowl or the yarn when she is after them,
+  // otherwise the camera (after the clip has posed the skeleton)
+  const tgt = new THREE.Vector3();
+  function lookTarget(viewer) {
+    const y = brain.yarn, bw = brain.bowl;
+    const chasing = y && (brain.goal === 'yarn' || ['pounce', 'bat'].includes(brain.mode) || brain.face?.then === 'pounce');
+    if (chasing) return tgt.set(y.x, y.y, y.z);
+    if (bw && bw.eatenAt == null && (brain.goal === 'eat' || brain.face?.then === 'eat')) return tgt.set(bw.x, 0.6, bw.z);
+    if (['walk', 'trot'].includes(brain.mode)) return null;     // walking: eyes ahead
+    return viewer;
+  }
   function lookAt(viewer, dt) {
-    const wantW = LOOK[brain.mode] ?? 0;
+    const target = lookTarget(viewer);
+    const wantW = target ? (LOOK[brain.mode] ?? 0) : 0;
     look.w += (wantW - look.w) * (1 - Math.exp(-dt * 3));
-    if (look.w < 0.01 || !viewer) return;
+    if (look.w < 0.01) return;
+    const t = target || viewer;
+    if (!t) return;
     root.updateMatrixWorld(true);
     B.head.getWorldPosition(v1);
-    let yaw = Math.atan2(viewer.x - v1.x, viewer.z - v1.z) - brain.heading;
+    let yaw = Math.atan2(t.x - v1.x, t.z - v1.z) - brain.heading;
     yaw = ((yaw + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
-    const pitch = Math.atan2(viewer.y - v1.y, Math.hypot(viewer.x - v1.x, viewer.z - v1.z));
+    const pitch = Math.atan2(t.y - v1.y, Math.hypot(t.x - v1.x, t.z - v1.z));
     const ty = Math.max(-0.95, Math.min(0.95, yaw)) * (Math.abs(yaw) > 2.4 ? 0 : 1);
-    const tp = Math.max(-0.35, Math.min(0.45, pitch * 0.8));
+    const tp = Math.max(-0.45, Math.min(0.45, pitch * 0.8));
     const k = 1 - Math.exp(-dt * 5);
     look.yaw += (ty - look.yaw) * k;
     look.pitch += (tp - look.pitch) * k;
@@ -283,8 +403,42 @@ export async function createKitty(o) {
     turn(B.head, look.yaw * 0.6, look.pitch * 0.65);
   }
 
+  // every few seconds one ear flicks (timing from her own clock, so recordings stay identical)
+  function earFlicks() {
+    const t = brain.t;
+    if (brain.mode === 'sleep' && t % 7 > 0.4) return;
+    const slot = Math.floor(t / 3.1);
+    const h = Math.sin(slot * 91.7) * 43758.5453;
+    const r = h - Math.floor(h);
+    const start = slot * 3.1 + r * 1.6, a = t - start;
+    if (a < 0 || a > 0.28) return;
+    const ear = B.ears[r < 0.5 ? 0 : 1];
+    if (!ear) return;
+    const amt = Math.sin((a / 0.28) * Math.PI) * 0.45;
+    ear.getWorldQuaternion(q2);
+    const axis = v2.set(r < 0.5 ? -1 : 1, 0.2, 0).normalize();
+    q1.setFromAxisAngle(axis, amt);
+    ear.quaternion.multiply(q1);
+    ear.updateMatrixWorld(true);
+  }
+
   function drawFX() {
     const now = brain.t;
+    root.updateMatrixWorld(true);
+    const S2 = KITTY.scale;
+    const lowBody = ['sit', 'sitdown', 'purr', 'meow', 'groom', 'liedown', 'sleep'].includes(brain.mode);
+    bodyBlob.position.set(brain.x, 0.04, brain.z);
+    bodyBlob.rotation.z = brain.heading;
+    bodyBlob.scale.set(lowBody ? 0.26 * S2 : 0.2 * S2, lowBody ? 0.36 * S2 : 0.52 * S2, 1);
+    B.paws.forEach((b, k) => {
+      const pb = pawBlobs[k];
+      if (!b) { pb.visible = false; return; }
+      b.getWorldPosition(v1);
+      const h = Math.max(0, v1.y - 0.03 * S2);
+      pb.position.set(v1.x, 0.045, v1.z);
+      pb.material.opacity = 0.5 * Math.max(0, 1 - h / (0.05 * S2));
+      pb.visible = pb.material.opacity > 0.02;
+    });
     // hearts
     let i = 0;
     for (const h of heartLog) {
@@ -365,7 +519,7 @@ export async function createKitty(o) {
     },
     /** after advance / simulateTo and once the camera is placed: head turn toward it, effects */
     finish(viewer, steps) {
-      if (steps) lookAt(viewer, steps * STEP);
+      if (steps) { lookAt(viewer, steps * STEP); earFlicks(); }
       drawFX();
     },
     call(x, z) { brain.call(x, z); },

@@ -252,7 +252,7 @@ export function createBrain(o = {}) {
     else enter('idle', 2.5 + rand() * 2.5);
   }
 
-  const standOff = () => KITTY.pounce + 2.2;             // pounce from here: she lands on it
+  const standOff = () => KITTY.pounce + 3.0;             // pounce from here: she lands just short of it
 
   function chaseYarn() {
     const y = b.yarn;
@@ -417,7 +417,7 @@ export function createBrain(o = {}) {
       }
       case 'bat': {
         const y = b.yarn;
-        if (!b.batted && KITTY.clips.Bat - b.timer > 0.28 && y) {
+        if (!b.batted && KITTY.clips.Bat - b.timer > 0.2 && y) {
           b.batted = true;
           y.rounds += 1;
           cheer(0.08);
