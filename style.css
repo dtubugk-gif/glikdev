@@ -290,7 +290,8 @@ html.capture-short .bubble { font-size: 16px; max-width: 100%; }
 
 @media (max-width: 759px) and (orientation: portrait) {
   .title-day { display: block; }      /* "Day N." on its own line, the headline below */
-  .hint { right: auto; left: 50%; transform: translateX(-50%); bottom: calc(var(--gutter) + var(--safe-b) + 62px); white-space: nowrap; }
+  .hint { right: auto; left: 50%; transform: translateX(-50%); bottom: calc(var(--gutter) + var(--safe-b) + 62px);
+          width: max-content; max-width: calc(100% - 2 * var(--gutter)); text-align: center; text-wrap: balance; }
 }
 
 @media (prefers-reduced-motion: reduce) {

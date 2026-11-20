@@ -1,4 +1,5 @@
-// The Day 1 world: renderer, daylight sky, sun, the Blender-built empty baseplate (models/day1.glb).
+// The world: renderer, daylight sky, sun, the Blender-built baseplate (models/day1.glb).
+// What the days add (the kitty from Day 2) lives in its own module and joins this scene.
 // Everything that moves is a pure function of the time passed to update(t), so demo
 // recordings are frame exact.
 import * as THREE from '../vendor/three/three.module.js';
@@ -169,11 +170,14 @@ export async function createWorld({ renderer, modelUrl, phone = false }) {
   const plate = model.getObjectByName('Baseplate');
 
   let animate = true;
+  let shadowFocus = null;                  // () => Vector3: what the shadow box should centre on
   function update(t) {
     sky.position.copy(camera.position);
     sky.material.uniforms.uTime.value = animate ? t : 0;
-    // the shadow box follows the camera's ground focus, so whatever gets built casts crisp shadows
-    sun.target.position.set(camera.position.x, 0, camera.position.z);
+    // the shadow box follows what casts shadows (the kitty, from Day 2), else the camera's ground focus
+    const f = shadowFocus && shadowFocus();
+    if (f) sun.target.position.set(f.x, 0, f.z);
+    else sun.target.position.set(camera.position.x, 0, camera.position.z);
     sun.position.copy(sun.target.position).addScaledVector(sunDir, 80);
   }
 
@@ -181,6 +185,12 @@ export async function createWorld({ renderer, modelUrl, phone = false }) {
     scene, camera, model, plate, sun,
     update,
     setAnimate(on) { animate = on; },
+    /** Centre the (smaller, sharper) shadow box on fn() instead of the camera. */
+    setShadowFocus(fn, half = 16) {
+      shadowFocus = fn;
+      sc.left = -half; sc.right = half; sc.top = half; sc.bottom = -half;
+      sc.updateProjectionMatrix();
+    },
     render() { renderer.render(scene, camera); },
     resize(w, h, pixelRatio) {
       if (pixelRatio && renderer.getPixelRatio() !== pixelRatio) renderer.setPixelRatio(pixelRatio);

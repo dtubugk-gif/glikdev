@@ -3,18 +3,18 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Glikdev – Day 1: an empty world</title>
-  <meta name="description" content="A game built one YouTube comment at a time. Day 1: an empty baseplate. Comment what Day 2 should add.">
+  <title>Glikdev – Day 2: a kitty</title>
+  <meta name="description" content="A game built one YouTube comment at a time. Day 2: a kitty you can call and pet. Comment what Day 3 should add.">
   <meta name="theme-color" content="#a9cfee">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Glikdev">
-  <meta property="og:title" content="Glikdev – Day 1: an empty world">
-  <meta property="og:description" content="A game built one YouTube comment at a time. What should Day 2 add?">
+  <meta property="og:title" content="Glikdev – Day 2: a kitty">
+  <meta property="og:description" content="A game built one YouTube comment at a time. Day 2: a kitty. What should Day 3 add?">
   <meta property="og:url" content="https://dtubugk-gif.github.io/glikdev/">
   <meta property="og:image" content="https://dtubugk-gif.github.io/glikdev/poster.jpg">
   <meta property="og:image:width" content="1440">
   <meta property="og:image:height" content="900">
-  <meta property="og:image:alt" content="An empty grey baseplate with a faint grid under a daylight sky">
+  <meta property="og:image:alt" content="A big ginger tabby kitty with a red collar sits on a grey baseplate under a daylight sky">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" href="logo.svg?v=949fcba92ebc" type="image/svg+xml">
   <link rel="preload" href="fonts/fredoka-700.woff2" as="font" type="font/woff2" crossorigin>
@@ -29,6 +29,10 @@
       "./src/demo.js": "./src/demo.js?v=949fcba92ebc",
       "./src/world.js": "./src/world.js?v=949fcba92ebc",
       "./src/controls.js": "./src/controls.js?v=949fcba92ebc",
+      "./src/kitty.js": "./src/kitty.js?v=949fcba92ebc",
+      "./src/kittybrain.js": "./src/kittybrain.js?v=949fcba92ebc",
+      "./src/kittysound.js": "./src/kittysound.js?v=949fcba92ebc",
+      "./src/kittyaudio.js": "./src/kittyaudio.js?v=949fcba92ebc",
       "./vendor/three/three.module.js": "./vendor/three/three.module.js?v=949fcba92ebc",
       "./vendor/three/addons/loaders/GLTFLoader.js": "./vendor/three/addons/loaders/GLTFLoader.js?v=949fcba92ebc",
       "./vendor/three/addons/utils/BufferGeometryUtils.js": "./vendor/three/addons/utils/BufferGeometryUtils.js?v=949fcba92ebc"
@@ -46,7 +50,7 @@
     <img src="poster.jpg?v=949fcba92ebc" alt="" width="1440" height="900" fetchpriority="high" decoding="async">
   </picture>
 
-  <canvas id="world" role="img" aria-label="An empty grey baseplate with a faint grid, stretching away to the horizon under a daylight sky"></canvas>
+  <canvas id="world" role="img" aria-label="A big ginger tabby kitty with a red collar and a gold bell sits on the grey baseplate under a daylight sky"></canvas>
 
   <div class="ui" id="ui">
     <header class="title">
@@ -54,9 +58,9 @@
         <img class="logo" src="logo.svg?v=949fcba92ebc" alt="Glikdev" width="36" height="36">
         <span>A game built by YouTube comments</span>
       </p>
-      <h1><span class="title-day">Day 1.</span> <span class="title-line">This world is empty.</span></h1>
+      <h1><span class="title-day">Day 2.</span> <span class="title-line">Now there's a kitty.</span></h1>
       <!-- static fallback; main.js rewrites the day, the headline and the bubble from the newest days.json entry -->
-      <p class="bubble">What should Day 2 add? Comment it.</p>
+      <p class="bubble">What should Day 3 add? Comment it.</p>
     </header>
 
     <p class="status" id="status" role="status" aria-live="polite">Loading the world…</p>

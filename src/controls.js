@@ -64,7 +64,7 @@ export class OrbitRig {
     const el = this.dom;
     el.addEventListener('pointerdown', (e) => {
       if (!this.enabled) return;
-      el.setPointerCapture?.(e.pointerId);
+      try { el.setPointerCapture?.(e.pointerId); } catch { /* pointer already gone */ }
       this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (this.pointers.size === 2) {
         const [a, b] = [...this.pointers.values()];

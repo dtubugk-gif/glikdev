@@ -1,6 +1,7 @@
-// Glikdev. Glue: URL modes, UI, Day log, the world and the render loop. The title card and the Day log
-// come from days.json at runtime (the newest entry), so a new day only adds an entry there.
-//   ?demo=orbit | ?demo=reveal   scripted camera, driven only by frame time (for filming)
+// Glikdev. Glue: URL modes, UI, Day log, the world, the kitty (Day 2) and the render loop. The title
+// card and the Day log come from days.json at runtime (the newest entry), so a new day only adds an entry there.
+//   ?demo=orbit | reveal | kitty | kittycall | kittypet | kittywalk
+//                                scripted camera (and kitty), driven only by frame time (for filming)
 //   ?ui=0                        hide every piece of UI
 //   ?capture=short               Shorts layout: record at 360x640 CSS with deviceScaleFactor 3
 // window.renderFrame(t) renders the frame at t seconds (used by frame-exact recorders);
@@ -8,7 +9,7 @@
 // Cache safety: index.html loads this file as src/main.js?v=<build> and maps every module to the same
 // ?v= through its import map; data and model URLs below get the same stamp (deploy.mjs writes it).
 import { renderDayLog, renderHeadline, latestDay } from './daylog.js';
-import { DEMOS, demoPose } from './demo.js';
+import { DEMOS, demoPose, KITTY_DEMOS } from './demo.js';
 
 // Set this to the channel's URL once it exists (for example 'https://www.youtube.com/@glikdev').
 const CHANNEL_URL = 'https://www.youtube.com/@glikdev';
@@ -103,6 +104,7 @@ async function start() {
     mods = await Promise.all([import('./world.js'), import('./controls.js'), import('../vendor/three/three.module.js')]);
   } catch (err) { showLoadError(err); return; }
   const [{ createRenderer, createWorld, PLATE }, { OrbitRig, placeCamera }, THREE] = mods;
+  const kittyMods = Promise.all([import('./kitty.js'), import('./kittyaudio.js')]);
 
   const canvas = $('world');
   const coarse = matchMedia('(pointer: coarse)').matches;
@@ -120,12 +122,12 @@ async function start() {
   const { camera } = world;
   world.setAnimate(demo ? true : !reducedMotion);
 
-  let hinted = false;
+  let hinted = false, looked = false;
   // Orbit the centre of the plate. The start view looks along the grid at a slight angle,
   // so the lines run off toward the horizon in perspective.
   const target = [0, PLATE.topY, 0];
   const home = { az: 0.32, pol: 1.05, dist: 32, height: 16, target, shift: 0, shiftX: 0, fov: 60, horizon: 0.42 };
-  const rig = new OrbitRig(camera, canvas, { target, minPolar: 0.22, maxPolar: 1.52, minHeight: 1.5, onInteract: dismissHint });
+  const rig = new OrbitRig(camera, canvas, { target, minPolar: 0.22, maxPolar: 1.52, minHeight: 1.5, onInteract: () => { looked = true; } });
 
   // Where the horizon lands for a camera pitched down by `pitch` (radians) with vertical fov `fov` (deg),
   // as a fraction of the height from the top, before any lens shift.
@@ -181,7 +183,7 @@ async function start() {
   rig.setPose(home);
   // web fonts change the bubble's height: frame again once they are in
   // web fonts and the day's copy change the bubble's height: frame again (unless someone is already looking around)
-  const reframe = () => { layout(); if (!hinted) rig.setPose({ az: rig.goal.az, pol: home.pol, dist: home.dist }); };
+  const reframe = () => { layout(); if (!looked) rig.setPose({ az: rig.goal.az, pol: home.pol, dist: home.dist }); };
   document.fonts?.ready.then(reframe);
   onCopyChange = reframe;
   addEventListener('resize', () => {
@@ -192,9 +194,74 @@ async function start() {
     rig.setLimits(rig.minDist, rig.maxDist);               // clamps both ends, current and goal
   });
 
-  // hint, once
+  // ------------------------------------------------------------ the kitty (Day 2, idea by @lifediamond888)
+  let kitty = null, audio = null;
+  const kd = demo ? KITTY_DEMOS[demo] : null;
+  try {
+    const [{ createKitty }, { createKittyAudio }] = await kittyMods;
+    const ground = Math.sin(home.pol) * home.dist;
+    kitty = await createKitty({
+      scene: world.scene, renderer, url: stamped('models/kitty.glb'),
+      start: kd ? kd.start(home) : { x: 0, z: 0, heading: home.az, mode: 'sit' },
+      script: kd ? kd.script : null,
+      viewer: kd ? kd.viewer(home) : [Math.sin(home.az) * ground, Math.cos(home.az) * ground],
+    });
+    const focus = new THREE.Vector3();
+    world.setShadowFocus(() => kitty.focus(focus));
+    if (!demo && !short) {
+      audio = createKittyAudio();
+      kitty.on((e) => audio.event(e));
+    }
+  } catch (err) { console.warn('Glikdev: the kitty did not load', err); kitty = null; }
+  const kittyState = () => {
+    const b = kitty.brain, h = kitty.headPosition();
+    return { x: b.x, z: b.z, heading: b.heading, head: [h.x, h.y, h.z] };
+  };
+
+  // taps: on the kitty = pet her; on the ground = call her there (a drag or a pinch is not a tap)
+  const taps = new Map();
+  const ray = new THREE.Raycaster();
+  const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  const hit = new THREE.Vector3();
+  function rayAt(cx, cy) {
+    camera.updateMatrixWorld();
+    ray.setFromCamera(new THREE.Vector2((cx / innerWidth) * 2 - 1, 1 - (cy / innerHeight) * 2), camera);
+    return ray.ray;
+  }
+  if (kitty && !demo) {
+    canvas.addEventListener('pointerdown', (e) => {
+      taps.set(e.pointerId, { x: e.clientX, y: e.clientY, t: performance.now(), multi: taps.size > 0 });
+      if (taps.size > 1) for (const v of taps.values()) v.multi = true;
+      audio?.unlock();
+    });
+    const end = (e) => {
+      const d = taps.get(e.pointerId);
+      taps.delete(e.pointerId);
+      if (e.type !== 'pointerup' || !d || d.multi || taps.size) return;
+      if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 10 || performance.now() - d.t > 450) return;
+      const r = rayAt(e.clientX, e.clientY);
+      if (kitty.pick(r)) { kitty.pet(); dismissHint(); return; }
+      if (r.intersectPlane(groundPlane, hit) && Math.abs(hit.x) < PLATE.half - 4 && Math.abs(hit.z) < PLATE.half - 4) {
+        kitty.call(hit.x, hit.z);
+        dismissHint();
+      }
+    };
+    canvas.addEventListener('pointerup', end);
+    canvas.addEventListener('pointercancel', end);
+    if (!coarse) {
+      canvas.addEventListener('pointermove', (e) => {
+        if (e.buttons) return;
+        canvas.style.cursor = kitty.pick(rayAt(e.clientX, e.clientY)) ? 'pointer' : '';
+      });
+    }
+  }
+
+  // hint, until the first tap that does something
   if (showUI && !demo && !short) {
-    hintEl.textContent = coarse ? 'Drag to look around · Pinch to zoom' : 'Drag to look around · Scroll or W/S to zoom';
+    hintEl.textContent = kitty
+      ? (coarse ? 'Tap the ground to call the kitty · Tap her to pet her'
+        : 'Click the ground to call the kitty · Click her to pet her · Drag to look around')
+      : (coarse ? 'Drag to look around · Pinch to zoom' : 'Drag to look around · Scroll or W/S to zoom');
     hintEl.hidden = false;
   }
   function dismissHint() {
@@ -206,8 +273,10 @@ async function start() {
   // ------------------------------------------------------------ loop
   let t0 = null, last = null, external = false, skip = false;
   function step(t, dt) {
+    let ks = 0;
+    if (kitty) ks = demo ? kitty.simulateTo(t) : kitty.advance(dt, camera.position);
     if (demo) {
-      const pose = demoPose(demo, t, home);
+      const pose = demoPose(demo, t, home, kitty ? kittyState() : null) || demoPose('orbit', t, home);
       setShift(pose.shift, 0);
       if (pose.position) {
         camera.position.set(...pose.position);
@@ -218,6 +287,7 @@ async function start() {
     } else {
       rig.update(dt);
     }
+    if (kitty) kitty.finish(camera.position, ks);
     world.update(t);
     world.render();
   }
@@ -228,7 +298,7 @@ async function start() {
     const dt = Math.min(0.05, Math.max(0, (ts - last) / 1000));
     if (dialog.open) { last = ts; return; }                // nothing to see behind the Day log
     // when nobody is touching the camera, 30 fps is plenty
-    if (!demo && rig.idle()) { skip = !skip; if (skip) return; }
+    if (!demo && rig.idle() && !(kitty && kitty.busy())) { skip = !skip; if (skip) return; }
     last = ts;
     step((ts - t0) / 1000, dt);
   }
@@ -240,10 +310,8 @@ async function start() {
 
   // handles for tests and for the days to come
   const v = new THREE.Vector3();
-  const ray = new THREE.Raycaster();
-  const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   window.__glikdev = {
-    world, rig, home, daysLoaded, build: BUILD,
+    world, rig, home, daysLoaded, build: BUILD, kitty,
     /** Screen height fraction (from the top) of the visible horizon: the plate's far edge. */
     horizonFrac() {
       camera.updateMatrixWorld();
