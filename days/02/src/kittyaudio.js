@@ -71,7 +71,8 @@ export function createKittyAudio() {
         case 'sigh': case 'asleep': if (e.type === 'sigh') play('sigh', 0.6 * v); break;
         case 'bite': play('bite', 0.7 * v, { rate: vary() }); break;
         case 'step': play('step', (e.strong ? 0.5 : 0.35) * v, { rate: vary() }); break;
-        case 'thud': play('thud', 0.6 * v); break;
+        case 'thud': play('thud', (e.soft ? 0.32 : 0.6) * v, { rate: e.soft ? 1.15 : 1 }); break;
+        case 'toss': play('swat', Math.min(0.55, 0.2 + (e.speed || 0) / 80), { rate: 0.7 }); break;
         case 'swat': play('swat', 0.6 * v); break;
         case 'leap': play('swat', 0.35 * v, { rate: 0.8 }); break;
         case 'land': play('step', 0.7 * v, { rate: 0.85 }); break;

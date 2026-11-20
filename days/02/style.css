@@ -251,6 +251,45 @@ html.no-ui .nametag:not(.is-filmed), html.capture-short .nametag:not(.is-filmed)
 }
 .namer-field input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 .namer-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
+/* choosing the cat */
+.catpick { max-width: min(520px, 100%); }
+.cats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.cat-card {
+  position: relative;
+  display: grid; justify-items: center; gap: 4px;
+  padding: 6px 4px 9px;
+  border: 2.5px solid var(--ink); border-radius: 18px;
+  background: #fff; color: var(--ink);
+  box-shadow: var(--drop);
+  font: 600 16px/1.1 var(--display);
+  cursor: pointer;
+  transition: transform 110ms ease, box-shadow 110ms ease, background-color 150ms ease;
+}
+.cat-card img { width: 100%; height: auto; aspect-ratio: 6 / 5; object-fit: contain; border-radius: 12px;
+  background: radial-gradient(ellipse at 50% 92%, #e9dcc6 0 32%, transparent 33%), linear-gradient(#d9ecf7, #f3ecdf); }
+@media (hover: hover) { .cat-card:hover { transform: translateY(-1px); box-shadow: 0 4px 0 rgba(47, 38, 32, 0.22); } }
+.cat-card:active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(47, 38, 32, 0.22); }
+.cat-card:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.cat-card[aria-pressed="true"] { background: #ffe9d8; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent), var(--drop); }
+.cat-card[aria-pressed="true"]::after {             /* a tick on the one she is */
+  content: ''; position: absolute; top: -9px; right: -9px; width: 26px; height: 26px; border-radius: 50%;
+  border: 2.5px solid var(--ink);
+  background: var(--accent-fill) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='m6 12.5 4 4 8-9' fill='none' stroke='%23fff' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat center / 18px;
+}
+.cat-card.is-loading img { opacity: 0.45; }
+.cat-card.is-loading::before {                     /* a turning ring while her model loads */
+  content: ''; position: absolute; left: 50%; top: 38%; width: 30px; height: 30px; margin: -15px 0 0 -15px;
+  border-radius: 50%; border: 4px solid rgba(47, 38, 32, 0.18); border-top-color: var(--accent-fill);
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(1turn); } }
+.cats[aria-busy="true"] .cat-card:not(.is-loading) { opacity: 0.6; cursor: default; }
+.cat-status { min-height: 1.3em; margin: 10px 0 0; font-size: 15px; color: var(--accent); }
+.cat-status:empty { min-height: 0; margin: 0; }
+.cat-credits { margin: 12px 0 0; font-size: 13px; line-height: 1.45; color: var(--ink-3); }
+.cat-credits a { color: var(--ink-2); }
+@media (max-width: 380px) { .cats { gap: 7px; } .cat-card { font-size: 14px; border-radius: 14px; } }
+
 .chip-primary { background: var(--accent-fill); color: #fff; }
 @media (hover: hover) { .chip-primary:hover { background: #f07c45; } }
 
@@ -383,7 +422,14 @@ html.capture-short .bubble { font-size: 16px; max-width: 100%; }
 /* small phones: the channel chip says just "YouTube" so both chips stay on one row */
 @media (max-width: 400px) { .chip-extra { display: none; } }
 @media (max-width: 340px) { .chip { padding: 0 13px 0 11px; gap: 6px; } .corner { gap: 8px; } }
-@media (max-width: 359px) { .care-label { display: none; } .care-btn { padding: 0; width: 46px; } }
+@media (max-width: 389px) {                         /* narrow phones: five buttons in one row */
+  .care { gap: 6px; }
+  .care-btn { padding: 0 12px 0 10px; gap: 6px; }
+  .care-cat { padding: 0; width: 46px; }
+  .care-cat .care-label { display: none; }
+}
+@media (max-width: 339px) { .care-label { display: none; } .care-btn { padding: 0; width: 46px; } }
+@media (max-width: 299px) { .care { gap: 4px; } .care-btn, .care-cat { width: 44px; min-width: 44px; min-height: 44px; } }
 
 @media (max-width: 759px) and (orientation: portrait) {
   .title-day { display: block; }      /* "Day N." on its own line, the headline below */
@@ -396,6 +442,7 @@ html.capture-short .bubble { font-size: 16px; max-width: 100%; }
 
 @media (prefers-reduced-motion: reduce) {
   .daylog[open] .sheet { animation: none; }
-  .chip, .hint, .poster, .care-btn { transition: none; }
+  .chip, .hint, .poster, .care-btn, .cat-card { transition: none; }
+  .cat-card.is-loading::before { animation-duration: 2.4s; }
   .care-badge, .nametag.is-filmed.is-pop { animation: none; }
 }

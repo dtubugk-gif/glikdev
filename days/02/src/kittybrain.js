@@ -29,7 +29,12 @@ export const KITTY = {
     Eat: 1.6, Groom: 3, Stretch: 2.2, Sleep: 4, Pounce: 1.3, Bat: 0.7 },
 };
 export const EAT = { seconds: 5.4, bite: 1.6 / 3 };      // three bites per Eat loop
-export const YARN = { scale: 1.6, radius: 0.034 * KITTY_SCALE * 1.6, decel: 5.5 };   // a big, toy-sized ball
+export const YARN = { scale: 1.6, radius: 0.034 * KITTY_SCALE * 1.6, decel: 5.5,   // a big, toy-sized ball
+  hold: 3.6,          // how high it hangs while you carry it
+  gravity: 30,        // thrown: it falls this fast (m/s²)
+  bounce: 0.38,       // ...keeps this much of its fall speed on each bounce
+  maxThrow: 36,       // the hardest throw (m/s along the ground)
+  drag: 0.32 };       // a thrown ball's extra rolling drag (per m/s): it rolls a way, then settles
 
 const TAU = Math.PI * 2;
 const wrap = (a) => ((a + Math.PI) % TAU + TAU) % TAU - Math.PI;   // to [-pi, pi)
@@ -175,7 +180,7 @@ export function createBrain(o = {}) {
   };
 
   b.play = () => {
-    if (b.bowl) return;                                  // dinner first
+    if (b.bowl || b.yarn?.held) return;                  // dinner first; and it is in your hand
     if (b.yarn && b.yarn.flying === 0) {                 // it is already on the floor: game on again
       b.yarn.rounds = 0;
       emit('chirp');
@@ -188,8 +193,36 @@ export function createBrain(o = {}) {
     const from = { x: (b.viewer[0] + land.x) / 2, z: (b.viewer[1] + land.z) / 2 };
     const ux = land.x - from.x, uz = land.z - from.z, ud = Math.hypot(ux, uz) || 1;
     b.yarn = { x: from.x, y: 9, z: from.z, from, land, flying: 0.75, vx: (ux / ud) * 7, vz: (uz / ud) * 7,
-      spin: 0, ax: 1, az: 0, rounds: 0 };
+      spin: 0, ax: 1, az: 0, rounds: 0, rim: KITTY.roam + 8 };
     emit('yarn', { x: land.x, z: land.z });
+  };
+
+  // You can pick the yarn up, carry it about and throw it anywhere on the plate (main.js drags it).
+  // While you hold it she stops and watches; the moment it leaves your hand she is after it.
+  b.grabYarn = () => {
+    const y = b.yarn;
+    if (!y) return false;
+    Object.assign(y, { held: true, air: false, flying: 0, vx: 0, vz: 0, vy: 0, hx: y.x, hz: y.z });
+    if (b.goal === 'yarn') { b.target = null; b.goal = null; b.speed = 0; enter('idle', 30); }
+    if (b.mode === 'face' && b.face?.then === 'pounce') { b.face = null; enter('idle', 30); }
+    emit('grab', { x: y.x, z: y.z });
+    return true;
+  };
+  b.holdYarn = (x, z) => {
+    const y = b.yarn;
+    if (!y?.held) return;
+    const p = inside({ x, z });
+    y.hx = p.x; y.hz = p.z;
+  };
+  b.throwYarn = (vx, vz, vy) => {
+    const y = b.yarn;
+    if (!y?.held) return;
+    const sp = Math.hypot(vx, vz), k = sp > YARN.maxThrow ? YARN.maxThrow / sp : 1;
+    Object.assign(y, { held: false, air: true, vx: vx * k, vz: vz * k, vy, rounds: 0, rim: KITTY.limit, drag: YARN.drag });
+    emit('toss', { speed: sp * k });
+    if (b.mode === 'eat' || b.bowl) return;              // dinner first: she goes for it when she is done
+    emit('chirp');
+    chaseYarn();
   };
 
   b.meow = () => {
@@ -266,6 +299,37 @@ export function createBrain(o = {}) {
   function stepYarn(dt) {
     const y = b.yarn;
     if (!y) return;
+    if (y.held) {                                        // in your hand: it follows it, lifted off the floor
+      const k = 1 - Math.exp(-dt * 22);
+      const dx = (y.hx - y.x) * k, dz = (y.hz - y.z) * k;
+      y.x += dx; y.z += dz;
+      y.y += (YARN.radius + YARN.hold - y.y) * (1 - Math.exp(-dt * 12));
+      const d = Math.hypot(dx, dz);
+      if (d > 1e-4) { y.ax = dz / d; y.az = -dx / d; y.spin += d / YARN.radius * 0.5; }
+      return;
+    }
+    if (y.air) {                                         // thrown: it flies, falls, and bounces
+      y.vy -= YARN.gravity * dt;
+      y.x += y.vx * dt; y.z += y.vz * dt; y.y += y.vy * dt;
+      const v = Math.hypot(y.vx, y.vz);
+      if (v > 1e-3) { y.ax = y.vz / v; y.az = -y.vx / v; y.spin += (v * dt) / YARN.radius; }
+      rim(y);
+      if (y.y <= YARN.radius) {
+        y.y = YARN.radius;
+        const hit = -y.vy;
+        if (hit > 5) {                                   // a bounce: loses height and a little speed
+          y.vy = hit * YARN.bounce;
+          y.vx *= 0.82; y.vz *= 0.82;
+          emit('thud', { x: y.x, z: y.z, soft: hit < 12 });
+        } else {                                         // down: rolling from here
+          y.vy = 0; y.air = false;
+          if (hit > 2) emit('thud', { x: y.x, z: y.z, soft: true });
+          const busy = ['pounce', 'bat', 'face', 'eat'].includes(b.mode) || b.goal === 'yarn' || b.bowl;
+          if (!busy) { emit('chirp'); chaseYarn(); }
+        }
+      }
+      return;
+    }
     if (y.flying > 0) {                                  // the toss: an arc onto the floor
       y.flying = Math.max(0, y.flying - dt);
       const k = 1 - y.flying / 0.75;
@@ -282,16 +346,22 @@ export function createBrain(o = {}) {
     }
     const v = Math.hypot(y.vx, y.vz);
     if (v > 0) {
-      const nv = Math.max(0, v - YARN.decel * dt);
+      const nv = Math.max(0, v - (YARN.decel + (y.drag || 0) * v) * dt);
       y.ax = y.vz / v; y.az = -y.vx / v;
       y.vx *= nv / v; y.vz *= nv / v;
       y.x += y.vx * dt; y.z += y.vz * dt;
-      const r = Math.hypot(y.x, y.z), R = KITTY.roam + 8;   // the play area: it bounces back in at the rim
-      if (r > R && (y.x * y.vx + y.z * y.vz) > 0) {
-        const nx = y.x / r, nz = y.z / r, dot = y.vx * nx + y.vz * nz;
-        y.vx = (y.vx - 2 * dot * nx) * 0.6; y.vz = (y.vz - 2 * dot * nz) * 0.6;
-      }
+      rim(y);
       y.spin += (nv * dt) / YARN.radius;                 // rolling: angle = distance / radius
+    }
+  }
+
+  // the play area: it bounces back in at the rim (her own game stays near the middle; a throw can
+  // reach almost to the plate's edge)
+  function rim(y) {
+    const r = Math.hypot(y.x, y.z), R = y.rim ?? KITTY.roam + 8;
+    if (r > R && (y.x * y.vx + y.z * y.vz) > 0) {
+      const nx = y.x / r, nz = y.z / r, dot = y.vx * nx + y.vz * nz;
+      y.vx = (y.vx - 2 * dot * nx) * 0.6; y.vz = (y.vz - 2 * dot * nz) * 0.6;
     }
   }
 
@@ -408,8 +478,9 @@ export function createBrain(o = {}) {
         if (b.timer <= 0) {
           const y = b.yarn;
           const [fx, fz] = fwd();
-          const near = y && Math.hypot(y.x - (b.x + fx * KITTY.mouth), y.z - (b.z + fz * KITTY.mouth)) < 4.5;
-          if (near) { enter('bat', KITTY.clips.Bat); b.batted = false; }
+          const near = y && !y.air && Math.hypot(y.x - (b.x + fx * KITTY.mouth), y.z - (b.z + fz * KITTY.mouth)) < 4.5;
+          if (y?.held) enter('idle', 30);                  // you picked it up mid-leap: she waits for the throw
+          else if (near) { enter('bat', KITTY.clips.Bat); b.batted = false; }
           else if (y && y.rounds < 3) chaseYarn();
           else { b.after = b.after || 'groom'; enter('sitdown', KITTY.clips.Sit); }
         }
@@ -417,9 +488,10 @@ export function createBrain(o = {}) {
       }
       case 'bat': {
         const y = b.yarn;
-        if (!b.batted && KITTY.clips.Bat - b.timer > 0.2 && y) {
+        if (!b.batted && KITTY.clips.Bat - b.timer > 0.2 && y && !y.held && !y.air) {
           b.batted = true;
           y.rounds += 1;
+          y.drag = 0;                                       // her own swats roll on as they always did
           cheer(0.08);
           b.energy = clamp(b.energy - 0.22, 0, 1);
           const toMiddle = Math.atan2(-y.x, -y.z);          // batted along her way, bent toward the middle
@@ -432,7 +504,8 @@ export function createBrain(o = {}) {
           emit(y.rounds < 3 ? 'chirp' : 'trill');
         }
         if (b.timer <= 0) {
-          if (y && y.rounds < 3) chaseYarn();
+          if (y?.held) enter('idle', 30);
+          else if (y && y.rounds < 3) chaseYarn();
           else { b.after = b.after || 'groom'; enter('sitdown', KITTY.clips.Sit); }
         }
         break;

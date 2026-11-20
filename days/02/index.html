@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="build" content="406ce8c72c07">
+  <meta name="build" content="b3bebcb5d3f5">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Glikdev – Day 2: a kitty</title>
   <meta name="description" content="A game built one YouTube comment at a time. Day 2: a kitty you can name, pet, feed and play with. Comment what Day 3 should add.">
@@ -17,38 +17,38 @@
   <meta property="og:image:height" content="900">
   <meta property="og:image:alt" content="A big ginger tabby kitty with a red collar sits on a grey baseplate under a daylight sky">
   <meta name="twitter:card" content="summary_large_image">
-  <link rel="icon" href="logo.svg?v=406ce8c72c07" type="image/svg+xml">
+  <link rel="icon" href="logo.svg?v=b3bebcb5d3f5" type="image/svg+xml">
   <link rel="preload" href="fonts/fredoka-700.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/rubik-latin.woff2" as="font" type="font/woff2" crossorigin>
   <!-- Cache safety: every module is loaded with the same ?v= build stamp (tools/deploy.mjs rewrites
-       "?v=406ce8c72c07" everywhere in this file). New modules must be added to this import map. -->
+       "?v=b3bebcb5d3f5" everywhere in this file). New modules must be added to this import map. -->
   <script type="importmap">
   {
     "imports": {
-      "./src/main.js": "./src/main.js?v=406ce8c72c07",
-      "./src/daylog.js": "./src/daylog.js?v=406ce8c72c07",
-      "./src/demo.js": "./src/demo.js?v=406ce8c72c07",
-      "./src/world.js": "./src/world.js?v=406ce8c72c07",
-      "./src/controls.js": "./src/controls.js?v=406ce8c72c07",
-      "./src/kitty.js": "./src/kitty.js?v=406ce8c72c07",
-      "./src/kittybrain.js": "./src/kittybrain.js?v=406ce8c72c07",
-      "./src/kittysound.js": "./src/kittysound.js?v=406ce8c72c07",
-      "./src/kittyaudio.js": "./src/kittyaudio.js?v=406ce8c72c07",
-      "./vendor/three/three.module.js": "./vendor/three/three.module.js?v=406ce8c72c07",
-      "./vendor/three/addons/loaders/GLTFLoader.js": "./vendor/three/addons/loaders/GLTFLoader.js?v=406ce8c72c07",
-      "./vendor/three/addons/utils/BufferGeometryUtils.js": "./vendor/three/addons/utils/BufferGeometryUtils.js?v=406ce8c72c07"
+      "./src/main.js": "./src/main.js?v=b3bebcb5d3f5",
+      "./src/daylog.js": "./src/daylog.js?v=b3bebcb5d3f5",
+      "./src/demo.js": "./src/demo.js?v=b3bebcb5d3f5",
+      "./src/world.js": "./src/world.js?v=b3bebcb5d3f5",
+      "./src/controls.js": "./src/controls.js?v=b3bebcb5d3f5",
+      "./src/kitty.js": "./src/kitty.js?v=b3bebcb5d3f5",
+      "./src/kittybrain.js": "./src/kittybrain.js?v=b3bebcb5d3f5",
+      "./src/kittysound.js": "./src/kittysound.js?v=b3bebcb5d3f5",
+      "./src/kittyaudio.js": "./src/kittyaudio.js?v=b3bebcb5d3f5",
+      "./vendor/three/three.module.js": "./vendor/three/three.module.js?v=b3bebcb5d3f5",
+      "./vendor/three/addons/loaders/GLTFLoader.js": "./vendor/three/addons/loaders/GLTFLoader.js?v=b3bebcb5d3f5",
+      "./vendor/three/addons/utils/BufferGeometryUtils.js": "./vendor/three/addons/utils/BufferGeometryUtils.js?v=b3bebcb5d3f5"
     }
   }
   </script>
-  <link rel="modulepreload" href="vendor/three/three.module.js?v=406ce8c72c07">
-  <link rel="stylesheet" href="style.css?v=406ce8c72c07">
-  <script type="module" src="src/main.js?v=406ce8c72c07"></script>
+  <link rel="modulepreload" href="vendor/three/three.module.js?v=b3bebcb5d3f5">
+  <link rel="stylesheet" href="style.css?v=b3bebcb5d3f5">
+  <script type="module" src="src/main.js?v=b3bebcb5d3f5"></script>
 </head>
 <body>
   <!-- shown while the world loads (and as the backdrop when 3D is not available) -->
   <picture class="poster" id="poster">
-    <source media="(orientation: portrait)" srcset="poster-portrait.jpg?v=406ce8c72c07" width="780" height="1688">
-    <img src="poster.jpg?v=406ce8c72c07" alt="" width="1440" height="900" fetchpriority="high" decoding="async">
+    <source media="(orientation: portrait)" srcset="poster-portrait.jpg?v=b3bebcb5d3f5" width="780" height="1688">
+    <img src="poster.jpg?v=b3bebcb5d3f5" alt="" width="1440" height="900" fetchpriority="high" decoding="async">
   </picture>
 
   <canvas id="world" role="img" aria-label="A big ginger tabby kitty with a red collar and a gold bell sits on the grey baseplate under a daylight sky"></canvas>
@@ -56,7 +56,7 @@
   <div class="ui" id="ui">
     <header class="title">
       <p class="eyebrow">
-        <img class="logo" src="logo.svg?v=406ce8c72c07" alt="Glikdev" width="36" height="36">
+        <img class="logo" src="logo.svg?v=b3bebcb5d3f5" alt="Glikdev" width="36" height="36">
         <span>A game built by YouTube comments</span>
       </p>
       <h1><span class="title-day">Day 2.</span> <span class="title-line">Now there's a kitty.</span></h1>
@@ -80,6 +80,10 @@
 
     <!-- Day 2: looking after the kitty (shown once she has loaded) -->
     <div class="care" id="care" role="group" aria-label="Look after the kitty" hidden>
+      <button class="care-btn care-cat" id="care-cat" type="button" aria-haspopup="dialog" aria-controls="catpick" aria-label="Choose your cat">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path class="fill" d="M4.6 3.6 8.4 7.4a9 7.6 0 0 1 7.2 0l3.8-3.8.8 7.6A8.2 7.8 0 0 1 12 20.4a8.2 7.8 0 0 1-8.2-9.2Z"/><path d="M4.6 3.6 8.4 7.4a9 7.6 0 0 1 7.2 0l3.8-3.8.8 7.6A8.2 7.8 0 0 1 12 20.4a8.2 7.8 0 0 1-8.2-9.2Z"/><path d="M8.6 12.2v.6M15.4 12.2v.6M11 15.3h2l-1 1.1Z"/></svg>
+        <span class="care-label">Cat</span>
+      </button>
       <button class="care-btn" id="care-pet" type="button">
         <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><ellipse class="fill" cx="12" cy="15.5" rx="4.6" ry="3.9"/><ellipse cx="12" cy="15.5" rx="4.6" ry="3.9"/><ellipse cx="6" cy="10" rx="1.9" ry="2.4"/><ellipse cx="9.6" cy="6.6" rx="1.9" ry="2.5"/><ellipse cx="14.4" cy="6.6" rx="1.9" ry="2.5"/><ellipse cx="18" cy="10" rx="1.9" ry="2.4"/></svg>
         <span class="care-label">Pet</span>
@@ -119,6 +123,25 @@
         <button class="chip chip-primary" type="submit" id="namer-save">Save name</button>
       </div>
     </form>
+  </dialog>
+
+  <dialog class="namer catpick" id="catpick" aria-labelledby="catpick-title">
+    <div class="namer-card">
+      <h2 id="catpick-title">Choose your cat</h2>
+      <p class="namer-sub">She keeps her name and her hearts.</p>
+      <div class="cats" id="cats" role="group" aria-labelledby="catpick-title"></div>
+      <p class="cat-status" id="cat-status" role="status" aria-live="polite"></p>
+      <p class="cat-credits">
+        Ginger: made in Blender for Day&nbsp;2.
+        Realistic: “Realistic cat” by <a href="https://sketchfab.com/3d-models/realistic-cat-pets-for-your-project-ec407d89f7304194bc04f2b4710eab8c" target="_blank" rel="noopener">Micael Martins</a>.
+        Tabby: “cat” by <a href="https://sketchfab.com/3d-models/cat-51cc3bfb49b64128aa54ffa29f36d8c1" target="_blank" rel="noopener">toti.shroom</a>,
+        <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>.
+        Both on Sketchfab, rigged and animated here.
+      </p>
+      <div class="namer-actions">
+        <button class="chip" type="button" id="catpick-close">Done</button>
+      </div>
+    </div>
   </dialog>
 
   <dialog class="daylog" id="daylog" aria-labelledby="daylog-title">
