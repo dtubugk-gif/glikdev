@@ -1,10 +1,12 @@
-// Day 2: the kitty's sounds in the browser. Nothing plays until the player has tapped (browsers
-// require a gesture), and only in answer to what the player does: a meow when she arrives where she
-// was called, a purr while she is petted, the collar bell when she sets off or is petted.
-import { meow, purr, bell } from './kittysound.js';
+// Day 2: the kitty's sounds in the browser. Nothing plays until the player has tapped once (browsers
+// require a gesture). Every sound is synthesised by kittysound.js when audio starts, then played in
+// answer to her events: meows, trills, chirps, mews, purring, a yawn, a sleepy sigh, crunching kibble,
+// soft paw steps in time with her feet, the collar bell, the yarn landing and her paw swats.
+// Sounds get quieter the further she is from the camera.
+import * as S from './kittysound.js';
 
 export function createKittyAudio() {
-  let ctx = null, master = null, bufs = null, purring = null, n = 0;
+  let ctx = null, master = null, bufs = null, purring = null, n = 0, muted = false;
 
   function unlock() {
     if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return; }
@@ -12,21 +14,27 @@ export function createKittyAudio() {
     if (!AC) return;
     ctx = new AC();
     master = ctx.createGain();
-    master.gain.value = 0.55;
+    master.gain.value = muted ? 0 : 0.6;
     master.connect(ctx.destination);
     const sr = ctx.sampleRate;
     const make = (f) => { const b = ctx.createBuffer(1, f.length, sr); b.copyToChannel(f, 0); return b; };
-    bufs = { meow: [0, 1, 2].map((v) => make(meow(sr, v))), purr: make(purr(sr, 4.0)), bell: [0, 1].map((v) => make(bell(sr, v))) };
+    const many = (fn, k) => Array.from({ length: k }, (_, v) => make(fn(sr, v)));
+    bufs = {
+      meow: many(S.meow, 3), trill: many(S.trill, 3), chirp: many(S.chirp, 3), mew: many(S.mew, 3),
+      purr: make(S.purr(sr, 4.0)), bell: many(S.bell, 2), yawn: [make(S.yawn(sr))], sigh: [make(S.sigh(sr))],
+      bite: many(S.bite, 3), step: many(S.step, 4), thud: [make(S.thud(sr))], swat: [make(S.swat(sr))],
+    };
   }
 
-  function play(buf, gain = 1, { rate = 1 } = {}) {
+  function play(name, gain = 1, { rate = 1, delay = 0 } = {}) {
+    const list = bufs[name];
     const src = ctx.createBufferSource();
-    src.buffer = buf;
+    src.buffer = list[n++ % list.length];
     src.playbackRate.value = rate;
     const g = ctx.createGain();
     g.gain.value = gain;
     src.connect(g).connect(master);
-    src.start();
+    src.start(ctx.currentTime + delay);
     return { src, g };
   }
 
@@ -40,18 +48,47 @@ export function createKittyAudio() {
     purring = null;
   }
 
+  const vary = () => 0.94 + 0.12 * ((n * 0.618) % 1);    // a little pitch variety, no two alike
+
   return {
     unlock,
-    /** feed it the kitty's brain events */
-    event(e) {
+    get running() { return !!ctx && ctx.state === 'running'; },
+    get muted() { return muted; },
+    setMuted(m) {
+      muted = m;
+      if (master) master.gain.setTargetAtTime(m ? 0 : 0.6, ctx.currentTime, 0.05);
+    },
+    /** feed it the kitty's events; `near` is 0-1 (1 = close to the camera) */
+    event(e, near = 1) {
       if (!ctx || ctx.state !== 'running') return;
-      if (e.type === 'meow') play(bufs.meow[n++ % 3], 0.9, { rate: 0.97 + 0.06 * ((n * 0.37) % 1) });
-      else if (e.type === 'purr' || (e.type === 'pet' && purring)) {
-        stopPurr(0.2);
-        purring = play(bufs.purr, 1.0);
-        purring.src.onended = () => { purring = null; };
-      } else if (e.type === 'purr-end') stopPurr(0.6);
-      if (e.type === 'jingle' || e.type === 'pet') play(bufs.bell[n++ % 2], e.type === 'pet' ? 0.35 : 0.45);
+      const v = 0.35 + 0.65 * near;
+      switch (e.type) {
+        case 'meow': play('meow', 0.9 * v, { rate: vary() }); break;
+        case 'trill': play('trill', 0.75 * v, { rate: vary() }); break;
+        case 'chirp': play('chirp', 0.7 * v, { rate: vary() }); break;
+        case 'mew': play('mew', 0.75 * v, { rate: vary() }); break;
+        case 'yawn': play('yawn', 0.7 * v, { delay: e.delay || 0 }); break;
+        case 'sigh': case 'asleep': if (e.type === 'sigh') play('sigh', 0.6 * v); break;
+        case 'bite': play('bite', 0.7 * v, { rate: vary() }); break;
+        case 'step': play('step', (e.strong ? 0.5 : 0.35) * v, { rate: vary() }); break;
+        case 'thud': play('thud', 0.6 * v); break;
+        case 'swat': play('swat', 0.6 * v); break;
+        case 'leap': play('swat', 0.35 * v, { rate: 0.8 }); break;
+        case 'land': play('step', 0.7 * v, { rate: 0.85 }); break;
+        case 'jingle': case 'wake': play('bell', 0.4 * v); break;
+        case 'bowl': play('bell', 0.3, { rate: 0.7 }); break;
+        case 'purr':
+          stopPurr(0.2);
+          purring = play('purr', 1.0 * v);
+          purring.src.onended = () => { purring = null; };
+          break;
+        case 'pet':
+          if (purring) { stopPurr(0.2); purring = play('purr', 1.0 * v); purring.src.onended = () => { purring = null; }; }
+          play('bell', 0.25 * v);
+          break;
+        case 'purr-end': stopPurr(0.6); break;
+        default:
+      }
     },
   };
 }

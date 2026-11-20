@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createBrain, KITTY, STEP, rng, headingTo } from '../src/kittybrain.js';
-import { meow, purr, bell } from '../src/kittysound.js';
+import { meow, purr, bell, trill, chirp, mew, yawn, sigh, bite, step, thud, swat } from '../src/kittysound.js';
 
 const run = (b, seconds, onStep) => {
   const n = Math.round(seconds / STEP);
@@ -95,4 +95,93 @@ test('the synthesised sounds are clean: right length, finite, not clipping', () 
     assert.ok(peak > 0.3 && peak <= 0.81, `${name} peak ${peak}`);
   }
   assert.deepEqual(meow(48000, 2), meow(48000, 2), 'deterministic');
+});
+
+test('fed: a bowl appears, she runs over, eats all three layers, is full and happier, then washes', () => {
+  const b = createBrain({ seed: 5, x: 0, z: 0, mode: 'sit', viewer: [0, 40], hunger: 0.9, happy: 0.4 });
+  b.feed();
+  const ev = [];
+  const modes = [];
+  run(b, 16, (k) => { ev.push(...k.drain()); if (modes[modes.length - 1] !== k.mode) modes.push(k.mode); });
+  const types = ev.map((e) => e.type);
+  const bowl = ev.find((e) => e.type === 'bowl');
+  assert.ok(bowl && Math.abs(Math.hypot(bowl.x, bowl.z) - Math.hypot(10, 3)) < 0.5 && Math.abs(bowl.x) > 9,
+    `the bowl lands beside her, across the view (${bowl?.x}, ${bowl?.z})`);
+  for (const m of ['standup', 'trot', 'face', 'eat', 'sitdown', 'groom']) assert.ok(modes.includes(m), `${m} in ${modes.join(' > ')}`);
+  assert.deepEqual(ev.filter((e) => e.type === 'kibble').map((e) => e.left), [2, 1, 0]);
+  assert.ok(types.filter((t) => t === 'bite').length >= 9, 'she crunches all the way through');
+  assert.ok(types.includes('eaten') && types.includes('bowl-gone'));
+  assert.ok(b.hunger < 0.1 && b.happy > 0.55, `hunger ${b.hunger.toFixed(2)}, happy ${b.happy.toFixed(2)}`);
+  assert.equal(b.bowl, null);
+});
+
+test('play: the yarn lands, she chases, pounces and bats it three times, then sits and washes', () => {
+  const b = createBrain({ seed: 8, x: 0, z: 0, mode: 'sit', viewer: [0, 40] });
+  b.play();
+  const ev = [];
+  const modes = new Set();
+  const seq = [];
+  let tired = 1;
+  run(b, 40, (k) => {
+    const got = k.drain();
+    if (got.some((e) => e.type === 'swat' && e.round === 3)) tired = k.energy;
+    ev.push(...got); modes.add(k.mode); if (seq[seq.length - 1] !== k.mode) seq.push(k.mode);
+  });
+  const swats = ev.filter((e) => e.type === 'swat');
+  assert.equal(swats.length, 3, `three rounds (got ${swats.length})`);
+  for (const m of ['trot', 'pounce', 'bat']) assert.ok(modes.has(m), m);
+  assert.ok(ev.some((e) => e.type === 'thud') && ev.some((e) => e.type === 'leap'));
+  const after = seq.slice(seq.lastIndexOf('bat') + 1);
+  assert.deepEqual(after.slice(0, 2), ['sitdown', 'groom'], `after the last swat: ${after.join(' > ')}`);
+  assert.ok(b.yarn && Math.hypot(b.yarn.vx, b.yarn.vz) === 0, 'the yarn comes to rest');
+  assert.ok(tired < 0.5, `playing tires her out (energy ${tired})`);
+});
+
+test('nap: she lies down and sleeps; a pet wakes her with a stretch, then she purrs', () => {
+  const b = createBrain({ seed: 3, mode: 'sit' });
+  b.nap();
+  run(b, 2);
+  assert.equal(b.mode, 'sleep');
+  assert.ok(b.isAsleep());
+  b.pet();
+  assert.equal(b.mode, 'stretch');
+  const ev = b.drain().map((e) => e.type);
+  assert.ok(ev.includes('wake') && ev.includes('yawn'));
+  run(b, 3.5);
+  assert.equal(b.mode, 'purr');
+});
+
+test('tapping the yarn on the floor starts a new game without a new toss', () => {
+  const b = createBrain({ seed: 8, mode: 'sit', viewer: [0, 40] });
+  b.play();
+  run(b, 40);
+  const yarn = b.yarn;
+  b.drain();
+  b.play();
+  assert.equal(b.yarn, yarn, 'same ball');
+  assert.equal(b.yarn.rounds, 0);
+  assert.ok(!b.drain().some((e) => e.type === 'yarn'), 'no new toss');
+});
+
+test('hungry: every so often she asks for food with a little mew', () => {
+  const b = createBrain({ seed: 2, mode: 'sit', timer: 999, hunger: 0.95 });
+  const mews = [];
+  run(b, 70, (k) => { for (const e of k.drain()) if (e.type === 'mew') mews.push(e.t); });
+  assert.ok(mews.length >= 2 && mews.length <= 4, `${mews.length} mews in 70 s`);
+});
+
+test('every new clip has a mode that shows it', () => {
+  const b = createBrain({ seed: 1 });
+  const want = { eat: 'Eat', groom: 'Groom', stretch: 'Stretch', sleep: 'Sleep', liedown: 'Sleep', pounce: 'Pounce', bat: 'Bat' };
+  for (const [mode, clip] of Object.entries(want)) { b.mode = mode; assert.equal(b.anim().name, clip); }
+});
+
+test('all her voices and sounds render clean', () => {
+  for (const [name, fn] of Object.entries({ trill, chirp, mew, yawn, sigh, bite, step, thud, swat })) {
+    const f = fn(48000, 1);
+    assert.ok(f.length > 48000 * 0.05, name);
+    let peak = 0;
+    for (const x of f) { assert.ok(Number.isFinite(x), name); peak = Math.max(peak, Math.abs(x)); }
+    assert.ok(peak > 0.2 && peak <= 0.81, `${name} peak ${peak}`);
+  }
 });

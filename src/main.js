@@ -3,6 +3,7 @@
 //   ?demo=orbit | reveal | kitty | kittycall | kittypet | kittywalk
 //                                scripted camera (and kitty), driven only by frame time (for filming)
 //   ?ui=0                        hide every piece of UI
+//   ?tag=Mochi&tagAt=1.5         (filming) show the kitty's name tag, popping in at tagAt seconds
 //   ?capture=short               Shorts layout: record at 360x640 CSS with deviceScaleFactor 3
 // window.renderFrame(t) renders the frame at t seconds (used by frame-exact recorders);
 // window.__ready resolves once the world has drawn its first frame.
@@ -68,6 +69,20 @@ dialog.addEventListener('close', () => openBtn.focus());
 
 const channel = $('channel');
 if (CHANNEL_URL) { channel.href = CHANNEL_URL; channel.hidden = false; }
+
+// ---------------------------------------------------------------- the kitty's name and needs (this device only)
+const CARE_KEY = 'glikdev.kitty.v1';
+const cleanName = (n) => String(n ?? '').replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 18);
+function loadCare() {
+  try {
+    const d = JSON.parse(localStorage.getItem(CARE_KEY) || 'null');
+    if (!d || typeof d !== 'object') return null;
+    return d;
+  } catch { return null; }
+}
+function saveCare(d) { try { localStorage.setItem(CARE_KEY, JSON.stringify(d)); } catch { /* private mode: fine */ } }
+const filmTag = cleanName(params.get('tag'));
+const filmTagAt = Number(params.get('tagAt')) || 0;
 
 // ---------------------------------------------------------------- failure states
 function hasWebGL2() {
@@ -157,6 +172,7 @@ async function start() {
     if (portrait && showUI) {
       // keep the horizon below the bubble, however long the day's headline is
       const b = document.querySelector('.bubble')?.getBoundingClientRect();
+      if (b && b.height) root.style.setProperty('--hint-top', `${Math.round(b.bottom + 30)}px`);   // the hint sits just under it
       if (b && b.height) spec.horizon = Math.min(short ? 0.6 : 0.45, Math.max(spec.horizon, (b.bottom + 34) / h));
     }
     camera.fov = spec.fov;
@@ -197,25 +213,43 @@ async function start() {
   // ------------------------------------------------------------ the kitty (Day 2, idea by @lifediamond888)
   let kitty = null, audio = null;
   const kd = demo ? KITTY_DEMOS[demo] : null;
+  const live = !demo && !short;
+  const saved = live ? loadCare() : null;
+  const care = {
+    name: cleanName(saved?.name) || 'Kitty',
+    muted: !!saved?.muted,
+  };
+  let needs;
+  if (saved && Number.isFinite(saved.hunger) && Number.isFinite(saved.happy)) {
+    const away = Math.max(0, Math.min(3600, (Date.now() - (Number(saved.at) || Date.now())) / 1000));
+    needs = { hunger: Math.min(1, saved.hunger + away / 240), happy: Math.max(0, saved.happy - away / 900) };
+  }
   try {
     const [{ createKitty }, { createKittyAudio }] = await kittyMods;
     const ground = Math.sin(home.pol) * home.dist;
     kitty = await createKitty({
-      scene: world.scene, renderer, url: stamped('models/kitty.glb'),
+      scene: world.scene, renderer, url: stamped('models/kitty.glb'), toysUrl: stamped('models/toys.glb'),
       start: kd ? kd.start(home) : { x: 0, z: 0, heading: home.az, mode: 'sit' },
       script: kd ? kd.script : null,
       viewer: kd ? kd.viewer(home) : [Math.sin(home.az) * ground, Math.cos(home.az) * ground],
+      needs: kd ? kd.needs : needs,
     });
     const focus = new THREE.Vector3();
     world.setShadowFocus(() => kitty.focus(focus));
-    if (!demo && !short) {
+    if (live) {
       audio = createKittyAudio();
-      kitty.on((e) => audio.event(e));
+      audio.setMuted(care.muted);
+      const head = new THREE.Vector3();
+      kitty.on((e) => {
+        const d = camera.position.distanceTo(kitty.headPosition(head));
+        audio.event(e, Math.max(0, Math.min(1, (70 - d) / 50)));
+      });
     }
   } catch (err) { console.warn('Glikdev: the kitty did not load', err); kitty = null; }
   const kittyState = () => {
     const b = kitty.brain, h = kitty.headPosition();
-    return { x: b.x, z: b.z, heading: b.heading, head: [h.x, h.y, h.z] };
+    return { x: b.x, z: b.z, heading: b.heading, head: [h.x, h.y, h.z],
+      bowl: b.bowl ? { x: b.bowl.x, z: b.bowl.z } : null, yarn: b.yarn ? { x: b.yarn.x, z: b.yarn.z } : null };
   };
 
   // taps: on the kitty = pet her; on the ground = call her there (a drag or a pinch is not a tap)
@@ -240,7 +274,9 @@ async function start() {
       if (e.type !== 'pointerup' || !d || d.multi || taps.size) return;
       if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 10 || performance.now() - d.t > 450) return;
       const r = rayAt(e.clientX, e.clientY);
-      if (kitty.pick(r)) { kitty.pet(); dismissHint(); return; }
+      const what = kitty.pick(r);
+      if (what === 'kitty') { kitty.pet(); dismissHint(); return; }
+      if (what === 'yarn') { kitty.play(); dismissHint(); return; }
       if (r.intersectPlane(groundPlane, hit) && Math.abs(hit.x) < PLATE.half - 4 && Math.abs(hit.z) < PLATE.half - 4) {
         kitty.call(hit.x, hit.z);
         dismissHint();
@@ -253,6 +289,92 @@ async function start() {
         if (e.buttons) return;
         canvas.style.cursor = kitty.pick(rayAt(e.clientX, e.clientY)) ? 'pointer' : '';
       });
+    }
+  }
+
+  // ------------------------------------------------------------ looking after her: buttons, name tag, rename
+  const tag = $('nametag'), tagName = $('nametag-name'), tagHearts = $('nametag-hearts'), tagSr = $('nametag-sr');
+  const careEl = $('care'), hungryBadge = $('care-hungry'), soundBtn = $('care-sound');
+  const namer = $('namer'), namerInput = $('namer-input');
+  const heartEls = Array.from({ length: 5 }, () => { const i = document.createElement('i'); tagHearts.append(i); return i; });
+  let shownHearts = -1, shownHungry = null;
+  function showName(n) { tagName.textContent = n; }
+  function persist() {
+    if (!kitty || !live) return;
+    const b = kitty.brain;
+    saveCare({ name: care.name, muted: care.muted, hunger: +b.hunger.toFixed(3), happy: +b.happy.toFixed(3), at: Date.now() });
+  }
+  if (kitty && (filmTag || (showUI && !demo))) {
+    showName(filmTag || care.name);
+    if (filmTag) tag.classList.add('is-filmed');
+    tag.hidden = false;
+  }
+  if (kitty && showUI && !demo && !short) {
+    careEl.hidden = false;
+    root.classList.add('has-care');
+    const act = (fn) => () => { audio?.unlock(); fn(); dismissHint(); };
+    $('care-pet').addEventListener('click', act(() => kitty.pet()));
+    $('care-feed').addEventListener('click', act(() => kitty.feed()));
+    $('care-play').addEventListener('click', act(() => kitty.play()));
+    const paintSound = () => {
+      soundBtn.setAttribute('aria-pressed', String(!care.muted));
+      soundBtn.setAttribute('aria-label', care.muted ? 'Sound off' : 'Sound on');
+    };
+    paintSound();
+    soundBtn.addEventListener('click', () => {
+      care.muted = !care.muted;
+      audio?.unlock();
+      audio?.setMuted(care.muted);
+      paintSound();
+      persist();
+    });
+    tag.addEventListener('click', () => {
+      namerInput.value = care.name === 'Kitty' ? '' : care.name;
+      namerInput.placeholder = 'Kitty';
+      if (typeof namer.showModal === 'function') namer.showModal(); else namer.setAttribute('open', '');
+      namerInput.focus();
+    });
+    $('namer-cancel').addEventListener('click', () => namer.close());
+    $('namer-form').addEventListener('submit', () => {
+      care.name = cleanName(namerInput.value) || 'Kitty';
+      showName(care.name);
+      persist();
+      kitty.pet();                                        // she likes her new name
+    });
+    namer.addEventListener('click', (e) => { if (e.target === namer) namer.close(); });
+    namer.addEventListener('close', () => tag.focus());
+    setInterval(persist, 4000);
+    addEventListener('pagehide', persist);
+    document.addEventListener('visibilitychange', () => { if (document.hidden) persist(); });
+  }
+  // every frame: the tag floats over her head; hearts and the hungry badge follow her needs
+  const tagPos = new THREE.Vector3();
+  function placeTag(t) {
+    if (tag.hidden || !kitty) return;
+    kitty.headPosition(tagPos);
+    tagPos.y += 2.6;
+    tagPos.project(camera);
+    const vis = tagPos.z < 1 && Math.abs(tagPos.x) < 1.2 && Math.abs(tagPos.y) < 1.2;
+    let s = 1;
+    if (filmTag) s = t < filmTagAt ? 0 : Math.min(1, 1 + 2.7 * (Math.min(1, (t - filmTagAt) / 0.45) - 1) ** 3 + 1.7 * (Math.min(1, (t - filmTagAt) / 0.45) - 1) ** 2);
+    tag.style.visibility = vis && s > 0.01 ? 'visible' : 'hidden';
+    const x = (tagPos.x + 1) / 2 * innerWidth, y = (1 - tagPos.y) / 2 * innerHeight;
+    tag.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -100%) scale(${s.toFixed(3)})`;
+    const b = kitty.brain;
+    const hearts = Math.max(1, Math.round(b.happy * 5));
+    if (hearts !== shownHearts) {
+      shownHearts = hearts;
+      heartEls.forEach((el, k) => el.classList.toggle('off', k >= hearts));
+    }
+    const hungry = b.hunger > 0.7;
+    if (hungry !== shownHungry) {
+      shownHungry = hungry;
+      hungryBadge.hidden = !hungry;
+      tagSr.textContent = `, happiness ${hearts} of 5${hungry ? ', hungry' : ''}. Rename`;
+    }
+    if (!careEl.hidden) {
+      $('care-feed').disabled = !!b.bowl;
+      $('care-play').disabled = !!b.bowl;
     }
   }
 
@@ -272,9 +394,15 @@ async function start() {
 
   // ------------------------------------------------------------ loop
   let t0 = null, last = null, external = false, skip = false;
+  const interest = new THREE.Vector3();
   function step(t, dt) {
     let ks = 0;
     if (kitty) ks = demo ? kitty.simulateTo(t) : kitty.advance(dt, camera.position);
+    if (kitty && !demo) {                                  // the camera keeps her (and what she is after) in the middle
+      const k = 1 - Math.exp(-dt * 1.8), f = kitty.interest(interest);
+      rig.target[0] += (f.x - rig.target[0]) * k;
+      rig.target[2] += (f.z - rig.target[2]) * k;
+    }
     if (demo) {
       const pose = demoPose(demo, t, home, kitty ? kittyState() : null) || demoPose('orbit', t, home);
       setShift(pose.shift, 0);
@@ -287,7 +415,7 @@ async function start() {
     } else {
       rig.update(dt);
     }
-    if (kitty) kitty.finish(camera.position, ks);
+    if (kitty) { kitty.finish(camera.position, ks); placeTag(t); }
     world.update(t);
     world.render();
   }

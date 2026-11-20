@@ -4,12 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Glikdev – Day 2: a kitty</title>
-  <meta name="description" content="A game built one YouTube comment at a time. Day 2: a kitty you can call and pet. Comment what Day 3 should add.">
+  <meta name="description" content="A game built one YouTube comment at a time. Day 2: a kitty you can name, pet, feed and play with. Comment what Day 3 should add.">
   <meta name="theme-color" content="#a9cfee">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Glikdev">
   <meta property="og:title" content="Glikdev – Day 2: a kitty">
-  <meta property="og:description" content="A game built one YouTube comment at a time. Day 2: a kitty. What should Day 3 add?">
+  <meta property="og:description" content="A game built one YouTube comment at a time. Day 2: a kitty you can name, pet, feed and play with. What should Day 3 add?">
   <meta property="og:url" content="https://dtubugk-gif.github.io/glikdev/">
   <meta property="og:image" content="https://dtubugk-gif.github.io/glikdev/poster.jpg">
   <meta property="og:image:width" content="1440">
@@ -76,7 +76,49 @@
         <span><span class="chip-extra">Glikdev on </span>YouTube</span>
       </a>
     </nav>
+
+    <!-- Day 2: looking after the kitty (shown once she has loaded) -->
+    <div class="care" id="care" role="group" aria-label="Look after the kitty" hidden>
+      <button class="care-btn" id="care-pet" type="button">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><ellipse class="fill" cx="12" cy="15.5" rx="4.6" ry="3.9"/><ellipse cx="12" cy="15.5" rx="4.6" ry="3.9"/><ellipse cx="6" cy="10" rx="1.9" ry="2.4"/><ellipse cx="9.6" cy="6.6" rx="1.9" ry="2.5"/><ellipse cx="14.4" cy="6.6" rx="1.9" ry="2.5"/><ellipse cx="18" cy="10" rx="1.9" ry="2.4"/></svg>
+        <span class="care-label">Pet</span>
+      </button>
+      <button class="care-btn" id="care-feed" type="button">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path class="fill" d="M3.5 12h17a8.5 6.5 0 0 1-17 0Z"/><path d="M3.5 12h17a8.5 6.5 0 0 1-17 0ZM7 18.6h10"/><circle cx="9" cy="9.6" r="1.4"/><circle cx="12.6" cy="8.6" r="1.4"/><circle cx="15.6" cy="10" r="1.3"/></svg>
+        <span class="care-label">Feed</span>
+        <span class="care-badge" id="care-hungry" hidden>!</span>
+      </button>
+      <button class="care-btn" id="care-play" type="button">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle class="fill" cx="11" cy="11" r="7.5"/><circle cx="11" cy="11" r="7.5"/><path d="M5 7.5c4 1 8 4.2 9.5 10.5M8.2 4.2c3.6 2 6 5.5 6.6 9.8M4.2 13c3-.6 6.3.3 9 2.8M16.8 16.4c1.5 1.4 2.7 2.4 4.2 3"/></svg>
+        <span class="care-label">Play</span>
+      </button>
+      <button class="care-btn care-sound" id="care-sound" type="button" aria-pressed="true" aria-label="Sound on">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path class="fill" d="M4 9.5h3.6L12 5.6v12.8l-4.4-3.9H4Z"/><path d="M4 9.5h3.6L12 5.6v12.8l-4.4-3.9H4Z"/><path class="wave" d="M15.4 9.2a4 4 0 0 1 0 5.6M18 6.8a7.4 7.4 0 0 1 0 10.4"/><path class="cross" d="m15.5 9.5 5 5m0-5-5 5"/></svg>
+      </button>
+    </div>
   </div>
+
+  <!-- her name, floating over her head; tap it to rename her -->
+  <button class="nametag" id="nametag" type="button" aria-haspopup="dialog" aria-controls="namer" hidden>
+    <span class="nametag-name" id="nametag-name">Kitty</span>
+    <span class="nametag-hearts" id="nametag-hearts" aria-hidden="true"></span>
+    <span class="nametag-sr" id="nametag-sr"></span>
+  </button>
+
+  <dialog class="namer" id="namer" aria-labelledby="namer-title">
+    <form class="namer-card" method="dialog" id="namer-form">
+      <h2 id="namer-title">Name your kitty</h2>
+      <p class="namer-sub">Only you see it. It stays on this device.</p>
+      <label class="namer-field">
+        <span class="namer-label">Her name</span>
+        <input id="namer-input" name="name" type="text" maxlength="18" autocomplete="off" spellcheck="false" enterkeyhint="done" required>
+      </label>
+      <div class="namer-actions">
+        <button class="chip" type="button" id="namer-cancel">Cancel</button>
+        <button class="chip chip-primary" type="submit" id="namer-save">Save name</button>
+      </div>
+    </form>
+  </dialog>
 
   <dialog class="daylog" id="daylog" aria-labelledby="daylog-title">
     <div class="sheet">
