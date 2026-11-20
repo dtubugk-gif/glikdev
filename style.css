@@ -251,6 +251,16 @@ html.no-ui .nametag:not(.is-filmed), html.capture-short .nametag:not(.is-filmed)
 }
 .namer-field input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 .namer-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
+/* the free camera's way back to her */
+.follow-chip {
+  position: fixed; z-index: 2; left: 50%; transform: translateX(-50%);
+  bottom: calc(var(--gutter) + var(--safe-b));
+}
+@media (hover: hover) { .follow-chip:hover { transform: translateX(-50%) translateY(-1px); } }
+.follow-chip:active { transform: translateX(-50%) translateY(2px); }
+.follow-name { display: inline-block; max-width: 9em; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; unicode-bidi: isolate; }
+.follow-chip:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+
 /* choosing the cat */
 .catpick { max-width: min(520px, 100%); }
 .cats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
@@ -438,6 +448,7 @@ html.capture-short .bubble { font-size: 16px; max-width: 100%; }
   .care { left: calc(var(--gutter) + var(--safe-l)); right: calc(var(--gutter) + var(--safe-r));
           bottom: calc(var(--gutter) + var(--safe-b) + 58px); justify-content: flex-start; }
   html.has-care .hint { bottom: auto; top: var(--hint-top, 40%); }   /* under the bubble, in the sky (main.js sets it) */
+  .follow-chip { bottom: calc(var(--gutter) + var(--safe-b) + 116px); }   /* above the care bar */
 }
 
 @media (prefers-reduced-motion: reduce) {

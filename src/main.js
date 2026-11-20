@@ -168,7 +168,11 @@ async function start() {
   // so the lines run off toward the horizon in perspective.
   const target = [0, PLATE.topY, 0];
   const home = { az: 0.32, pol: 1.05, dist: 32, height: 16, target, shift: 0, shiftX: 0, fov: 60, horizon: 0.42 };
-  const rig = new OrbitRig(camera, canvas, { target, minPolar: 0.22, maxPolar: 1.52, minHeight: 1.5, onInteract: () => { looked = true; } });
+  let follow = true;                                       // the camera follows the kitty until you move it
+  let onFree = () => {};
+  const rig = new OrbitRig(camera, canvas, { target, minPolar: 0.22, maxPolar: 1.52, minHeight: 1.5,
+    bounds: PLATE.half - 8, onInteract: () => { looked = true; },
+    onPan: () => { if (follow) { follow = false; onFree(); } } });
 
   // Where the horizon lands for a camera pitched down by `pitch` (radians) with vertical fov `fov` (deg),
   // as a fraction of the height from the top, before any lens shift.
@@ -356,7 +360,7 @@ async function start() {
     canvas.addEventListener('pointercancel', letGo);
     canvas.addEventListener('lostpointercapture', letGo);
     canvas.addEventListener('pointerdown', (e) => {
-      taps.set(e.pointerId, { x: e.clientX, y: e.clientY, t: performance.now(), multi: taps.size > 0 });
+      taps.set(e.pointerId, { x: e.clientX, y: e.clientY, t: performance.now(), multi: taps.size > 0 || e.button > 0 || e.shiftKey });
       if (taps.size > 1) for (const v of taps.values()) v.multi = true;
       audio?.unlock();
     });
@@ -387,11 +391,31 @@ async function start() {
 
   // ------------------------------------------------------------ looking after her: buttons, name tag, rename
   const tag = $('nametag'), tagName = $('nametag-name'), tagHearts = $('nametag-hearts'), tagSr = $('nametag-sr');
+  // the free camera: once you move it yourself, this brings it back to her (and so does C, or Pet / Feed / Play)
+  const followBtn = $('follow'), followName = $('follow-name');
+  function backToHer() {
+    if (follow) return;
+    follow = true;
+    rig.release();
+    followBtn.hidden = true;
+  }
+  onFree = () => {
+    if (!kitty || demo || short || !showUI) return;
+    followName.textContent = care.name;
+    followBtn.hidden = false;
+    dismissHint();
+  };
+  followBtn.addEventListener('click', () => { backToHer(); canvas.focus?.(); });
+  addEventListener('keydown', (e) => {
+    if (e.code !== 'KeyC' || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+    if (e.target?.closest?.('dialog, input, textarea, [contenteditable]')) return;
+    backToHer();
+  });
   const careEl = $('care'), hungryBadge = $('care-hungry'), soundBtn = $('care-sound');
   const namer = $('namer'), namerInput = $('namer-input');
   const heartEls = Array.from({ length: 5 }, () => { const i = document.createElement('i'); tagHearts.append(i); return i; });
   let shownHearts = -1, shownHungry = null;
-  function showName(n) { tagName.textContent = n; }
+  function showName(n) { tagName.textContent = n; followName.textContent = n; }
   function persist() {
     if (!kitty || !live) return;
     const b = kitty.brain;
@@ -405,7 +429,7 @@ async function start() {
   if (kitty && showUI && !demo && !short) {
     careEl.hidden = false;
     root.classList.add('has-care');
-    const act = (fn) => () => { audio?.unlock(); fn(); dismissHint(); };
+    const act = (fn) => () => { audio?.unlock(); backToHer(); fn(); dismissHint(); };
     $('care-pet').addEventListener('click', act(() => kitty.pet()));
     $('care-feed').addEventListener('click', act(() => kitty.feed()));
     $('care-play').addEventListener('click', act(() => kitty.play()));
@@ -527,9 +551,9 @@ async function start() {
   // hint, until the first tap that does something
   if (showUI && !demo && !short) {
     hintEl.textContent = kitty
-      ? (coarse ? 'Tap the ground to call the kitty · Tap her to pet her'
-        : 'Click the ground to call the kitty · Click her to pet her · Drag to look around')
-      : (coarse ? 'Drag to look around · Pinch to zoom' : 'Drag to look around · Scroll or W/S to zoom');
+      ? (coarse ? 'Tap the ground to call the kitty · Tap her to pet her · Two fingers to move'
+        : 'Click the ground to call the kitty · Click her to pet her · Drag to look around · Right-drag or WASD to move')
+      : (coarse ? 'Drag to look around · Two fingers to move and zoom' : 'Drag to look around · Right-drag or WASD to move · Scroll to zoom');
     hintEl.hidden = false;
   }
   function dismissHint() {
@@ -566,7 +590,7 @@ async function start() {
   function step(t, dt) {
     let ks = 0;
     if (kitty) ks = demo ? kitty.simulateTo(t) : kitty.advance(dt, camera.position);
-    if (kitty && !demo) {                                  // the camera keeps her (and what she is after) in the middle
+    if (kitty && !demo && follow) {                        // the camera keeps her (and what she is after) in the middle
       const k = 1 - Math.exp(-dt * 1.8), f = kitty.interest(interest);
       rig.target[0] += (f.x - rig.target[0]) * k;
       rig.target[2] += (f.z - rig.target[2]) * k;

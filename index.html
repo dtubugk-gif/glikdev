@@ -102,6 +102,12 @@
     </div>
   </div>
 
+  <!-- the free camera: shown once you move the camera away from her -->
+  <button class="chip follow-chip" id="follow" type="button" hidden>
+    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle class="fill" cx="12" cy="12" r="3.2"/><circle cx="12" cy="12" r="7.5"/><path d="M12 1.8v3.4M12 18.8v3.4M1.8 12h3.4M18.8 12h3.4"/></svg>
+    <span>Back to <span class="follow-name" id="follow-name">Kitty</span></span>
+  </button>
+
   <!-- her name, floating over her head; tap it to rename her -->
   <button class="nametag" id="nametag" type="button" aria-haspopup="dialog" aria-controls="namer" hidden>
     <span class="nametag-name" id="nametag-name">Kitty</span>
