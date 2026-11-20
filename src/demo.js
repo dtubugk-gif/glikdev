@@ -3,7 +3,7 @@
 // deterministic: kittybrain.js is seeded and stepped at a fixed rate), so a recorder that controls
 // requestAnimationFrame / performance.now gets identical frames on every run.
 
-export const DEMOS = ['orbit', 'reveal', 'kitty', 'kittycall', 'kittypet', 'kittywalk', 'kittyname', 'kittyfeed', 'kittyplay'];
+export const DEMOS = ['orbit', 'reveal', 'kitty', 'kittycall', 'kittypet', 'kittywalk', 'kittyname', 'kittyfeed', 'kittyplay', 'kittynap'];
 
 const lerp = (a, b, k) => a + (b - a) * k;
 const DEG = Math.PI / 180;
@@ -53,6 +53,12 @@ export const KITTY_DEMOS = {
     start: () => ({ x: 0, z: 0, heading: 0.35, mode: 'sit' }),
     script: [{ t: 0.3, type: 'play' }],
     viewer: () => [Math.sin(0.35) * 30, Math.cos(0.35) * 30],
+  },
+  // she curls up into a loaf and falls asleep (Zzz)
+  kittynap: {
+    start: () => ({ x: 0, z: 0, heading: 0.2, mode: 'sit', timer: 60 }),
+    script: [{ t: 0.2, type: 'nap' }],
+    viewer: () => [Math.sin(0.2) * 20, Math.cos(0.2) * 20],
   },
   // she strolls across the plate; the camera tracks alongside
   kittywalk: {
@@ -127,6 +133,12 @@ export function demoPose(name, t, home, kitty = null) {
     const a = 0.2 + 0.36, d = 14.5 - 0.5 * easeInOut(t / 3);
     const pos = [kx + Math.sin(a) * d, 4.0, kz + Math.cos(a) * d];
     return { position: pos, look: [kx, 6.9, kz], shift: 0 };
+  }
+  if (name === 'kittynap') {
+    // low and close, slowly drifting round her as she settles; room above for the Zzz
+    const a = 0.2 + 0.5 + 0.05 * t, dist = lerp(15, 12.5, easeInOut(t / 4.4));
+    const pos = [kx + Math.sin(a) * dist, 3.2, kz + Math.cos(a) * dist];
+    return { position: pos, look: [kx, 5.2, kz], shift: 0 };
   }
   if (name === 'kittyfeed' || name === 'kittyplay') {
     // a wider shot that keeps her and the bowl (or the yarn) in frame, eased in once it appears
