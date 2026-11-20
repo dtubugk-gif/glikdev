@@ -8,7 +8,9 @@
 //   call(x, z)   she trots there (runs, when it is far), turns to whoever called, sits and meows
 //   pet()        she purrs with her eyes shut (petting a sleeping kitty wakes her with a stretch first)
 //   feed()       a bowl of kibble appears near her; she runs over, eats it all, then washes her face
+//                (food already out: the bowl is topped up, and she eats on - or comes back for more)
 //   play()       a ball of yarn lands near her: she chases it, pounces, bats it away - three rounds
+//                (even at dinner: she leaves the bowl to play, then goes back to finish it)
 //   meow(), walkTo(x, z), nap()   used by the scripted recordings
 // Everything she does is also reported as events (drain()): sounds, effects and the UI follow them.
 
@@ -87,6 +89,7 @@ export function createBrain(o = {}) {
     happy: o.happy ?? 0.6,            // 0 .. 1
     energy: 1,                        // play tires her out; a nap fills it back up
     bowl: null,                       // {x, z, t, left, bites, eatenAt}
+    eatStart: 0,                      // when she started on the bowl (bites are counted from here)
     yarn: null,                       // {x, y, z, vx, vz, spin, ax, az, rounds, flying}
     batted: false,
     events: [],
@@ -179,21 +182,47 @@ export function createBrain(o = {}) {
   }
 
   b.feed = () => {
+    if (b.yarn) b.yarn.rounds = 3;                       // food beats play
+    emit('chirp');
+    if (b.bowl) {                                        // food is already out: top the bowl up
+      b.bowl.left = 3;
+      b.bowl.eatenAt = null;
+      emit('refill', { x: b.bowl.x, z: b.bowl.z });
+      if (b.mode === 'eat') { b.timer = EAT.seconds; b.eatStart = b.t; b.bowl.bites = 0; return; }   // she eats on
+      if (b.goal === 'eat' || b.face?.then === 'eat') return;      // already on her way
+      b.after = null;
+      goEat();
+      return;
+    }
     const bowl = besideHer(10, 3);
     b.bowl = { ...bowl, t: b.t, left: 3, bites: 0, eatenAt: null };
-    if (b.yarn) b.yarn.rounds = 3;                       // food beats play
     emit('bowl', { x: bowl.x, z: bowl.z });
-    emit('chirp');
-    const dx = b.x - bowl.x, dz = b.z - bowl.z, dd = Math.hypot(dx, dz) || 1;
     b.after = null;
-    go({ x: bowl.x + (dx / dd) * KITTY.mouth, z: bowl.z + (dz / dd) * KITTY.mouth }, 'eat', true);
+    goEat();
   };
 
+  /** Off to the bowl, to stand with her mouth over it. */
+  function goEat() {
+    const bowl = b.bowl, dx = b.x - bowl.x, dz = b.z - bowl.z, dd = Math.hypot(dx, dz) || 1;
+    go({ x: bowl.x + (dx / dd) * KITTY.mouth, z: bowl.z + (dz / dd) * KITTY.mouth }, 'eat', true);
+  }
+
+  /** Food left in the bowl? (she comes back to it after a game) */
+  const foodLeft = () => !!(b.bowl && b.bowl.eatenAt == null && b.bowl.left > 0);
+
+  /** A game is over: back to the food if there is some, otherwise a wash. */
+  function playOver() {
+    if (foodLeft()) { b.after = null; goEat(); return; }
+    b.after = b.after || 'groom';
+    enter('sitdown', KITTY.clips.Sit);
+  }
+
   b.play = () => {
-    if (b.bowl || b.yarn?.held) return;                  // dinner first; and it is in your hand
+    if (b.yarn?.held) return;                            // it is in your hand
     if (b.yarn && b.yarn.flying === 0) {                 // it is already on the floor: game on again
       b.yarn.rounds = 0;
       emit('chirp');
+      if (['pounce', 'bat', 'face'].includes(b.mode)) return;     // mid-game already: she just plays on
       if (lying()) { b.after = null; wake(null); }
       chaseYarn();
       return;
@@ -230,7 +259,6 @@ export function createBrain(o = {}) {
     const sp = Math.hypot(vx, vz), k = sp > YARN.maxThrow ? YARN.maxThrow / sp : 1;
     Object.assign(y, { held: false, air: true, vx: vx * k, vz: vz * k, vy, rounds: 0, rim: KITTY.limit, drag: YARN.drag });
     emit('toss', { speed: sp * k });
-    if (b.mode === 'eat' || b.bowl) return;              // dinner first: she goes for it when she is done
     emit('chirp');
     chaseYarn();
   };
@@ -334,7 +362,7 @@ export function createBrain(o = {}) {
         } else {                                         // down: rolling from here
           y.vy = 0; y.air = false;
           if (hit > 2) emit('thud', { x: y.x, z: y.z, soft: true });
-          const busy = ['pounce', 'bat', 'face', 'eat'].includes(b.mode) || b.goal === 'yarn' || b.bowl;
+          const busy = ['pounce', 'bat', 'face'].includes(b.mode) || b.goal === 'yarn';
           if (!busy) { emit('chirp'); chaseYarn(); }
         }
       }
@@ -350,7 +378,7 @@ export function createBrain(o = {}) {
       if (y.flying === 0) {
         y.y = YARN.radius;
         emit('thud', { x: y.x, z: y.z });
-        if (b.mode !== 'eat' && !b.bowl) { emit('chirp'); chaseYarn(); }
+        if (y.rounds < 3) { emit('chirp'); chaseYarn(); }           // a toss at dinner: the food can wait
       }
       return;
     }
@@ -461,17 +489,20 @@ export function createBrain(o = {}) {
         if (f.then === 'pounce' && b.yarn) { f.x = b.yarn.x; f.z = b.yarn.z; }
         if (turnTo(f.x, f.z, dt) < 0.1) {
           b.face = null;
-          if (f.then === 'eat' && b.bowl) { enter('eat', EAT.seconds); b.bowl.bites = 0; emit('eat'); }
+          if (f.then === 'eat' && b.bowl) {
+            enter('eat', EAT.seconds * Math.max(1, b.bowl.left) / 3);   // as long as the food left lasts
+            b.eatStart = b.t; b.bowl.bites = 0; emit('eat');
+          }
           else if (f.then === 'pounce') { enter('pounce', KITTY.clips.Pounce); emit('wiggle'); }
           else enter('sitdown', KITTY.clips.Sit);
         }
         break;
       }
       case 'eat': {
-        const e = EAT.seconds - b.timer;                  // seconds eating
+        const e = b.t - b.eatStart;                       // seconds eating
         const bites = Math.floor((e - 0.15) / EAT.bite) + 1;
         if (e > 0.15 && bites > b.bowl.bites) { b.bowl.bites = bites; emit('bite'); }
-        const left = 3 - Math.min(3, Math.floor(e / (EAT.seconds / 3)));
+        const left = Math.max(0, Math.min(3, Math.ceil(b.timer / (EAT.seconds / 3) - 1e-6)));
         if (left < b.bowl.left) { b.bowl.left = left; emit('kibble', { left }); }
         if (b.timer <= 0) {
           b.bowl.left = 0; b.bowl.eatenAt = b.t;
@@ -498,7 +529,7 @@ export function createBrain(o = {}) {
           if (y?.held) enter('idle', 30);                  // you picked it up mid-leap: she waits for the throw
           else if (near) { enter('bat', KITTY.clips.Bat); b.batted = false; }
           else if (y && y.rounds < 3) chaseYarn();
-          else { b.after = b.after || 'groom'; enter('sitdown', KITTY.clips.Sit); }
+          else playOver();
         }
         break;
       }
@@ -522,7 +553,7 @@ export function createBrain(o = {}) {
         if (b.timer <= 0) {
           if (y?.held) enter('idle', 30);
           else if (y && y.rounds < 3) chaseYarn();
-          else { b.after = b.after || 'groom'; enter('sitdown', KITTY.clips.Sit); }
+          else playOver();
         }
         break;
       }

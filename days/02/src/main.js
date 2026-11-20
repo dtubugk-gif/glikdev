@@ -542,10 +542,6 @@ async function start() {
       hungryBadge.hidden = !hungry;
       tagSr.textContent = `, happiness ${hearts} of 5${hungry ? ', hungry' : ''}. Rename`;
     }
-    if (!careEl.hidden) {
-      $('care-feed').disabled = !!b.bowl;
-      $('care-play').disabled = !!b.bowl;
-    }
   }
 
   // hint, until the first tap that does something
