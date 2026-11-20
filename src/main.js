@@ -229,6 +229,7 @@ async function start() {
     const ground = Math.sin(home.pol) * home.dist;
     kitty = await createKitty({
       scene: world.scene, renderer, url: stamped('models/kitty.glb'), toysUrl: stamped('models/toys.glb'),
+      furUrl: stamped('models/kitty_fur.png'), furLayers: coarse ? 6 : 10,
       start: kd ? kd.start(home) : { x: 0, z: 0, heading: home.az, mode: 'sit' },
       script: kd ? kd.script : null,
       viewer: kd ? kd.viewer(home) : [Math.sin(home.az) * ground, Math.cos(home.az) * ground],
