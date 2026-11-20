@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="build" content="6ad44a19557c">
+  <meta name="build" content="9b83cc16e32f">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Glikdev – Day 2: a kitty</title>
   <meta name="description" content="A game built one YouTube comment at a time. Day 2: a kitty you can name, pet, feed and play with. Comment what Day 3 should add.">
@@ -17,38 +17,38 @@
   <meta property="og:image:height" content="900">
   <meta property="og:image:alt" content="A big ginger tabby kitty with a red collar sits on a grey baseplate under a daylight sky">
   <meta name="twitter:card" content="summary_large_image">
-  <link rel="icon" href="logo.svg?v=6ad44a19557c" type="image/svg+xml">
+  <link rel="icon" href="logo.svg?v=9b83cc16e32f" type="image/svg+xml">
   <link rel="preload" href="fonts/fredoka-700.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/rubik-latin.woff2" as="font" type="font/woff2" crossorigin>
   <!-- Cache safety: every module is loaded with the same ?v= build stamp (tools/deploy.mjs rewrites
-       "?v=6ad44a19557c" everywhere in this file). New modules must be added to this import map. -->
+       "?v=9b83cc16e32f" everywhere in this file). New modules must be added to this import map. -->
   <script type="importmap">
   {
     "imports": {
-      "./src/main.js": "./src/main.js?v=6ad44a19557c",
-      "./src/daylog.js": "./src/daylog.js?v=6ad44a19557c",
-      "./src/demo.js": "./src/demo.js?v=6ad44a19557c",
-      "./src/world.js": "./src/world.js?v=6ad44a19557c",
-      "./src/controls.js": "./src/controls.js?v=6ad44a19557c",
-      "./src/kitty.js": "./src/kitty.js?v=6ad44a19557c",
-      "./src/kittybrain.js": "./src/kittybrain.js?v=6ad44a19557c",
-      "./src/kittysound.js": "./src/kittysound.js?v=6ad44a19557c",
-      "./src/kittyaudio.js": "./src/kittyaudio.js?v=6ad44a19557c",
-      "./vendor/three/three.module.js": "./vendor/three/three.module.js?v=6ad44a19557c",
-      "./vendor/three/addons/loaders/GLTFLoader.js": "./vendor/three/addons/loaders/GLTFLoader.js?v=6ad44a19557c",
-      "./vendor/three/addons/utils/BufferGeometryUtils.js": "./vendor/three/addons/utils/BufferGeometryUtils.js?v=6ad44a19557c"
+      "./src/main.js": "./src/main.js?v=9b83cc16e32f",
+      "./src/daylog.js": "./src/daylog.js?v=9b83cc16e32f",
+      "./src/demo.js": "./src/demo.js?v=9b83cc16e32f",
+      "./src/world.js": "./src/world.js?v=9b83cc16e32f",
+      "./src/controls.js": "./src/controls.js?v=9b83cc16e32f",
+      "./src/kitty.js": "./src/kitty.js?v=9b83cc16e32f",
+      "./src/kittybrain.js": "./src/kittybrain.js?v=9b83cc16e32f",
+      "./src/kittysound.js": "./src/kittysound.js?v=9b83cc16e32f",
+      "./src/kittyaudio.js": "./src/kittyaudio.js?v=9b83cc16e32f",
+      "./vendor/three/three.module.js": "./vendor/three/three.module.js?v=9b83cc16e32f",
+      "./vendor/three/addons/loaders/GLTFLoader.js": "./vendor/three/addons/loaders/GLTFLoader.js?v=9b83cc16e32f",
+      "./vendor/three/addons/utils/BufferGeometryUtils.js": "./vendor/three/addons/utils/BufferGeometryUtils.js?v=9b83cc16e32f"
     }
   }
   </script>
-  <link rel="modulepreload" href="vendor/three/three.module.js?v=6ad44a19557c">
-  <link rel="stylesheet" href="style.css?v=6ad44a19557c">
-  <script type="module" src="src/main.js?v=6ad44a19557c"></script>
+  <link rel="modulepreload" href="vendor/three/three.module.js?v=9b83cc16e32f">
+  <link rel="stylesheet" href="style.css?v=9b83cc16e32f">
+  <script type="module" src="src/main.js?v=9b83cc16e32f"></script>
 </head>
 <body>
   <!-- shown while the world loads (and as the backdrop when 3D is not available) -->
   <picture class="poster" id="poster">
-    <source media="(orientation: portrait)" srcset="poster-portrait.jpg?v=6ad44a19557c" width="780" height="1688">
-    <img src="poster.jpg?v=6ad44a19557c" alt="" width="1440" height="900" fetchpriority="high" decoding="async">
+    <source media="(orientation: portrait)" srcset="poster-portrait.jpg?v=9b83cc16e32f" width="780" height="1688">
+    <img src="poster.jpg?v=9b83cc16e32f" alt="" width="1440" height="900" fetchpriority="high" decoding="async">
   </picture>
 
   <canvas id="world" role="img" aria-label="A big ginger tabby kitty with a red collar and a gold bell sits on the grey baseplate under a daylight sky"></canvas>
@@ -56,7 +56,7 @@
   <div class="ui" id="ui">
     <header class="title">
       <p class="eyebrow">
-        <img class="logo" src="logo.svg?v=6ad44a19557c" alt="Glikdev" width="36" height="36">
+        <img class="logo" src="logo.svg?v=9b83cc16e32f" alt="Glikdev" width="36" height="36">
         <span>A game built by YouTube comments</span>
       </p>
       <h1><span class="title-day">Day 2.</span> <span class="title-line">Now there's a kitty.</span></h1>

@@ -30,6 +30,24 @@ const hintEl = $('hint');
 
 const BUILD = new URL(import.meta.url).searchParams.get('v') || '';
 const stamped = (url) => (BUILD ? `${url}${url.includes('?') ? '&' : '?'}v=${encodeURIComponent(BUILD)}` : url);
+// Each day's update must show up at once. GitHub Pages lets a browser keep the page (and so the old
+// build's models) for 10 minutes; so at start the page is fetched again, past the cache, and if the build
+// online is newer, it is loaded instead. Recordings and demos never do this; once per build at most.
+(async () => {
+  if (!BUILD || params.has('demo') || params.get('capture')) return;
+  try {
+    const r = await fetch(`${location.pathname}?fresh=${Date.now()}`, { cache: 'no-store' });
+    if (!r.ok) return;
+    const live = /src="src\/main\.js\?v=([A-Za-z0-9._-]+)"/.exec(await r.text())?.[1];
+    if (!live || live === BUILD) return;
+    let tried = null;
+    try { tried = sessionStorage.getItem('glikdev.fresh'); sessionStorage.setItem('glikdev.fresh', live); } catch { /* no storage: still fine */ }
+    if (tried === live) return;                          // already tried this one: never loop
+    const next = new URL(location.href);
+    next.searchParams.set('v', live);                    // a new address the browser has not kept
+    location.replace(next.href);
+  } catch { /* offline: carry on with what we have */ }
+})();
 // a snapshot lives at days/NN/: its links to other days go back to the site root first
 const SITE_ROOT = /\/days\/\d+\/(?:index\.html)?$/.test(location.pathname) ? '../../' : '';
 
