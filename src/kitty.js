@@ -366,6 +366,7 @@ export async function createKitty(o) {
     if (e.type === 'arrive' && callLog && callLog.end === Infinity) callLog.end = e.t + 0.6;
     if (e.type === 'bowl') bowlLog = { t: e.t, x: e.x, z: e.z, gone: Infinity };
     if (e.type === 'bowl-gone' && bowlLog) bowlLog.gone = e.t;
+    if (e.type === 'refill' && bowlLog) bowlLog.refill = e.t;
     emitOut(e);
   }
 
@@ -528,7 +529,9 @@ export async function createKitty(o) {
       const a = now - bowlLog.t, out = now - bowlLog.gone;
       bowl.visible = out < 0.45;
       bowl.position.set(bowlLog.x, 0, bowlLog.z);
-      const s = out > 0 ? 1 - out / 0.45 : easeOutBack(a / 0.35);
+      const r = bowlLog.refill != null ? now - bowlLog.refill : 9;   // topped up: a happy little bounce
+      const bounce = r < 0.4 ? 1 + 0.2 * Math.sin((r / 0.4) * Math.PI) : 1;
+      const s = (out > 0 ? 1 - out / 0.45 : easeOutBack(a / 0.35)) * bounce;
       bowl.scale.setScalar(S * Math.max(0.001, s));
       bowl.rotation.y = Math.atan2(bowlLog.x, bowlLog.z) * 0.5;
       const left = brain.bowl ? brain.bowl.left : 0;

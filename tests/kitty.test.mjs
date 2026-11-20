@@ -278,6 +278,89 @@ test('the run clip shows while running', () => {
   assert.ok(Math.abs(b.anim().rate - 1) < 1e-9);
 });
 
+// a kitty at her bowl, eating
+function eating(seed = 3) {
+  const b = createBrain({ seed, mode: 'sit', timer: 99, viewer: [0, 40] });
+  b.feed();
+  for (let i = 0; i < 1200 && b.mode !== 'eat'; i++) b.step(STEP);
+  assert.equal(b.mode, 'eat');
+  return b;
+}
+
+test('Feed while she is eating tops the same bowl up, and she eats on', () => {
+  const b = eating();
+  run(b, 2);
+  const bowl = { x: b.bowl.x, z: b.bowl.z };
+  assert.ok(b.bowl.left < 3, 'she has eaten some');
+  b.drain();
+  b.feed();
+  const ev = b.drain().map((e) => e.type);
+  assert.ok(ev.includes('refill') && !ev.includes('bowl'), `the same bowl, topped up (${ev.join(',')})`);
+  assert.equal(b.bowl.left, 3);
+  assert.deepEqual({ x: b.bowl.x, z: b.bowl.z }, bowl, 'it did not move');
+  assert.equal(b.mode, 'eat', 'she eats on');
+  let eaten = null;
+  run(b, 12, (k) => { for (const e of k.drain()) if (e.type === 'eaten') eaten = e.t; });
+  assert.ok(eaten != null && eaten > 5, 'she finished the top-up too');
+});
+
+test('Feed just after she finished: the bowl fills again and she comes back to it', () => {
+  const b = eating();
+  run(b, 6);
+  assert.notEqual(b.mode, 'eat');
+  assert.ok(b.bowl && b.bowl.eatenAt != null, 'empty bowl still out');
+  b.drain();
+  b.feed();
+  const modes = new Set();
+  let eaten = 0;
+  run(b, 15, (k) => { modes.add(k.mode); for (const e of k.drain()) if (e.type === 'eaten') eaten++; });
+  assert.ok(modes.has('eat') && eaten === 1, [...modes].join(','));
+});
+
+test('Play at dinner: she leaves the bowl to play, then goes back and finishes it', () => {
+  const b = eating();
+  run(b, 1.5);
+  const leftBefore = b.bowl.left;
+  b.drain();
+  b.play();
+  const order = [];
+  run(b, 40, (k) => { for (const e of k.drain()) if (['swat', 'eat', 'eaten'].includes(e.type)) order.push(e.type); });
+  assert.ok(leftBefore > 0);
+  const firstSwat = order.indexOf('swat'), eaten = order.indexOf('eaten');
+  assert.ok(firstSwat >= 0, `she played (${order.join(',')})`);
+  assert.ok(eaten > firstSwat, 'and finished her dinner after the game');
+  assert.equal(order.filter((t) => t === 'eaten').length, 1);
+});
+
+test('a ball thrown at dinner: she goes after it', () => {
+  const b = eating(5);
+  b.play();                                              // the yarn arrives...
+  run(b, 1.2);
+  if (!b.yarn.held) b.grabYarn();                        // ...and you pick it up and throw it
+  b.holdYarn(b.yarn.x, b.yarn.z);
+  run(b, 0.5);
+  b.throwYarn(10, -20, 9);
+  const modes = new Set();
+  run(b, 5, (k) => modes.add(k.mode));
+  assert.ok(modes.has('trot') || modes.has('run'), [...modes].join(','));
+});
+
+test('Feed and Play always do something, whatever she is doing', () => {
+  for (const mode of ['sit', 'idle', 'sleep', 'groom', 'purr', 'walk', 'stretch']) {
+    for (const what of ['feed', 'play']) {
+      const b = createBrain({ seed: 9, mode: mode === 'walk' || mode === 'stretch' ? 'idle' : mode, timer: 99, viewer: [0, 40] });
+      if (mode === 'walk') b.walkTo(20, 0);
+      run(b, 0.3);
+      b.drain();
+      b[what]();
+      const ev = [];
+      run(b, 20, (k) => ev.push(...k.drain().map((e) => e.type)));
+      if (what === 'feed') assert.ok(ev.includes('eaten'), `${mode}: fed -> she ate (${[...new Set(ev)].join(',')})`);
+      else assert.ok(ev.includes('swat'), `${mode}: play -> she played (${[...new Set(ev)].join(',')})`);
+    }
+  }
+});
+
 test('hungry: every so often she asks for food with a little mew', () => {
   const b = createBrain({ seed: 2, mode: 'sit', timer: 999, hunger: 0.95 });
   const mews = [];
