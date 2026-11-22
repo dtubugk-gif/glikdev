@@ -1,8 +1,9 @@
 // The game's sounds in the browser. Nothing plays until the player has tapped once (browsers require a
 // gesture).
-//   - The kitty's own voice (meows, trills, chirps, mews, purring, a yawn, a sleepy sigh) and her collar bell are
-//     synthesised by kittysound.js.
-//   - Everything else is a real recording (sounds/*.mp3, cut from the Sonniss GDC bundle by
+//   - Her voice is real cats: three meows cut from a recording the owner supplied (also used, shortened or
+//     pitched, for her hello, her chirp at a toy, her hungry mew and her yawn) and a public-domain purr.
+//     Only her sleepy sigh and her collar bell are still synthesised by kittysound.js.
+//   - Everything else is a real recording too (sounds/*.mp3, cut from the Sonniss GDC bundle by
 //     art/day03/sounds/build_sounds.py): the token's ting, coins and a happy sting when you buy, cloth and a pop
 //     when she puts something on, the shop opening and closing, soft pats for paws, your steps and the toy
 //     landing, a whoosh for her swats, kibble crunches, button clicks, the felt mouse's squeak, and a meadow
@@ -16,7 +17,11 @@ const FILES = {
   coin: ['sounds/coin.mp3'], coinflip: ['sounds/coinflip.mp3'], buy: ['sounds/buy.mp3'], cloth: ['sounds/cloth.mp3'],
   pop: ['sounds/pop.mp3'], click: ['sounds/click.mp3'], shopOpen: ['sounds/shopopen.mp3'], shopClose: ['sounds/shopclose.mp3'],
   nope: ['sounds/nope.mp3'], pat: ['sounds/pat1.mp3', 'sounds/pat2.mp3'], whoosh: ['sounds/whoosh.mp3'],
-  crunch: ['sounds/crunch1.mp3', 'sounds/crunch2.mp3'], squeak: ['sounds/squeak.mp3'], meadow: ['sounds/meadow.mp3'],
+  crunch: ['sounds/crunch1.mp3', 'sounds/crunch2.mp3'], squeak: ['sounds/squeak.mp3'],
+  // her voice: real cats (the owner's meow recording; a public-domain purr from Wikimedia Commons)
+  meow: ['sounds/meow1.mp3', 'sounds/meow2.mp3', 'sounds/meow3.mp3'], trill: ['sounds/trill.mp3'], chirp: ['sounds/chirp.mp3'],
+  purr: ['sounds/purr.mp3'],
+  meadow: ['sounds/meadow.mp3'],
 };
 
 /** @param {{url?:(path:string)=>string}} [o]  url: adds the build stamp to a file path */
@@ -134,7 +139,7 @@ export function createKittyAudio(o = {}) {
   function startPurr(v, pan) {
     stopPurr(0.2);
     purring = play('purr', 0.001, { pan });
-    purring.g.gain.linearRampToValueAtTime(1.0 * v, ctx.currentTime + 0.25);   // a purr swells in, it does not switch on
+    purring.g.gain.linearRampToValueAtTime((rec.purr ? 0.9 : 1.0) * v, ctx.currentTime + 0.25);   // a purr swells in, it does not switch on
     purring.src.onended = () => { purring = null; };
   }
 
@@ -160,11 +165,12 @@ export function createKittyAudio(o = {}) {
       const v = 0.35 + 0.65 * near;
       const at = (extra) => ({ pan, ...extra });
       switch (e.type) {
-        case 'meow': play('meow', 0.9 * v, at({ rate: vary() })); break;
-        case 'trill': play('trill', 0.72 * v, at({ rate: vary() })); break;
-        case 'chirp': play('chirp', 0.62 * v, at({ rate: vary() })); break;
-        case 'mew': play('mew', 0.7 * v, at({ rate: vary() })); break;
-        case 'yawn': play('yawn', 0.7 * v, at({ delay: e.delay || 0 })); break;
+        case 'meow': play('meow', 0.8 * v, at({ rate: vary() })); break;
+        case 'trill': play('trill', 0.55 * v, at({ rate: (rec.trill ? 1.08 : 1) * vary() })); break;
+        case 'chirp': play('chirp', 0.5 * v, at({ rate: (rec.chirp ? 1.25 : 1) * vary() })); break;
+        // a hungry mew is a meow, smaller and higher; a yawn is one stretched long and low
+        case 'mew': if (rec.meow) play('meow', 0.6 * v, at({ rate: 1.2 * vary() })); else play('mew', 0.7 * v, at({ rate: vary() })); break;
+        case 'yawn': if (rec.meow) play('meow', 0.45 * v, at({ which: 2, rate: 0.72, delay: e.delay || 0 })); else play('yawn', 0.7 * v, at({ delay: e.delay || 0 })); break;
         case 'sigh': play('sigh', 0.6 * v, at()); break;
         case 'bite': play('crunch', 0.75 * v, at({ rate: 0.9 + 0.25 * ((n * 0.37) % 1) })); break;
         case 'step': play('pat', (e.strong ? 0.42 : 0.28) * v, at({ rate: 1.05 * vary() })); break;

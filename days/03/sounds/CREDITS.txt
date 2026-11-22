@@ -17,3 +17,7 @@ crunch1.mp3  -  kibble  -  "Cracker" (InMotionAudio, Christmas Cracker)
 crunch2.mp3  -  kibble, a second take  -  "Cracker" (InMotionAudio, Christmas Cracker)
 squeak.mp3  -  the felt mouse  -  "Dry Ice Squeak Metal Animal Mouse Imitation Short 07" (Epic Stock Media, HD Game Materials)
 meadow.mp3  -  the air outside: birds, insects, wind in the grass (looped in the game)  -  "Meadow Pipits calling many Insects humming Wind blowing through Grass" (Just Sound Effects, Highlands of Norway)
+
+Her voice:
+meow1-3.mp3, trill.mp3, chirp.mp3  -  cut from a recording the owner supplied ("Kitty meowing to attract cats")
+purr.mp3  -  "Purring cat bertie.ogg" by jim_mowatt, public domain, via Wikimedia Commons (its mid tones lifted for small speakers)
