@@ -244,7 +244,9 @@ html.has-care .hint { bottom: calc(var(--gutter) + var(--safe-b) + 66px); }
   22%, 88% { transform: scale(1) rotate(0); opacity: 1; }
   100% { transform: scale(0.5); opacity: 0; }
 }
-html.no-ui .emote, html.capture-short .emote { display: none !important; }
+html.no-ui .emote:not(.is-filmed), html.capture-short .emote:not(.is-filmed) { display: none !important; }
+.emote.is-filmed { width: 88px; height: 88px; transform-origin: 50% 100%; }
+.emote.is-filmed svg { animation: none; }
 .mind-face { display: inline-block; width: 20px; height: 20px; vertical-align: -4px; margin-right: 6px; }
 /* what is on her mind: a small thought bubble over her name tag (Day 3: she has a mind of her own) */
 .thought {
@@ -269,7 +271,8 @@ html.no-ui .emote, html.capture-short .emote { display: none !important; }
 .thought.is-no::before, .thought.is-no::after { background: var(--ink); }
 .thought.is-want { color: var(--accent); }
 .thought-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-html.no-ui .thought, html.capture-short .thought { display: none !important; }
+html.no-ui .thought:not(.is-filmed), html.capture-short .thought:not(.is-filmed) { display: none !important; }
+.thought.is-filmed { font-size: 19px; min-height: 36px; padding: 0 14px; transition: none; }
 /* she is asking for this: the button that answers her beckons */
 .care-btn.is-wanted { border-color: var(--accent); animation: wanted 900ms ease-in-out infinite; }
 @keyframes wanted { 50% { transform: translateY(-3px); box-shadow: 0 6px 0 rgba(47, 38, 32, 0.22); } }

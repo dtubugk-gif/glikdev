@@ -280,9 +280,15 @@ async function start() {
   // her mind (Day 3): who she is and what she has learned are hers for good, kept with the rest on this device.
   // ?mind=0 switches it off (she does as she is told, as on Day 2); ?mind=<number> gives one particular cat.
   const mindParam = params.get('mind');
+  // A recording whose demo has a mind (demo.js `mind`) gets the same fresh cat every time it starts over.
+  const filmMind = kd?.mind ? () => { const m = createMind({ seed: kd.mind.seed }); if (kd.mind.sleepy != null) m.sleepy = kd.mind.sleepy; return m; } : null;
   const mind = live && mindParam !== '0'
     ? createMind(mindParam ? { seed: Number(mindParam) >>> 0 } : { seed: (Math.random() * 2 ** 32) >>> 0, saved: saved?.mind })
-    : null;
+    : filmMind;
+  const herMind = () => kitty?.brain.mind || null;        // the mind she has right now
+  const filmFeel = params.get('feel') === '1' && !!filmMind;   // filming: show her emoji and her thought
+  let clockMs = 0;                                        // recordings: the film's own clock
+  const nowMs = () => (demo ? clockMs : performance.now());
   try {
     const [{ createKitty }, { createKittyAudio }] = await kittyMods;
     const ground = Math.sin(home.pol) * home.dist;
@@ -809,7 +815,7 @@ async function start() {
   }
   function flashThought(text, kind, seconds = 2.6) {
     if (!text || !mind) return;
-    flash = { text, kind, until: performance.now() + seconds * 1000 };
+    flash = { text, kind, until: nowMs() + seconds * 1000 };
     setThought(text, kind);
   }
   /** her standing thought, a few times a second (a flash sits on top of it until it runs out) */
@@ -819,14 +825,16 @@ async function start() {
     flash = null;
     if (now - thoughtAt < 250 && thoughtNow) return;
     thoughtAt = now;
-    const th = mind.thought(kitty.brain.sense());
+    const th = herMind()?.thought(kitty.brain.sense());
     setThought(th ? th.text : '', th ? th.kind || 'want' : '');
   }
   if (mind && kitty) {
     $('thought-who').textContent = `${care.name}: `;
     thoughtEl.classList.add('is-out');
-    thoughtEl.hidden = !(showUI && !demo && !short);
+    thoughtEl.hidden = !((showUI && !demo && !short) || filmFeel);
+    if (filmFeel) thoughtEl.classList.add('is-filmed');
     kitty.on((e) => {
+      if (e.type === 'reset') { flash = null; thoughtAt = 0; emoteUntil = 0; setThought('', ''); return; }   // a recording starting over
       if (e.type === 'decide') {
         if (e.quiet) {                                      // she was only expected to tag along
           if (!e.yes && e.why === 'mood' && e.t - stayedAt > 20) { stayedAt = e.t; flashThought('Staying here', 'no', 2.2); }
@@ -864,10 +872,11 @@ async function start() {
     emoteEl.classList.remove('is-pop');
     void emoteEl.offsetWidth;                               // start the pop again from the top
     emoteEl.classList.add('is-pop');
-    emoteUntil = performance.now() + 2800;
+    emoteUntil = nowMs() + 2800;
   }
   if (mind && kitty) {
-    emoteEl.hidden = !(showUI && !demo && !short);
+    emoteEl.hidden = !((showUI && !demo && !short) || filmFeel);
+    if (filmFeel) emoteEl.classList.add('is-filmed');
     showFeeling('content', 'Content');
     kitty.on((e) => {
       if (e.type === 'feel') showFeeling(e.id, e.word);
@@ -878,8 +887,8 @@ async function start() {
   /** the "her mind" card under her name: who she is, how she feels, what she has learned */
   function showMind() {
     const card = $('mind');
-    if (!mind || !kitty) { card.hidden = true; return; }
-    const d = describeMind(mind, kitty.brain.sense());
+    if (!herMind()) { card.hidden = true; return; }
+    const d = describeMind(herMind(), kitty.brain.sense());
     $('mind-title').textContent = `${care.name}'s mind`;
     $('mind-temper').textContent = d.temper.join(' · ');
     const face = document.createElement('span');
@@ -907,17 +916,23 @@ async function start() {
     const room = thoughtNow && !thoughtEl.hidden ? 44 : 0;                                        // her thought sits on top of the tag
     const edge = Math.min(84, innerWidth / 2);                                                    // the tag stays whole when she is at the side of the picture
     const rawX = (tagPos.x + 1) / 2 * innerWidth;
-    const x = mind ? Math.max(edge, Math.min(innerWidth - edge, rawX)) : rawX;                    // (recordings keep the tag exactly where it was)
+    const x = live && mind ? Math.max(edge, Math.min(innerWidth - edge, rawX)) : rawX;                    // (recordings keep the tag exactly where it was)
     const y = Math.max(tagMinY + room, (1 - tagPos.y) / 2 * innerHeight);                         // never up over the title card
     tag.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -100%) scale(${s.toFixed(3)})`;
     if (!emoteEl.hidden) {                                  // the big face: over the bubble, or over the tag
-      const on = vis && performance.now() < emoteUntil;
+      const on = vis && nowMs() < emoteUntil;
       emoteEl.classList.toggle('is-on', on);
-      if (on) emoteEl.style.transform = `translate(${x.toFixed(1)}px, ${(y - (room ? 92 : 48)).toFixed(1)}px) translate(-50%, -100%)`;
+      let pop = '';                                         // filming: the pop is worked out from the film's clock, frame by frame
+      if (on && filmFeel) {
+        const age = (nowMs() - (emoteUntil - 2800)) / 1000, k = Math.min(1, age / 0.32);
+        const sc = age < 0.32 ? 1 + 2.7 * (k - 1) ** 3 + 1.7 * (k - 1) ** 2 : age > 2.5 ? Math.max(0, 1 - (age - 2.5) / 0.3) : 1;
+        pop = ` scale(${Math.max(0, sc).toFixed(3)})`;
+      }
+      if (on) emoteEl.style.transform = `translate(${x.toFixed(1)}px, ${(y - (room ? (filmFeel ? 112 : 92) : (filmFeel ? 60 : 48))).toFixed(1)}px) translate(-50%, -100%)${pop}`;
     }
     if (!thoughtEl.hidden) {
       thoughtEl.style.visibility = vis ? 'visible' : 'hidden';
-      thoughtEl.style.transform = `translate(${x.toFixed(1)}px, ${(y - 52).toFixed(1)}px) translate(-50%, -100%)`;
+      thoughtEl.style.transform = `translate(${x.toFixed(1)}px, ${(y - (filmFeel ? 64 : 52)).toFixed(1)}px) translate(-50%, -100%)`;
     }
     const b = kitty.brain;
     const hearts = Math.max(1, Math.round(b.happy * 5));
@@ -959,7 +974,7 @@ async function start() {
   if (kitty && showUI && !demo && !short) {
     kitty.on((e) => {
       if (e.type !== 'yarn' || yarnHinted || thrownOnce) return;
-      if (mind?.lastDecision?.verb === 'play' && !mind.lastDecision.yes) return;   // she turned the game down: not the moment for this tip
+      if (herMind()?.lastDecision?.verb === 'play' && !herMind().lastDecision.yes) return;   // she turned the game down: not the moment for this tip
       yarnHinted = true;
       setTimeout(() => {
         if (thrownOnce) return;
@@ -979,7 +994,8 @@ async function start() {
     let ks = 0;
     if (kitty && mind && player) kitty.setFriend(player.x, player.z);      // so she can come over to you
     if (kitty) ks = demo ? kitty.simulateTo(t) : kitty.advance(dt, camera.position);
-    if (mind) think(performance.now());
+    clockMs = t * 1000;
+    if (mind) think(nowMs());
     if (player) {
       if (demo) player.simulateTo(t);
       else {

@@ -4,7 +4,7 @@
 // requestAnimationFrame / performance.now gets identical frames on every run.
 
 export const DEMOS = ['orbit', 'reveal', 'kitty', 'kittycall', 'kittypet', 'kittywalk', 'kittyname', 'kittyfeed', 'kittyplay', 'kittynap',
-  'kittytoken', 'kittydress', 'shopwalk', 'kittytoy'];
+  'kittytoken', 'kittydress', 'shopwalk', 'kittytoy', 'kittywake'];
 
 // Day 3: where the shop's doormat is, and where the kitty waits beside it (town.js works these out from SHOP)
 const SHOP_DOOR = [19.97, -21.57], SHOP_WAIT = [12.84, -23.42];
@@ -72,6 +72,15 @@ export const KITTY_DEMOS = {
     script: [{ t: 0.7, type: 'pet' }],
     viewer: () => [Math.sin(0.2) * 20, Math.cos(0.2) * 20],
     player: { ...BESIDE, script: [{ t: 1.6, type: 'wave' }] },
+  },
+  // Day 3: she is fast asleep; you pet her awake; she is furious about it (her mind is on in this shot, the same
+  // cat every time; ?feel=1 shows her emoji and her thought)
+  kittywake: {
+    start: () => ({ x: 0, z: 0, heading: 0.2, mode: 'sleep', timer: 60, energy: 0.3 }),
+    script: [{ t: 1.7, type: 'pet' }],
+    viewer: () => [Math.sin(0.2) * 20, Math.cos(0.2) * 20],
+    mind: { seed: 6, sleepy: 0.9 },
+    player: { ...BESIDE, script: [{ t: 1.25, type: 'wave' }] },
   },
   // Day 3: you run to the shop, and she trots along and waits by the door
   shopwalk: {
@@ -174,6 +183,13 @@ export function demoPose(name, t, home, kitty = null) {
     const back = lerp(15, 12.5, easeInOut(t / 5)), sidew = lerp(4.5, 2.5, easeInOut(t / 5));
     const pos = [p.x - ux * back - uz * sidew, lerp(6.4, 5.4, easeInOut(t / 5)), p.z - uz * back + ux * sidew];
     return { position: pos, look: [p.x + ux * 7, 4.6, p.z + uz * 7], shift: 0 };
+  }
+  if (name === 'kittywake') {
+    // like the token shot but looking well above her: she sits low in the frame, with room over her head for
+    // her name, her thought and the big emoji, all under the caption
+    const a = 0.2 + 0.4 - 0.04 * easeInOut(t / 5), d = lerp(20, 19.2, easeInOut(t / 5));
+    const pos = [kx + Math.sin(a) * d, 4.4, kz + Math.cos(a) * d];
+    return { position: pos, look: [kx, 11.3, kz], shift: 0 };
   }
   if (name === 'kittytoken') {
     // like the pet shot, a little wider and looking higher: room for the token to rise and fly off

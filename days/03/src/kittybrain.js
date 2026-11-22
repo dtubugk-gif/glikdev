@@ -96,7 +96,7 @@ export function createBrain(o = {}) {
     viewer: o.viewer ? o.viewer.slice() : [0, 30],
     hunger: o.hunger ?? 0.2,          // 0 full .. 1 starving
     happy: o.happy ?? 0.6,            // 0 .. 1
-    energy: 1,                        // play tires her out; a nap fills it back up
+    energy: o.energy ?? 1,            // play tires her out; a nap fills it back up
     bowl: null,                       // {x, z, t, left, bites, eatenAt}
     eatStart: 0,                      // when she started on the bowl (bites are counted from here)
     yarn: null,                       // {x, y, z, vx, vz, spin, ax, az, rounds, flying}
