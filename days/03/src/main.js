@@ -4,6 +4,7 @@
 //                                scripted camera (and kitty), driven only by frame time (for filming)
 //   ?tokens=1                    (filming) show the friendship token counter even with ?ui=0
 //   ?wear=crown,bowtie,wings     (filming, posters) she starts with these on
+//   ?have=6                      (filming) the token counter starts at 6
 //   ?ui=0                        hide every piece of UI
 //   ?tag=Mochi&tagAt=1.5         (filming) show the kitty's name tag, popping in at tagAt seconds
 //   ?capture=short               Shorts layout: record at 360x640 CSS with deviceScaleFactor 3
@@ -294,7 +295,9 @@ async function start() {
     }
   } catch (err) { console.warn('Glikdev: the kitty did not load', err); kitty = null; }
   // ------------------------------------------------------------ friendship tokens and her wardrobe (Day 3, idea by @Kowffe)
-  const freshWallet = () => createWallet(live ? loadWallet() : (kd?.wallet ?? null));
+  // filming: ?have=6 starts the counter at 6, so it keeps counting up from one clip of a Short to the next
+  const filmHave = Math.max(0, Math.floor(Number(params.get('have')) || 0));
+  const freshWallet = () => createWallet(live ? loadWallet() : { ...(kd?.wallet ?? {}), ...(filmHave ? { tokens: filmHave } : {}) });
   let wallet = freshWallet(), wardrobe = null, tokenFX = null, rewardState = {}, filmWear = { ...paramWear };
   let flashHint = () => {};
   const tokenHead = new THREE.Vector3();
