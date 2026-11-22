@@ -31,6 +31,7 @@
       "./src/controls.js": "./src/controls.js?v=8942e4e1daa9",
       "./src/kitty.js": "./src/kitty.js?v=8942e4e1daa9",
       "./src/kittybrain.js": "./src/kittybrain.js?v=8942e4e1daa9",
+      "./src/emotes.js": "./src/emotes.js?v=0",
       "./src/kittymind.js": "./src/kittymind.js?v=8942e4e1daa9",
       "./src/kittysound.js": "./src/kittysound.js?v=8942e4e1daa9",
       "./src/kittyaudio.js": "./src/kittyaudio.js?v=8942e4e1daa9",
@@ -121,11 +122,13 @@
 
   <!-- her name, floating over her head; tap it to rename her -->
   <button class="nametag" id="nametag" type="button" aria-haspopup="dialog" aria-controls="namer" hidden>
+    <span class="nametag-face" id="nametag-face" aria-hidden="true"></span>
     <span class="nametag-name" id="nametag-name">Kitty</span>
     <span class="nametag-hearts" id="nametag-hearts" aria-hidden="true"></span>
     <span class="nametag-sr" id="nametag-sr"></span>
   </button>
 
+  <div class="emote" id="emote" aria-hidden="true" hidden></div>
   <p class="thought" id="thought" role="status" aria-live="polite" hidden><span class="thought-sr" id="thought-who"></span><span id="thought-text"></span></p>
 
   <dialog class="namer" id="namer" aria-labelledby="namer-title">

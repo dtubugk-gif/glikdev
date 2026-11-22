@@ -17,6 +17,7 @@ import { renderDayLog, renderHeadline, latestDay } from './daylog.js';
 import { DEMOS, demoPose, KITTY_DEMOS } from './demo.js';
 import { createWallet, rewardFor, ITEMS, itemById } from './tokens.js';
 import { createMind, sayWhy, describeMind } from './kittymind.js';
+import { emoteSVG } from './emotes.js';
 
 // Set this to the channel's URL once it exists (for example 'https://www.youtube.com/@glikdev').
 const CHANNEL_URL = 'https://www.youtube.com/@glikdev';
@@ -819,7 +820,7 @@ async function start() {
     if (now - thoughtAt < 250 && thoughtNow) return;
     thoughtAt = now;
     const th = mind.thought(kitty.brain.sense());
-    setThought(th ? th.text : '', th ? 'want' : '');
+    setThought(th ? th.text : '', th ? th.kind || 'want' : '');
   }
   if (mind && kitty) {
     $('thought-who').textContent = `${care.name}: `;
@@ -849,6 +850,31 @@ async function start() {
     });
   }
 
+  // ------------------------------------------------------------ how she feels (Day 3: she has feelings)
+  // A little face in her name tag always shows it; when a feeling starts, the same face pops up big over her head.
+  const emoteEl = $('emote'), faceEl = $('nametag-face');
+  const POPS = new Set(['happy', 'loving', 'playful', 'sleepy', 'hungry', 'grumpy', 'angry', 'furious', 'sad']);
+  let emoteUntil = 0, feelWord = '';
+  function showFeeling(id, word) {
+    faceEl.innerHTML = emoteSVG(id);
+    feelWord = word;
+    shownHungry = null;                                     // the tag's spoken label is written again
+    if (!POPS.has(id) || emoteEl.hidden) return;
+    emoteEl.innerHTML = emoteSVG(id);
+    emoteEl.classList.remove('is-pop');
+    void emoteEl.offsetWidth;                               // start the pop again from the top
+    emoteEl.classList.add('is-pop');
+    emoteUntil = performance.now() + 2800;
+  }
+  if (mind && kitty) {
+    emoteEl.hidden = !(showUI && !demo && !short);
+    showFeeling('content', 'Content');
+    kitty.on((e) => {
+      if (e.type === 'feel') showFeeling(e.id, e.word);
+      else if (e.type === 'woken' && e.angry) flashThought('You woke me up!', 'no', 3.4);
+    });
+  }
+
   /** the "her mind" card under her name: who she is, how she feels, what she has learned */
   function showMind() {
     const card = $('mind');
@@ -856,7 +882,10 @@ async function start() {
     const d = describeMind(mind, kitty.brain.sense());
     $('mind-title').textContent = `${care.name}'s mind`;
     $('mind-temper').textContent = d.temper.join(' · ');
-    $('mind-feels').textContent = d.feels;
+    const face = document.createElement('span');
+    face.className = 'mind-face';
+    face.innerHTML = emoteSVG(d.feeling);
+    $('mind-feels').replaceChildren(face, d.feels);
     $('mind-trust').replaceChildren(...Array.from({ length: 5 }, (_, k) => { const i = document.createElement('i'); if (k >= d.trust) i.className = 'off'; return i; }));
     $('mind-trust-sr').textContent = `${d.trust} of 5`;
     $('mind-likes').textContent = d.likes;
@@ -876,8 +905,16 @@ async function start() {
     if (filmTag) s = t < filmTagAt ? 0 : Math.min(1, 1 + 2.7 * (Math.min(1, (t - filmTagAt) / 0.45) - 1) ** 3 + 1.7 * (Math.min(1, (t - filmTagAt) / 0.45) - 1) ** 2);
     tag.style.visibility = vis && s > 0.01 ? 'visible' : 'hidden';
     const room = thoughtNow && !thoughtEl.hidden ? 44 : 0;                                        // her thought sits on top of the tag
-    const x = (tagPos.x + 1) / 2 * innerWidth, y = Math.max(tagMinY + room, (1 - tagPos.y) / 2 * innerHeight);   // never up over the title card
+    const edge = Math.min(84, innerWidth / 2);                                                    // the tag stays whole when she is at the side of the picture
+    const rawX = (tagPos.x + 1) / 2 * innerWidth;
+    const x = mind ? Math.max(edge, Math.min(innerWidth - edge, rawX)) : rawX;                    // (recordings keep the tag exactly where it was)
+    const y = Math.max(tagMinY + room, (1 - tagPos.y) / 2 * innerHeight);                         // never up over the title card
     tag.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -100%) scale(${s.toFixed(3)})`;
+    if (!emoteEl.hidden) {                                  // the big face: over the bubble, or over the tag
+      const on = vis && performance.now() < emoteUntil;
+      emoteEl.classList.toggle('is-on', on);
+      if (on) emoteEl.style.transform = `translate(${x.toFixed(1)}px, ${(y - (room ? 92 : 48)).toFixed(1)}px) translate(-50%, -100%)`;
+    }
     if (!thoughtEl.hidden) {
       thoughtEl.style.visibility = vis ? 'visible' : 'hidden';
       thoughtEl.style.transform = `translate(${x.toFixed(1)}px, ${(y - 52).toFixed(1)}px) translate(-50%, -100%)`;
@@ -892,7 +929,7 @@ async function start() {
     if (hungry !== shownHungry) {
       shownHungry = hungry;
       hungryBadge.hidden = !hungry;
-      tagSr.textContent = `, happiness ${hearts} of 5${hungry ? ', hungry' : ''}. Rename${mind ? ', and see her mind' : ''}`;
+      tagSr.textContent = `, ${feelWord ? `feeling ${feelWord.toLowerCase()}, ` : ''}happiness ${hearts} of 5${hungry ? ', hungry' : ''}. Rename${mind ? ', and see her mind' : ''}`;
     }
   }
 
