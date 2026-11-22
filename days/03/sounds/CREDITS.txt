@@ -1,0 +1,19 @@
+Sounds in this folder are cut from the Sonniss GDC 2026 Game Audio Bundle (royalty-free, commercial use).
+The kitty's voice is synthesised in src/kittysound.js.
+
+coin.mp3  -  a friendship token  -  "Ting Coins" (Cinematic Sound Design, UI Interaction Elements)
+coinflip.mp3  -  coins dropping in when you buy  -  "Foley Coin Flip Single Fast" (Cinematic Sound Design, Hybrid Game & UI Elements)
+buy.mp3  -  bought it  -  "Game Entry Happy Short" (Cinematic Sound Design, Hybrid Game & UI Elements)
+cloth.mp3  -  putting something on  -  "Action Inventory Open Flip Cloth Canvas Bag Slide Light 02" (Epic Stock Media, Fantasy Game 2 - Sound Kit for Enchanted Realms)
+pop.mp3  -  the pop as it settles; hearts  -  "Interface Pop High Short" (Cinematic Sound Design, Interface & Infographics)
+click.mp3  -  buttons  -  "UI Button Analog Vintage Double Click Neutral Dry Press 11" (Epic Stock Media, Board Game - Sound Set Kit for Tabletop and Digital Games)
+shopopen.mp3  -  the shop opens  -  "Kalimba 3 Up" (CB_Sounddesign, Applicable Sounds - Organic UI and Building Games SFX)
+shopclose.mp3  -  the shop closes  -  "Case" (InMotionAudio, Instrument Case)
+nope.mp3  -  not enough tokens  -  "Deny Muted" (Cinematic Sound Design, UI Interaction Elements)
+pat1.mp3  -  a paw on the floor; your steps; the toy landing  -  "SinglePats04" (InMotionAudio, Foley T-Shirt)
+pat2.mp3  -  the same, a second take  -  "SinglePats04" (InMotionAudio, Foley T-Shirt)
+whoosh.mp3  -  a paw swat; a throw  -  "Woosh Sweep Slide Infographics Basic" (Cinematic Sound Design, Ultra Transitions & Impacts)
+crunch1.mp3  -  kibble  -  "Cracker" (InMotionAudio, Christmas Cracker)
+crunch2.mp3  -  kibble, a second take  -  "Cracker" (InMotionAudio, Christmas Cracker)
+squeak.mp3  -  the felt mouse  -  "Dry Ice Squeak Metal Animal Mouse Imitation Short 07" (Epic Stock Media, HD Game Materials)
+meadow.mp3  -  the air outside: birds, insects, wind in the grass (looped in the game)  -  "Meadow Pipits calling many Insects humming Wind blowing through Grass" (Just Sound Effects, Highlands of Norway)

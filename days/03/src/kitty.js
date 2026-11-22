@@ -193,7 +193,7 @@ export async function createKitty(o) {
   const root = new THREE.Group();
   root.name = 'Kitty';
   // the cat herself: the Day 2 ginger kitty, or one of the other cats (same skeleton and clips)
-  let model, clips, B;
+  let model, clips, B, headScale = 1;                     // headScale: a bigger head on the same body (kitten proportions)
   const bone = (n) => model.getObjectByName(n);
   function mount(g, fur, furLayers) {
     clips = checkCat(g, 'the cat');
@@ -229,6 +229,7 @@ export async function createKitty(o) {
     return found;
   }
   checkCat(gltf, o.url);
+  headScale = o.headScale ?? 1;
   mount(gltf, furMap, o.furLayers);
   o.scene.add(root);
 
@@ -317,18 +318,20 @@ export async function createKitty(o) {
     yq.identity();
     play(brain.anim(), true);
     mixer.update(0);
+    if (headScale !== 1) B.head.scale.setScalar(headScale);
     place();
     emitOut({ t: 0, type: 'reset' });            // a recording starting over: listeners start over too
   }
 
   /** Change cats in place: she keeps her name, needs, spot and whatever she is doing. */
-  async function setCat({ url, furUrl, furLayers, key }) {
+  async function setCat({ url, furUrl, furLayers, key, headScale: headScaleNew }) {
     const [g, fur] = await Promise.all([loader.loadAsync(url), loadFur(furUrl)]);
     checkCat(g, url);                            // a broken file leaves the current cat as she is
     const was = cur ? { name: cur.getClip().name, time: cur.time } : null;
     const old = model;
     emitOut({ t: brain.t, type: 'cat-out' });    // what she wears comes off the old skeleton first
     root.remove(old);
+    headScale = headScaleNew ?? 1;
     mount(g, fur, furLayers);
     newMixer();
     play(brain.anim(), true);
@@ -417,6 +420,7 @@ export async function createKitty(o) {
     play(brain.anim());
     const prevT = cur.time;
     mixer.update(STEP);
+    if (headScale !== 1) B.head.scale.setScalar(headScale);
     footsteps(prevT);
     place();
     // the yarn rolls: turn it by the distance it travelled, about the axis across its path
