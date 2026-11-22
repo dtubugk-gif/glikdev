@@ -310,7 +310,8 @@ export async function createKitty(o) {
   }
 
   function reset() {
-    brain = createBrain(startOpts);
+    // a recording starts her mind afresh every time it starts over (o.mind is then a function that makes one)
+    brain = createBrain({ ...startOpts, mind: typeof o.mind === 'function' ? o.mind() : o.mind || null });
     brain.toyBounce = toy.bounce;
     newMixer();
     heartLog = []; callLog = null; bowlLog = null; scriptAt = 0; lastSpin = 0;
