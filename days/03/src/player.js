@@ -10,10 +10,11 @@ import * as THREE from '../vendor/three/three.module.js';
 import { GLTFLoader } from '../vendor/three/addons/loaders/GLTFLoader.js';
 
 export const PLAYER = {
-  scale: 14,                // the same doll's-house scale as the kitty (she is 23.5 cm at cat size: 3.3 m here)
-  walk: 3.4, run: 9.0,      // m/s
-  runFrom: 7,               // a trip longer than this is run
-  radius: 1.3,
+  scale: 20,                // bigger than the kitty's x14 (the owner: "make me bigger"): 26 cm at cat size, 5.2 m here
+  eye: 4.15,                // where your eyes are (m): the first-person camera sits here
+  walk: 4.6, run: 11.0,     // m/s
+  runFrom: 8,               // a trip longer than this is run
+  radius: 1.8,
   limit: 118,               // the plate is 128 m from the middle to its edge
 };
 const STEP = 1 / 60;
@@ -100,8 +101,8 @@ export function createWalker(o = {}) {
   w.moving = () => w.speed > 0.3;
   /** which clip, and how fast it plays */
   w.anim = () => {
-    if (w.speed > PLAYER.walk * 1.35) return { name: 'Run', rate: Math.min(1.5, Math.max(0.8, w.speed / 6.6)) };
-    if (w.speed > 0.3) return { name: 'Walk', rate: Math.min(1.6, Math.max(0.6, w.speed / 2.9)) };
+    if (w.speed > PLAYER.walk * 1.35) return { name: 'Run', rate: Math.min(1.5, Math.max(0.8, w.speed / 9.4)) };
+    if (w.speed > 0.3) return { name: 'Walk', rate: Math.min(1.6, Math.max(0.6, w.speed / 4.1)) };
     if (w.t < w.waveUntil) return { name: 'Wave', rate: 1 };
     return { name: 'Idle', rate: 1 };
   };
@@ -129,7 +130,7 @@ export async function createPlayer(o) {
   const g = c.getContext('2d'), gr = g.createRadialGradient(32, 32, 2, 32, 32, 31);
   gr.addColorStop(0, 'rgba(38,32,28,0.85)'); gr.addColorStop(0.6, 'rgba(38,32,28,0.4)'); gr.addColorStop(1, 'rgba(38,32,28,0)');
   g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
-  const blob = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 2.6), new THREE.MeshBasicMaterial({
+  const blob = new THREE.Mesh(new THREE.PlaneGeometry(3.7, 3.7), new THREE.MeshBasicMaterial({
     map: new THREE.CanvasTexture(c), transparent: true, opacity: 0.5, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1 }));
   blob.rotation.x = -Math.PI / 2;
   blob.position.y = 0.04;
@@ -195,6 +196,8 @@ export async function createPlayer(o) {
       while (walker.t < t - STEP * 0.5) tick();
     },
     position(out = new THREE.Vector3()) { return out.set(walker.x, 0, walker.z); },
+    /** first person: you do not see your own body (your shadow stays) */
+    setBodyVisible(v) { model.visible = v; },
     busy() { return walker.moving() || !!walker.target || !!walker.dir || !!walker.face || walker.t < walker.waveUntil; },
   };
 }

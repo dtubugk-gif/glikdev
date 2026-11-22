@@ -183,7 +183,8 @@ async function start() {
   const target = [0, PLATE.topY, 0];
   const home = { az: 0.32, pol: 1.05, dist: 32, height: 16, target, shift: 0, shiftX: 0, fov: 60, horizon: 0.42 };
   let follow = true;                                       // the camera follows the kitty until you move it (Day 3: always you)
-  let camZoom = 1;
+  let camZoom = 1, firstPerson = false, tagMinY = 0;
+  const eye = new THREE.Vector3(), lookAtPt = new THREE.Vector3();
   let onFree = () => {};
   const rig = new OrbitRig(camera, canvas, { target, minPolar: 0.22, maxPolar: 1.52, minHeight: 1.5,
     bounds: PLATE.half - 8, onInteract: () => { looked = true; },
@@ -218,6 +219,7 @@ async function start() {
       // keep the horizon below the bubble, however long the day's headline is
       const b = document.querySelector('.bubble')?.getBoundingClientRect();
       if (b && b.height) root.style.setProperty('--hint-top', `${Math.round(b.bottom + 30)}px`);   // the hint sits just under it
+      if (b && b.height) tagMinY = Math.round(b.bottom + 100);
       if (b && b.height) spec.horizon = Math.min(short ? 0.6 : 0.45, Math.max(spec.horizon, (b.bottom + 34) / h));
     }
     camera.fov = spec.fov;
@@ -231,7 +233,7 @@ async function start() {
     home.shift = horizonAt(pitch - edgeDip(spec.height, spec.height / Math.tan(pitch), home.az), spec.fov) - spec.horizon;
     home.shiftX = 0;
     rig.setLimits(camZoom !== 1 ? 11 : 6, camZoom !== 1 ? 62 : 170);   // locked on the player: never far away
-    setShift(home.shift, 0);
+    if (firstPerson) { camera.fov = portrait ? 66 : wide ? 52 : 58; setShift(0, 0); } else setShift(home.shift, 0);
   }
   function setShift(sy, sx = 0) {
     const w = innerWidth, h = innerHeight;
@@ -300,7 +302,7 @@ async function start() {
   } catch (err) { console.warn('Glikdev: the kitty did not load', err); kitty = null; }
 
   // ------------------------------------------------------------ the shop and you (Day 3: the owner's ideas)
-  let player = null, store = null, town = null;
+  let player = null, store = null, town = null, PLAYER_EYE = 4;
   const pd = kd ? kd.player : null;                        // a recording shows the player only when its demo says so
   try { town = await import('./town.js'); } catch (err) { console.warn('Glikdev: the shop did not load', err); }
   const building = town ? town.createShop({ scene: world.scene, url: stamped('models/shop.glb'), renderer })
@@ -308,19 +310,25 @@ async function start() {
   if (!live) await building;                               // recordings: it is there from the first frame
   if (kitty && (live || pd)) {
     try {
-      const { createPlayer } = await import('./player.js');
+      const { createPlayer, PLAYER } = await import('./player.js');
+      PLAYER_EYE = PLAYER.eye;
       player = await createPlayer({ scene: world.scene, url: stamped('models/player.glb'),
-        start: pd ? pd.start : { x: 6.5, z: 5.5, heading: home.az },
+        start: pd ? pd.start : { x: 6, z: 17.5, heading: Math.atan2(-6, -17.5) },
         boxes: town ? [town.SHOP_BOX] : [],
-        circles: [() => ({ x: kitty.brain.x, z: kitty.brain.z, r: 2.4 })],
+        circles: [() => ({ x: kitty.brain.x, z: kitty.brain.z, r: 2.8 })],
         script: pd ? pd.script || [] : null });
       rig.moveKeys = false;
-      // third person: the camera is locked on you. Drag turns it round you, pinch or scroll zooms; it cannot wander off.
-      rig.canPan = false;
-      camZoom = 0.74;                                      // a little closer than the wide Day 2 view
-      rig.target[0] = player.x; rig.target[2] = player.z;
-      rig.setLimits(11, 62);
-      rig.setPose({ az: home.az, pol: home.pol, dist: home.dist * camZoom });
+      rig.canPan = false;                                  // the camera is yours: it cannot wander off
+      if (live) {
+        // first person (the owner's choice): the camera is your eyes. Drag looks around; you do not see your own body.
+        firstPerson = true;
+        player.setBodyVisible(false);
+        rig.minHeight = -1e6;                              // (no orbit to keep above the ground)
+        rig.minPolar = 0.95; rig.maxPolar = 2.0;           // look down at your feet, or up at her face and the roofs
+        const az0 = Math.atan2(player.x - kitty.brain.x, player.z - kitty.brain.z);   // facing your kitty
+        rig.setPose({ az: az0, pol: Math.PI / 2 + 0.03, dist: 30 });
+        layout();
+      }
     } catch (err) { console.warn('Glikdev: the player did not load', err); player = null; }
   }
   const kittyBusy = () => { const b = kitty.brain; return ['eat', 'pounce', 'bat'].includes(b.mode) || b.goal === 'eat' || b.goal === 'yarn' || !!b.yarn?.held; };
@@ -769,7 +777,7 @@ async function start() {
     let s = 1;
     if (filmTag) s = t < filmTagAt ? 0 : Math.min(1, 1 + 2.7 * (Math.min(1, (t - filmTagAt) / 0.45) - 1) ** 3 + 1.7 * (Math.min(1, (t - filmTagAt) / 0.45) - 1) ** 2);
     tag.style.visibility = vis && s > 0.01 ? 'visible' : 'hidden';
-    const x = (tagPos.x + 1) / 2 * innerWidth, y = (1 - tagPos.y) / 2 * innerHeight;
+    const x = (tagPos.x + 1) / 2 * innerWidth, y = Math.max(tagMinY, (1 - tagPos.y) / 2 * innerHeight);   // never up over the title card
     tag.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -100%) scale(${s.toFixed(3)})`;
     const b = kitty.brain;
     const hearts = Math.max(1, Math.round(b.happy * 5));
@@ -788,8 +796,8 @@ async function start() {
   // hint, until the first tap that does something
   if (showUI && !demo && !short) {
     hintEl.textContent = kitty && player
-      ? (coarse ? 'Tap the ground to walk there · Tap your kitty to pet her · Walk to the shop to spend tokens'
-        : 'Click the ground or use WASD to walk · Drag to look around · Click your kitty to pet her · Walk to the shop to spend tokens')
+      ? (coarse ? 'Drag to look around · Tap the ground to walk there · Tap your kitty to pet her'
+        : 'Drag to look around · Click the ground or use WASD to walk · Click your kitty to pet her')
       : kitty ? (coarse ? 'Tap the ground to call the kitty · Tap her to pet her · Two fingers to move'
         : 'Click the ground to call the kitty · Click her to pet her · Drag to look around · Right-drag or WASD to move')
       : (coarse ? 'Drag to look around · Two fingers to move and zoom' : 'Drag to look around · Right-drag or WASD to move · Scroll to zoom');
@@ -863,6 +871,21 @@ async function start() {
       }
     } else {
       rig.update(dt);
+      if (firstPerson && player) {
+        const w = player.walker;
+        // walking to a tapped spot (or turning to the shop): your eyes turn the way you go, unless you are looking around
+        if ((w.target || w.face) && rig.pointers.size === 0 && !held.size) {
+          let d = (w.heading + Math.PI) - rig.goal.az;
+          d = ((d + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+          rig.goal.az += d * (1 - Math.exp(-dt * 2.6));
+        }
+        const pitch = rig.pol - Math.PI / 2;               // up is positive
+        const bob = w.moving() ? 0.07 * Math.sin(w.t * (w.speed > 6 ? 15 : 9)) : 0;
+        eye.set(player.x, PLAYER_EYE + bob, player.z);
+        lookAtPt.set(eye.x - Math.sin(rig.az) * Math.cos(pitch), eye.y + Math.sin(pitch), eye.z - Math.cos(rig.az) * Math.cos(pitch));
+        camera.position.copy(eye);
+        camera.lookAt(lookAtPt);
+      }
     }
     if (kitty) {
       kitty.finish(camera.position, ks); placeTag(t);

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="build" content="9da4100a261e">
+  <meta name="build" content="318a629a1694">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Glikdev – Day 3: friendship tokens</title>
   <meta name="description" content="A game built one YouTube comment at a time. Day 3: earn friendship tokens with your kitty, then walk to the shop for toys and outfits. Comment what Day 4 should add.">
@@ -15,52 +15,52 @@
   <meta property="og:image" content="https://dtubugk-gif.github.io/glikdev/days/03/poster.jpg">
   <meta property="og:image:width" content="1440">
   <meta property="og:image:height" content="900">
-  <meta property="og:image:alt" content="A ginger kitty in a gold crown beside a small person in an orange hoodie, with a little wooden shop behind them">
+  <meta property="og:image:alt" content="A ginger kitty in a gold crown and a bow tie sits facing you, with a little wooden shop to the right">
   <meta name="twitter:card" content="summary_large_image">
-  <link rel="icon" href="logo.svg?v=9da4100a261e" type="image/svg+xml">
+  <link rel="icon" href="logo.svg?v=318a629a1694" type="image/svg+xml">
   <link rel="preload" href="fonts/fredoka-700.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/rubik-latin.woff2" as="font" type="font/woff2" crossorigin>
   <!-- Cache safety: every module is loaded with the same ?v= build stamp (tools/deploy.mjs rewrites
-       "?v=9da4100a261e" everywhere in this file). New modules must be added to this import map. -->
+       "?v=318a629a1694" everywhere in this file). New modules must be added to this import map. -->
   <script type="importmap">
   {
     "imports": {
-      "./src/main.js": "./src/main.js?v=9da4100a261e",
-      "./src/daylog.js": "./src/daylog.js?v=9da4100a261e",
-      "./src/demo.js": "./src/demo.js?v=9da4100a261e",
-      "./src/world.js": "./src/world.js?v=9da4100a261e",
-      "./src/controls.js": "./src/controls.js?v=9da4100a261e",
-      "./src/kitty.js": "./src/kitty.js?v=9da4100a261e",
-      "./src/kittybrain.js": "./src/kittybrain.js?v=9da4100a261e",
-      "./src/kittysound.js": "./src/kittysound.js?v=9da4100a261e",
-      "./src/kittyaudio.js": "./src/kittyaudio.js?v=9da4100a261e",
-      "./src/tokens.js": "./src/tokens.js?v=9da4100a261e",
-      "./src/player.js": "./src/player.js?v=9da4100a261e",
-      "./src/town.js": "./src/town.js?v=9da4100a261e",
-      "./src/outfits.js": "./src/outfits.js?v=9da4100a261e",
-      "./vendor/three/three.module.js": "./vendor/three/three.module.js?v=9da4100a261e",
-      "./vendor/three/addons/loaders/GLTFLoader.js": "./vendor/three/addons/loaders/GLTFLoader.js?v=9da4100a261e",
-      "./vendor/three/addons/utils/BufferGeometryUtils.js": "./vendor/three/addons/utils/BufferGeometryUtils.js?v=9da4100a261e"
+      "./src/main.js": "./src/main.js?v=318a629a1694",
+      "./src/daylog.js": "./src/daylog.js?v=318a629a1694",
+      "./src/demo.js": "./src/demo.js?v=318a629a1694",
+      "./src/world.js": "./src/world.js?v=318a629a1694",
+      "./src/controls.js": "./src/controls.js?v=318a629a1694",
+      "./src/kitty.js": "./src/kitty.js?v=318a629a1694",
+      "./src/kittybrain.js": "./src/kittybrain.js?v=318a629a1694",
+      "./src/kittysound.js": "./src/kittysound.js?v=318a629a1694",
+      "./src/kittyaudio.js": "./src/kittyaudio.js?v=318a629a1694",
+      "./src/tokens.js": "./src/tokens.js?v=318a629a1694",
+      "./src/player.js": "./src/player.js?v=318a629a1694",
+      "./src/town.js": "./src/town.js?v=318a629a1694",
+      "./src/outfits.js": "./src/outfits.js?v=318a629a1694",
+      "./vendor/three/three.module.js": "./vendor/three/three.module.js?v=318a629a1694",
+      "./vendor/three/addons/loaders/GLTFLoader.js": "./vendor/three/addons/loaders/GLTFLoader.js?v=318a629a1694",
+      "./vendor/three/addons/utils/BufferGeometryUtils.js": "./vendor/three/addons/utils/BufferGeometryUtils.js?v=318a629a1694"
     }
   }
   </script>
-  <link rel="modulepreload" href="vendor/three/three.module.js?v=9da4100a261e">
-  <link rel="stylesheet" href="style.css?v=9da4100a261e">
-  <script type="module" src="src/main.js?v=9da4100a261e"></script>
+  <link rel="modulepreload" href="vendor/three/three.module.js?v=318a629a1694">
+  <link rel="stylesheet" href="style.css?v=318a629a1694">
+  <script type="module" src="src/main.js?v=318a629a1694"></script>
 </head>
 <body>
   <!-- shown while the world loads (and as the backdrop when 3D is not available) -->
   <picture class="poster" id="poster">
-    <source media="(orientation: portrait)" srcset="poster-portrait.jpg?v=9da4100a261e" width="780" height="1688">
-    <img src="poster.jpg?v=9da4100a261e" alt="" width="1440" height="900" fetchpriority="high" decoding="async">
+    <source media="(orientation: portrait)" srcset="poster-portrait.jpg?v=318a629a1694" width="780" height="1688">
+    <img src="poster.jpg?v=318a629a1694" alt="" width="1440" height="900" fetchpriority="high" decoding="async">
   </picture>
 
-  <canvas id="world" role="img" aria-label="A big ginger tabby kitty in a gold crown and a bow tie sits beside a small person in an orange hoodie on the grey baseplate; a little wooden shop with a striped awning stands behind them"></canvas>
+  <canvas id="world" role="img" aria-label="Seen through your own eyes: a big ginger tabby kitty in a gold crown and a bow tie sits facing you on the grey baseplate; a little wooden shop with a striped awning stands to the right"></canvas>
 
   <div class="ui" id="ui">
     <header class="title">
       <p class="eyebrow">
-        <img class="logo" src="logo.svg?v=9da4100a261e" alt="Glikdev" width="36" height="36">
+        <img class="logo" src="logo.svg?v=318a629a1694" alt="Glikdev" width="36" height="36">
         <span>A game built by YouTube comments</span>
       </p>
       <h1><span class="title-day">Day 3.</span> <span class="title-line">Earn tokens. Go shopping.</span></h1>
@@ -115,7 +115,7 @@
 
   <!-- Day 3: her friendship tokens; tap to open the wardrobe -->
   <button class="chip tokens" id="tokens" type="button" aria-haspopup="dialog" aria-controls="shop" aria-label="Friendship tokens: 0. Go to the shop" hidden>
-    <img id="tokens-icon" src="models/shop/token.webp?v=9da4100a261e" alt="" width="34" height="34">
+    <img id="tokens-icon" src="models/shop/token.webp?v=318a629a1694" alt="" width="34" height="34">
     <span class="tokens-count" id="tokens-count">0</span>
   </button>
 
@@ -164,7 +164,7 @@
     <div class="namer-card">
       <div class="shop-head">
         <h2 id="shop-title">Kitty shop</h2>
-        <p class="shop-purse"><img src="models/shop/token.webp?v=9da4100a261e" alt="" width="28" height="28"><span id="shop-have">0</span><span class="shop-purse-label"> tokens</span></p>
+        <p class="shop-purse"><img src="models/shop/token.webp?v=318a629a1694" alt="" width="28" height="28"><span id="shop-have">0</span><span class="shop-purse-label"> tokens</span></p>
       </div>
       <p class="namer-sub">Welcome to the kitty shop! Pet her, feed her and play with her to earn friendship tokens.</p>
       <div id="shop-items">
