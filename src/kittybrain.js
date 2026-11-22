@@ -13,6 +13,12 @@
 //                (even at dinner: she leaves the bowl to play, then goes back to finish it)
 //   meow(), walkTo(x, z), nap()   used by the scripted recordings
 // Everything she does is also reported as events (drain()): sounds, effects and the UI follow them.
+//
+// Day 3: give her a mind (createBrain({ mind: createMind() }), see kittymind.js) and she decides for herself:
+// each of the verbs above is then a request she may turn down (a 'decide' event says what she made of it, a
+// 'refuse' event that she said no), and between requests she chooses what to do from what she feels, who she
+// is and her habits: she naps in her own spot, goes to the bowl when she is hungry, comes over to ask for a
+// cuddle or a game ('ask'), follows you about. Without a mind she behaves exactly as she did on Day 2.
 
 export const STEP = 1 / 60;
 
@@ -68,7 +74,7 @@ const inside = (p) => {
 
 /**
  * @param {{seed?:number, x?:number, z?:number, heading?:number, mode?:'sit'|'idle'|'sleep', timer?:number,
- *          viewer?:number[], hunger?:number, happy?:number}} [o]
+ *          viewer?:number[], hunger?:number, happy?:number, mind?:object}} [o]
  */
 export function createBrain(o = {}) {
   const rand = rng(o.seed ?? 2);
@@ -103,6 +109,99 @@ export function createBrain(o = {}) {
   function enter(mode, timer = 0) { b.mode = mode; b.timer = timer; }
   const fwd = () => [Math.sin(b.heading), Math.cos(b.heading)];
   const cheer = (d) => { b.happy = clamp(b.happy + d, 0, 1); };
+
+  // ---------------------------------------------------------------- her mind (Day 3): wants, moods, habits
+  // Without one (o.mind missing: the recordings and the old tests) she does whatever she is asked, as before.
+  const mind = o.mind || null;
+  b.mind = mind;
+  b.friend = null;                    // [x, z] where you are standing, when you are in the world
+  b.asking = null;                    // { what: 'cuddle' | 'play', until } while she is asking you for something
+  b.snub = 0;                         // she said no: until this time her nose is turned away
+  b.ateAt = -1e9;
+  b.solo = false;                     // the game going on is her own idea (nobody threw anything)
+  const playing = () => !!b.yarn && (b.goal === 'yarn' || ['pounce', 'bat'].includes(b.mode) || b.face?.then === 'pounce');
+  const toyDown = () => !!(b.yarn && !b.yarn.held && !b.yarn.air && b.yarn.flying === 0);
+  const friendSpot = () => b.friend || [b.x + (b.viewer[0] - b.x) * 0.4, b.z + (b.viewer[1] - b.z) * 0.4];
+  /** What she senses this instant: all her mind gets to go on. */
+  function sense() {
+    const f = friendSpot();
+    return { t: b.t, hunger: b.hunger, energy: b.energy, happy: b.happy, mode: b.mode, asleep: lying(), playing: playing(),
+      moving: ['walk', 'trot', 'run'].includes(b.mode), food: foodLeft(), ateAgo: b.t - b.ateAt, toy: toyDown(),
+      asking: b.asking ? b.asking.what : null, friend: true, friendDist: Math.hypot(f[0] - b.x, f[1] - b.z) };
+  }
+  b.sense = sense;
+  const YES = { yes: true, mood: 'ok', want: 1, why: null };
+  /** Ask her mind. `quiet`: nobody asked her out loud (she was only expected to tag along), so a no is not a snub. */
+  function wants(verb, quiet) {
+    if (!mind) return YES;
+    const d = mind.decide(verb, sense());
+    emit('decide', { verb, yes: d.yes, mood: d.mood, why: d.why, want: d.want, quiet: !!quiet });
+    if (!d.yes && !quiet) { b.snub = b.t + 2.4; cheer(-0.01); emit('refuse', { verb, why: d.why }); }
+    return d;
+  }
+  /** She came to ask for something and you did it. */
+  function answered() {
+    mind.outcome('answered');
+    cheer(0.08);
+    emit('answered', { what: b.asking.what });
+    b.asking = null;
+  }
+  /** She was asking for something and is now off doing something else: the asking is over (no hard feelings). */
+  function dropAsk() {
+    if (!b.asking) return;
+    emit('ask-end', { what: b.asking.what, dropped: true });
+    b.asking = null;
+  }
+  /** Had enough: up and away, a few metres off, the other way from you. */
+  function walkOff() {
+    if (b.mode === 'purr') emit('purr-end');
+    const f = friendSpot(), dx = b.x - f[0], dz = b.z - f[1], d = Math.hypot(dx, dz) || 1;
+    b.after = null;
+    go({ x: b.x + (dx / d) * 11 + (rand() - 0.5) * 6, z: b.z + (dz / d) * 11 + (rand() - 0.5) * 6 }, null, false);
+  }
+  /** She walks over to you and asks (what: 'cuddle' | 'play'), or just comes to be near you (null). */
+  function comeAsk(what) {
+    const f = friendSpot(), dx = b.x - f[0], dz = b.z - f[1], d = Math.hypot(dx, dz) || 1;
+    b.asking = what ? { what, until: b.t + 40 } : null;
+    b.after = what ? 'meow' : null;
+    if (d < 6.5) {                                         // already beside you: she turns to you and asks
+      b.target = null; b.goal = null;
+      if (what) { b.asking.until = b.t + 14; emit('ask', { what }); }
+      if (b.mode === 'sit') {
+        if (what) { b.after = null; enter('meow', KITTY.clips.Meow); emit('meow'); } else enter('sit', 4);
+      } else { b.face = { x: f[0], z: f[1], then: 'sit' }; enter('face'); }
+      return;
+    }
+    go({ x: f[0] + (dx / d) * 4.6, z: f[1] + (dz / d) * 4.6 }, 'ask', d > 22);
+  }
+  /** Nobody is telling her what to do: she chooses. */
+  function onHerOwn() {
+    const sat = b.mode === 'sit';
+    if (b.asking) { enter(sat ? 'sit' : 'idle', 2); return; }       // still waiting for your answer
+    const a = mind.choose(sense());
+    mind.did(a);
+    emit('mind', { does: a });
+    switch (a) {
+      case 'groom':
+        if (sat) enter('groom', 4 + rand() * 3); else { b.after = 'groom'; enter('sitdown', KITTY.clips.Sit); }
+        break;
+      case 'nap': {
+        const s = mind.spot;                               // a nap is taken in her spot, once she has one
+        if (s && Math.hypot(s.x - b.x, s.z - b.z) > 7) { go({ x: s.x, z: s.z }, 'spot', false); break; }
+        if (sat) { enter('liedown', 1.4); emit('sigh'); } else { b.after = 'nap'; enter('sitdown', KITTY.clips.Sit); }
+        break;
+      }
+      case 'wander': go(pickWander(), null, false); break;
+      case 'eat': b.after = null; emit('chirp'); goEat(); break;
+      case 'cuddle': comeAsk('cuddle'); break;
+      case 'playask':
+        if (toyDown()) { b.yarn.rounds = 1; b.solo = true; emit('chirp'); chaseYarn(); }   // her toy is out: she plays by herself
+        else comeAsk('play');
+        break;
+      case 'follow': comeAsk(null); break;
+      default: enter(sat ? 'sit' : 'idle', sat ? 4 + rand() * 4 : 2 + rand() * 2);
+    }
+  }
 
   function pickWander() {
     for (let i = 0; i < 20; i++) {
@@ -141,21 +240,32 @@ export function createBrain(o = {}) {
   }
 
   // ---------------------------------------------------------------- the player's verbs
-  b.call = (x, z) => {
+  b.call = (x, z, opt = {}) => {
     const p = inside({ x, z });
+    const d = wants('call', opt.quiet);
+    if (!d.yes) return false;                            // she heard you; she is not coming
     emit('call', p);
     emit('trill');
     b.after = 'meow';
-    if (Math.hypot(p.x - b.x, p.z - b.z) < 4.5) {      // already here: just turn round and sit
+    dropAsk();
+    const far = Math.hypot(p.x - b.x, p.z - b.z);
+    if (far < 4.5) {                                     // already here: just turn round and sit
       b.target = null; b.goal = null;
-      if (lying()) { wake('meow'); return; }
+      if (lying()) { wake('meow'); return true; }
       if (!sitting()) { b.face = { x: b.viewer[0], z: b.viewer[1], then: 'sit' }; enter('face'); }
-      return;
+      return true;
     }
-    go(p, 'call', true);
+    go(p, 'call', d.mood !== 'reluctant' || far > 30);   // reluctant: she comes, at a walk
+    return true;
   };
 
-  b.pet = () => {
+  b.pet = (opt = {}) => {
+    const d = opt.sure ? YES : wants('pet');             // sure: she is not asked (her new name: she just likes it)
+    if (!d.yes) {
+      if (d.why === 'enough' && (sitting() || b.mode === 'idle')) walkOff();
+      return false;
+    }
+    if (mind && b.asking?.what === 'cuddle') answered();
     emit('pet');
     cheer(0.06);
     if (lying()) { b.target = null; b.goal = null; wake('purr'); return; }
@@ -182,12 +292,17 @@ export function createBrain(o = {}) {
   }
 
   b.feed = () => {
-    if (b.yarn) b.yarn.rounds = 3;                       // food beats play
-    emit('chirp');
+    const d = wants('feed');                             // the bowl is put down either way; eating is up to her
+    if (d.yes) {
+      if (b.yarn) b.yarn.rounds = 3;                     // food beats play
+      emit('chirp');
+      dropAsk();
+    }
     if (b.bowl) {                                        // food is already out: top the bowl up
       b.bowl.left = 3;
       b.bowl.eatenAt = null;
       emit('refill', { x: b.bowl.x, z: b.bowl.z });
+      if (!d.yes) return false;                          // it waits there until she is hungry
       if (b.mode === 'eat') { b.timer = EAT.seconds; b.eatStart = b.t; b.bowl.bites = 0; return; }   // she eats on
       if (b.goal === 'eat' || b.face?.then === 'eat') return;      // already on her way
       b.after = null;
@@ -197,8 +312,10 @@ export function createBrain(o = {}) {
     const bowl = besideHer(10, 3);
     b.bowl = { ...bowl, t: b.t, left: 3, bites: 0, eatenAt: null };
     emit('bowl', { x: bowl.x, z: bowl.z });
+    if (!d.yes) return false;
     b.after = null;
     goEat();
+    return true;
   };
 
   /** Off to the bowl, to stand with her mouth over it. */
@@ -212,15 +329,22 @@ export function createBrain(o = {}) {
 
   /** A game is over: back to the food if there is some, otherwise a wash. */
   function playOver() {
-    if (foodLeft()) { b.after = null; goEat(); return; }
+    if (mind && !b.solo) mind.outcome('played');
+    b.solo = false;
+    if (foodLeft() && (!mind || b.hunger > 0.15)) { b.after = null; goEat(); return; }
     b.after = b.after || 'groom';
     enter('sitdown', KITTY.clips.Sit);
   }
 
   b.play = () => {
     if (b.yarn?.held) return;                            // it is in your hand
+    const d = wants('play');
+    if (mind && d.yes && b.asking?.what === 'play') answered();
+    const start = !d.yes ? 3 : d.mood === 'reluctant' ? 1 : 0;       // not keen: a short game; no: she only watches
+    if (d.yes) { b.solo = false; dropAsk(); }
     if (b.yarn && b.yarn.flying === 0) {                 // it is already on the floor: game on again
-      b.yarn.rounds = 0;
+      if (!d.yes) return;
+      b.yarn.rounds = start;
       emit('chirp');
       if (['pounce', 'bat', 'face'].includes(b.mode)) return;     // mid-game already: she just plays on
       if (lying()) { b.after = null; wake(null); }
@@ -232,7 +356,7 @@ export function createBrain(o = {}) {
     const from = { x: (b.viewer[0] + land.x) / 2, z: (b.viewer[1] + land.z) / 2 };
     const ux = land.x - from.x, uz = land.z - from.z, ud = Math.hypot(ux, uz) || 1;
     b.yarn = { x: from.x, y: 9, z: from.z, from, land, flying: 0.75, vx: (ux / ud) * 7, vz: (uz / ud) * 7,
-      spin: 0, ax: 1, az: 0, rounds: 0, rim: KITTY.roam + 8 };
+      spin: 0, ax: 1, az: 0, rounds: start, rim: KITTY.roam + 8 };
     emit('yarn', { x: land.x, z: land.z });
   };
 
@@ -257,8 +381,13 @@ export function createBrain(o = {}) {
     const y = b.yarn;
     if (!y?.held) return;
     const sp = Math.hypot(vx, vz), k = sp > YARN.maxThrow ? YARN.maxThrow / sp : 1;
-    Object.assign(y, { held: false, air: true, vx: vx * k, vz: vz * k, vy, rounds: 0, rim: KITTY.limit, drag: YARN.drag });
+    const d = wants('play');
+    if (mind && d.yes && b.asking?.what === 'play') answered();
+    Object.assign(y, { held: false, air: true, vx: vx * k, vz: vz * k, vy, rounds: d.yes ? 0 : 3, rim: KITTY.limit, drag: YARN.drag });
     emit('toss', { speed: sp * k });
+    if (!d.yes) return;                                  // she watches it go
+    b.solo = false;
+    dropAsk();
     emit('chirp');
     chaseYarn();
   };
@@ -285,6 +414,7 @@ export function createBrain(o = {}) {
     if (a === 'purr') startPurr();
     else if (a === 'meow') { enter('meow', KITTY.clips.Meow); emit('meow'); }
     else if (a === 'groom') enter('groom', 4.5 + rand() * 2);
+    else if (a === 'nap') { enter('liedown', 1.4); emit('sigh'); }
     else enter('sit', 5 + rand() * 4);
   }
 
@@ -315,7 +445,14 @@ export function createBrain(o = {}) {
     b.target = null;
     const g = b.goal;
     b.goal = null;
-    if (g === 'call') { b.face = { x: b.viewer[0], z: b.viewer[1], then: 'sit' }; enter('face'); return; }
+    if (g === 'call') { if (mind) mind.outcome('came'); b.face = { x: b.viewer[0], z: b.viewer[1], then: 'sit' }; enter('face'); return; }
+    if (g === 'ask') {                                     // she has come over to you
+      const f = friendSpot();
+      if (b.asking) { b.asking.until = b.t + 14; b.after = 'meow'; emit('ask', { what: b.asking.what }); }
+      b.face = { x: f[0], z: f[1], then: 'sit' }; enter('face');
+      return;
+    }
+    if (g === 'spot') { b.after = 'nap'; enter('sitdown', KITTY.clips.Sit); return; }   // her spot: a nap
     if (g === 'eat' && b.bowl) { b.face = { x: b.bowl.x, z: b.bowl.z, then: 'eat' }; enter('face'); return; }
     if (g === 'yarn' && b.yarn) { b.face = { x: b.yarn.x, z: b.yarn.z, then: 'pounce' }; enter('face'); return; }
     if (b.after) { enter('sitdown', KITTY.clips.Sit); return; }
@@ -363,7 +500,7 @@ export function createBrain(o = {}) {
           y.vy = 0; y.air = false;
           if (hit > 2) emit('thud', { x: y.x, z: y.z, soft: true });
           const busy = ['pounce', 'bat', 'face'].includes(b.mode) || b.goal === 'yarn';
-          if (!busy) { emit('chirp'); chaseYarn(); }
+          if (!busy && y.rounds < 3) { emit('chirp'); chaseYarn(); }
         }
       }
       return;
@@ -411,6 +548,22 @@ export function createBrain(o = {}) {
       emit('mew', { hungry: true });
       if (b.mode === 'sit') enter('meow', KITTY.clips.Meow);
     }
+    if (!mind) return;
+    mind.step(dt, sense());
+    if (sitting() || b.mode === 'idle') b.energy = clamp(b.energy + dt / 100, 0, 1);     // resting helps a little; a nap far more
+    if (b.asking && b.t > b.asking.until) {                // she asked and nothing came of it
+      mind.outcome('ignored');
+      emit('ask-end', { what: b.asking.what });
+      b.asking = null;
+    }
+    // food is out and now she is hungry: she goes and has it, no need to be told
+    if (foodLeft() && b.hunger > 0.3 && (b.mode === 'sit' || b.mode === 'idle') && !b.goal && !b.asking) {
+      mind.did('eat');
+      emit('mind', { does: 'eat' });
+      emit('chirp');
+      b.after = null;
+      goEat();
+    }
   }
 
   function setOff() {                                    // after standing up or a stretch
@@ -428,6 +581,7 @@ export function createBrain(o = {}) {
       case 'sit':
         b.speed = 0;
         if (b.timer <= 0) {
+          if (mind) { onHerOwn(); break; }
           const r = rand();
           if (r < 0.3) { enter('groom', 4 + rand() * 3); break; }
           if (r < 0.3 + (b.energy < 0.5 ? 0.5 : 0.14)) { enter('liedown', 1.4); emit('sigh'); break; }
@@ -446,7 +600,7 @@ export function createBrain(o = {}) {
         if (b.timer <= 0 && !setOff()) enter('idle', 2 + rand() * 2);
         break;
       case 'liedown':
-        if (b.timer <= 0) { enter('sleep', 14 + rand() * 10); emit('asleep'); }
+        if (b.timer <= 0) { enter('sleep', 14 + rand() * 10); emit('asleep'); if (mind) mind.napAt(b.x, b.z); }
         break;
       case 'sleep':
         b.energy = clamp(b.energy + dt / 15, 0, 1);
@@ -461,6 +615,7 @@ export function createBrain(o = {}) {
       case 'idle':
         b.speed *= Math.exp(-dt * 8);
         if (b.timer <= 0) {
+          if (mind) { onHerOwn(); break; }
           if (rand() < 0.25) { enter('stretch', KITTY.clips.Stretch); emit('yawn', { delay: 0.75 }); break; }
           b.target = pickWander(); b.goal = null; b.fast = false; enter('walk');
         }
@@ -471,6 +626,10 @@ export function createBrain(o = {}) {
         if (b.goal === 'yarn' && b.yarn && b.yarn.flying === 0) {   // keep after it while it rolls
           const y = b.yarn, dx = b.x - y.x, dz = b.z - y.z, d = Math.hypot(dx, dz) || 1;
           b.target = { x: y.x + (dx / d) * standOff(), z: y.z + (dz / d) * standOff() };
+        }
+        if (b.goal === 'ask') {                             // coming over to you: you may have moved
+          const f = friendSpot(), dx = b.x - f[0], dz = b.z - f[1], d = Math.hypot(dx, dz) || 1;
+          b.target = inside({ x: f[0] + (dx / d) * 4.6, z: f[1] + (dz / d) * 4.6 });
         }
         // in a hurry: a long way to go turns the trot into a run; near the end she trots again
         const left = Math.hypot(b.target.x - b.x, b.target.z - b.z);
@@ -507,6 +666,8 @@ export function createBrain(o = {}) {
         if (b.timer <= 0) {
           b.bowl.left = 0; b.bowl.eatenAt = b.t;
           b.hunger = 0; cheer(0.25);
+          b.ateAt = b.t;
+          if (mind) mind.outcome('ate');
           emit('eaten'); emit('trill');
           b.after = b.after === 'purr' ? 'purr' : 'groom';
           enter('sitdown', KITTY.clips.Sit);
@@ -547,7 +708,7 @@ export function createBrain(o = {}) {
           const a = Math.atan2(Math.sin(ahead) * (1 - w) + Math.sin(toMiddle) * w, Math.cos(ahead) * (1 - w) + Math.cos(toMiddle) * w);
           const sp = y.rounds < 3 ? 8 + rand() * 3 : 5;
           y.vx = Math.sin(a) * sp; y.vz = Math.cos(a) * sp;
-          emit('swat', { round: y.rounds });
+          emit('swat', b.solo ? { round: y.rounds, solo: true } : { round: y.rounds });
           emit(y.rounds < 3 ? 'chirp' : 'trill');
         }
         if (b.timer <= 0) {
@@ -558,7 +719,7 @@ export function createBrain(o = {}) {
         break;
       }
       case 'purr':
-        if (b.t >= b.purrUntil) { emit('purr-end'); enter('sit', 4 + rand() * 3); }
+        if (b.t >= b.purrUntil) { emit('purr-end'); if (mind) mind.outcome('purred'); enter('sit', 4 + rand() * 3); }
         break;
       case 'meow':
         if (b.timer <= 0) enter('sit', 4 + rand() * 4);

@@ -42,7 +42,8 @@ export function rewardFor(e, state = {}) {
   switch (e.type) {
     case 'purr': return 1;
     case 'eaten': return 3;
-    case 'swat': return 1;
+    case 'swat': return e.solo ? 0 : 1;                  // her own game, played by herself, earns nothing
+    case 'answered': return 2;                           // she came to ask you for something, and you did it
     case 'arrive':
       if (e.goal !== 'call') return 0;
       if (state.callAt != null && e.t - state.callAt < CALL_COOLDOWN) return 0;

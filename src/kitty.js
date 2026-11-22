@@ -151,7 +151,7 @@ float furHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.545
 
 /**
  * @param {{scene:THREE.Scene, url:string, toysUrl:string, start?:object, seed?:number,
- *          script?:{t:number,type:string,x?:number,z?:number}[], viewer?:number[], renderer?:THREE.WebGLRenderer,
+ *          mind?:object, script?:{t:number,type:string,x?:number,z?:number}[], viewer?:number[], renderer?:THREE.WebGLRenderer,
  *          needs?:{hunger:number, happy:number}}} o
  */
 const CLIPS = ['Idle', 'Walk', 'Trot', 'Run', 'Sit', 'SitIdle', 'Purr', 'Meow', 'Eat', 'Groom', 'Stretch', 'Sleep', 'Pounce', 'Bat'];
@@ -299,7 +299,7 @@ export async function createKitty(o) {
   const toy = { roll: true, bounce: undefined, yaw: 0 };
   const UP = new THREE.Vector3(0, 1, 0);
   const listeners = [];
-  const startOpts = { seed: o.seed ?? 2, ...o.start, viewer: o.viewer, ...(o.needs || {}) };
+  const startOpts = { seed: o.seed ?? 2, ...o.start, viewer: o.viewer, ...(o.needs || {}), mind: o.mind || null };
   const yq = new THREE.Quaternion(), dq = new THREE.Quaternion(), axis = new THREE.Vector3();
 
   function newMixer() {
@@ -451,7 +451,8 @@ export async function createKitty(o) {
   }
   function lookAt(viewer, dt) {
     const target = lookTarget(viewer);
-    const wantW = target ? (LOOK[brain.mode] ?? 0) : 0;
+    const snub = brain.snub > brain.t && !['walk', 'trot', 'run', 'pounce', 'bat', 'eat', 'sleep', 'liedown'].includes(brain.mode);
+    const wantW = snub ? 1 : target ? (LOOK[brain.mode] ?? 0) : 0;      // she said no: her nose goes up and away
     look.w += (wantW - look.w) * (1 - Math.exp(-dt * 3));
     if (look.w < 0.01) return;
     const t = target || viewer;
@@ -461,8 +462,9 @@ export async function createKitty(o) {
     let yaw = Math.atan2(t.x - v1.x, t.z - v1.z) - brain.heading;
     yaw = ((yaw + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
     const pitch = Math.atan2(t.y - v1.y, Math.hypot(t.x - v1.x, t.z - v1.z));
-    const ty = Math.max(-0.95, Math.min(0.95, yaw)) * (Math.abs(yaw) > 2.4 ? 0 : 1);
-    const tp = Math.max(-0.45, Math.min(0.45, pitch * 0.8));
+    let ty = Math.max(-0.95, Math.min(0.95, yaw)) * (Math.abs(yaw) > 2.4 ? 0 : 1);
+    let tp = Math.max(-0.45, Math.min(0.45, pitch * 0.8));
+    if (snub) { ty = yaw >= 0 ? -0.95 : 0.95; tp = 0.3; }             // away from whoever asked, chin up
     const k = 1 - Math.exp(-dt * 5);
     look.yaw += (ty - look.yaw) * k;
     look.pitch += (tp - look.pitch) * k;
@@ -613,9 +615,11 @@ export async function createKitty(o) {
     holdYarn(x, z) { brain.holdYarn(x, z); },
     throwYarn(vx, vz, vy) { brain.throwYarn(vx, vz, vy); },
     yarnPosition(out = new THREE.Vector3()) { const y = brain.yarn; return y ? out.set(y.x, y.y, y.z) : null; },
-    call(x, z) { brain.call(x, z); },
-    pet() { brain.pet(); },
-    feed() { brain.feed(); },
+    call(x, z, opt) { return brain.call(x, z, opt); },
+    pet(opt) { return brain.pet(opt); },
+    feed() { return brain.feed(); },
+    /** Day 3: where you are standing, so she can come over to you of her own accord */
+    setFriend(x, z) { brain.friend = [x, z]; },
     play() { brain.play(); },
     on(fn) { listeners.push(fn); },
     /**

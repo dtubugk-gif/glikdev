@@ -31,6 +31,7 @@
       "./src/controls.js": "./src/controls.js?v=de618f758463",
       "./src/kitty.js": "./src/kitty.js?v=de618f758463",
       "./src/kittybrain.js": "./src/kittybrain.js?v=de618f758463",
+      "./src/kittymind.js": "./src/kittymind.js?v=de618f758463",
       "./src/kittysound.js": "./src/kittysound.js?v=de618f758463",
       "./src/kittyaudio.js": "./src/kittyaudio.js?v=de618f758463",
       "./src/tokens.js": "./src/tokens.js?v=de618f758463",
@@ -125,6 +126,8 @@
     <span class="nametag-sr" id="nametag-sr"></span>
   </button>
 
+  <p class="thought" id="thought" role="status" aria-live="polite" hidden><span class="thought-sr" id="thought-who"></span><span id="thought-text"></span></p>
+
   <dialog class="namer" id="namer" aria-labelledby="namer-title">
     <form class="namer-card" method="dialog" id="namer-form">
       <h2 id="namer-title">Name your kitty</h2>
@@ -133,6 +136,17 @@
         <span class="namer-label">Her name</span>
         <input id="namer-input" name="name" type="text" maxlength="18" autocomplete="off" spellcheck="false" enterkeyhint="done" required>
       </label>
+      <section class="mind" id="mind" aria-labelledby="mind-title" hidden>
+        <h3 class="namer-label" id="mind-title">Her mind</h3>
+        <p class="mind-temper" id="mind-temper"></p>
+        <dl class="mind-list">
+          <div><dt>Feels</dt><dd id="mind-feels"></dd></div>
+          <div><dt>Trusts you</dt><dd><span class="mind-dots" id="mind-trust" aria-hidden="true"></span><span class="thought-sr" id="mind-trust-sr"></span></dd></div>
+          <div><dt>Likes most</dt><dd id="mind-likes"></dd></div>
+          <div><dt>Habits</dt><dd id="mind-habits"></dd></div>
+        </dl>
+        <p class="mind-note">She decides for herself. She can say no, and she learns what you two do together.</p>
+      </section>
       <div class="namer-actions">
         <button class="chip" type="button" id="namer-cancel">Cancel</button>
         <button class="chip chip-primary" type="submit" id="namer-save">Save name</button>

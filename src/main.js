@@ -16,6 +16,7 @@
 import { renderDayLog, renderHeadline, latestDay } from './daylog.js';
 import { DEMOS, demoPose, KITTY_DEMOS } from './demo.js';
 import { createWallet, rewardFor, ITEMS, itemById } from './tokens.js';
+import { createMind, sayWhy, describeMind } from './kittymind.js';
 
 // Set this to the channel's URL once it exists (for example 'https://www.youtube.com/@glikdev').
 const CHANNEL_URL = 'https://www.youtube.com/@glikdev';
@@ -267,6 +268,7 @@ async function start() {
     name: cleanName(saved?.name) || 'Kitty',
     muted: !!saved?.muted,
     cat: catOf(params.get('cat')) || catOf(saved?.cat) || 'ginger',
+    mindHint: !!saved?.mindHint,                           // has been told once that she has a mind of her own
   };
   const catOpts = (k) => ({ key: k, headScale: CATS[k].head ?? 1, url: stamped(CATS[k].url), furUrl: CATS[k].fur ? stamped(CATS[k].fur) : null, furLayers: params.has('fur') ? Math.max(0, Math.min(16, Number(params.get('fur')) || 0)) : (CATS[k].shells ?? (coarse ? 6 : 10)) });
   let needs;
@@ -274,6 +276,12 @@ async function start() {
     const away = Math.max(0, Math.min(3600, (Date.now() - (Number(saved.at) || Date.now())) / 1000));
     needs = { hunger: Math.min(1, saved.hunger + away / 240), happy: Math.max(0, saved.happy - away / 900) };
   }
+  // her mind (Day 3): who she is and what she has learned are hers for good, kept with the rest on this device.
+  // ?mind=0 switches it off (she does as she is told, as on Day 2); ?mind=<number> gives one particular cat.
+  const mindParam = params.get('mind');
+  const mind = live && mindParam !== '0'
+    ? createMind(mindParam ? { seed: Number(mindParam) >>> 0 } : { seed: (Math.random() * 2 ** 32) >>> 0, saved: saved?.mind })
+    : null;
   try {
     const [{ createKitty }, { createKittyAudio }] = await kittyMods;
     const ground = Math.sin(home.pol) * home.dist;
@@ -281,7 +289,7 @@ async function start() {
       start: kd ? kd.start(home) : { x: 0, z: 0, heading: home.az, mode: 'sit' },
       script: kd ? kd.script : null,
       viewer: kd ? kd.viewer(home) : [Math.sin(home.az) * ground, Math.cos(home.az) * ground],
-      needs: kd ? kd.needs : needs };
+      needs: kd ? kd.needs : needs, mind };
     kitty = await createKitty({ ...first, ...catOpts(care.cat) }).catch((err) => {
       if (care.cat === 'ginger') throw err;             // her chosen cat did not load: the ginger kitty instead
       console.warn('Glikdev: that cat did not load, back to the ginger kitty', err);
@@ -353,7 +361,7 @@ async function start() {
     const dx = x - player.x, dz = z - player.z, d = Math.hypot(dx, dz) || 1;
     const spot = { x: x - (dz / d) * 5.5 - (dx / d) * 2, z: z + (dx / d) * 5.5 - (dz / d) * 2 };
     const p = town ? town.outOfShop(spot.x, spot.z) : spot;
-    kitty.call(p.x, p.z);
+    kitty.call(p.x, p.z, { quiet: true });               // she may come along, or not: it is up to her
   }
   /** off to the shop: its doormat; the wardrobe opens when you get there */
   function goShop() {
@@ -361,7 +369,7 @@ async function start() {
     if (town.atShop(player.x, player.z)) { player.faceTo(town.SHOP.x, town.SHOP.z); openShop(); return; }
     player.goTo(town.SHOP_DOOR.x, town.SHOP_DOOR.z);
     wantShop = true;
-    if (!kittyBusy()) kitty.call(town.SHOP_WAIT.x, town.SHOP_WAIT.z);
+    if (!kittyBusy()) kitty.call(town.SHOP_WAIT.x, town.SHOP_WAIT.z, { quiet: true });
     flashHint('Off to the shop!', 2600);
   }
   // ------------------------------------------------------------ friendship tokens and her wardrobe (Day 3, idea by @Kowffe)
@@ -608,7 +616,9 @@ async function start() {
   function persist() {
     if (!kitty || !live) return;
     const b = kitty.brain;
-    saveCare({ name: care.name, muted: care.muted, cat: care.cat, hunger: +b.hunger.toFixed(3), happy: +b.happy.toFixed(3), at: Date.now() });
+    saveCare({ name: care.name, muted: care.muted, cat: care.cat, hunger: +b.hunger.toFixed(3), happy: +b.happy.toFixed(3), at: Date.now(),
+      ...(care.mindHint ? { mindHint: true } : {}),
+      ...(mind && !mindParam ? { mind: mind.toJSON() } : saved?.mind ? { mind: saved.mind } : {}) });
   }
   if (kitty && (filmTag || (showUI && !demo))) {
     showName(filmTag || care.name);
@@ -637,6 +647,7 @@ async function start() {
     tag.addEventListener('click', () => {
       namerInput.value = care.name === 'Kitty' ? '' : care.name;
       namerInput.placeholder = 'Kitty';
+      showMind();
       if (typeof namer.showModal === 'function') namer.showModal(); else namer.setAttribute('open', '');
       namerInput.focus();
     });
@@ -645,7 +656,8 @@ async function start() {
       care.name = cleanName(namerInput.value) || 'Kitty';
       showName(care.name);
       persist();
-      kitty.pet();                                        // she likes her new name
+      kitty.pet({ sure: true });                          // she likes her new name
+      $('thought-who').textContent = `${care.name}: `;
     });
     namer.addEventListener('click', (e) => { if (e.target === namer) namer.close(); });
     namer.addEventListener('close', () => tag.focus());
@@ -689,7 +701,7 @@ async function start() {
         persist();
         catStatus.textContent = '';
         picker.close();
-        kitty.pet();                                      // hello, new cat
+        kitty.pet({ sure: true });                        // hello, new cat
       } catch (err) {
         console.warn('Glikdev: that cat did not load', err);
         catStatus.textContent = 'That cat didn’t load. Check your connection and try again.';
@@ -780,6 +792,77 @@ async function start() {
     addEventListener('pagehide', persist);
     document.addEventListener('visibilitychange', () => { if (document.hidden) persist(); });
   }
+  // ------------------------------------------------------------ what is on her mind (Day 3: she has one)
+  // A small thought bubble over her name tag: what she wants ("Hungry", "Wants to play"), and for a moment her
+  // answer when she turns you down ("Not hungry", "Too sleepy") or gives in ("Oh, all right").
+  const thoughtEl = $('thought'), thoughtText = $('thought-text');
+  const wantBtn = { cuddle: $('care-pet'), play: $('care-play') };
+  let thoughtNow = '', thoughtKind = '', flash = null, thoughtAt = 0, stayedAt = -1e9, askHinted = {};
+  function setThought(text, kind) {
+    if (text === thoughtNow && kind === thoughtKind) return;
+    thoughtNow = text; thoughtKind = kind;
+    if (text) thoughtText.textContent = text;
+    thoughtEl.classList.toggle('is-no', kind === 'no');
+    thoughtEl.classList.toggle('is-want', kind === 'want');
+    thoughtEl.classList.toggle('is-out', !text);
+  }
+  function flashThought(text, kind, seconds = 2.6) {
+    if (!text || !mind) return;
+    flash = { text, kind, until: performance.now() + seconds * 1000 };
+    setThought(text, kind);
+  }
+  /** her standing thought, a few times a second (a flash sits on top of it until it runs out) */
+  function think(now) {
+    if (!mind || !kitty || thoughtEl.hidden) return;
+    if (flash && now < flash.until) return;
+    flash = null;
+    if (now - thoughtAt < 250 && thoughtNow) return;
+    thoughtAt = now;
+    const th = mind.thought(kitty.brain.sense());
+    setThought(th ? th.text : '', th ? 'want' : '');
+  }
+  if (mind && kitty) {
+    $('thought-who').textContent = `${care.name}: `;
+    thoughtEl.classList.add('is-out');
+    thoughtEl.hidden = !(showUI && !demo && !short);
+    kitty.on((e) => {
+      if (e.type === 'decide') {
+        if (e.quiet) {                                      // she was only expected to tag along
+          if (!e.yes && e.why === 'mood' && e.t - stayedAt > 20) { stayedAt = e.t; flashThought('Staying here', 'no', 2.2); }
+          return;
+        }
+        flashThought(sayWhy(e), e.yes ? 'ok' : 'no');
+        if (!e.yes && !care.mindHint) {                     // the first no: say once what is going on
+          care.mindHint = true;
+          flashHint(`${care.name} has a mind of her own. ${coarse ? 'Tap' : 'Click'} her name to see it`, 7000);
+          persist();
+        }
+      } else if (e.type === 'ask') {
+        wantBtn[e.what]?.classList.add('is-wanted');
+        if (!askHinted[e.what]) {
+          askHinted[e.what] = true;
+          flashHint(e.what === 'cuddle' ? `${care.name} came over for a cuddle. Pet her!` : `${care.name} wants a game. Tap Play!`, 6000);
+        }
+      } else if (e.type === 'answered' || e.type === 'ask-end') {
+        wantBtn[e.what]?.classList.remove('is-wanted');
+      }
+    });
+  }
+
+  /** the "her mind" card under her name: who she is, how she feels, what she has learned */
+  function showMind() {
+    const card = $('mind');
+    if (!mind || !kitty) { card.hidden = true; return; }
+    const d = describeMind(mind, kitty.brain.sense());
+    $('mind-title').textContent = `${care.name}'s mind`;
+    $('mind-temper').textContent = d.temper.join(' · ');
+    $('mind-feels').textContent = d.feels;
+    $('mind-trust').replaceChildren(...Array.from({ length: 5 }, (_, k) => { const i = document.createElement('i'); if (k >= d.trust) i.className = 'off'; return i; }));
+    $('mind-trust-sr').textContent = `${d.trust} of 5`;
+    $('mind-likes').textContent = d.likes;
+    $('mind-habits').textContent = d.habits.length ? `${d.habits.join('. ')}.` : 'None yet. She is still settling in.';
+    card.hidden = false;
+  }
   // every frame: the tag floats over her head; hearts and the hungry badge follow her needs
   const tagPos = new THREE.Vector3();
   const HAT_LIFT = { strawhat: 0.5, flowercrown: 0.35, crown: 0.75, wizardhat: 1.6 };
@@ -792,8 +875,13 @@ async function start() {
     let s = 1;
     if (filmTag) s = t < filmTagAt ? 0 : Math.min(1, 1 + 2.7 * (Math.min(1, (t - filmTagAt) / 0.45) - 1) ** 3 + 1.7 * (Math.min(1, (t - filmTagAt) / 0.45) - 1) ** 2);
     tag.style.visibility = vis && s > 0.01 ? 'visible' : 'hidden';
-    const x = (tagPos.x + 1) / 2 * innerWidth, y = Math.max(tagMinY, (1 - tagPos.y) / 2 * innerHeight);   // never up over the title card
+    const room = thoughtNow && !thoughtEl.hidden ? 44 : 0;                                        // her thought sits on top of the tag
+    const x = (tagPos.x + 1) / 2 * innerWidth, y = Math.max(tagMinY + room, (1 - tagPos.y) / 2 * innerHeight);   // never up over the title card
     tag.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -100%) scale(${s.toFixed(3)})`;
+    if (!thoughtEl.hidden) {
+      thoughtEl.style.visibility = vis ? 'visible' : 'hidden';
+      thoughtEl.style.transform = `translate(${x.toFixed(1)}px, ${(y - 52).toFixed(1)}px) translate(-50%, -100%)`;
+    }
     const b = kitty.brain;
     const hearts = Math.max(1, Math.round(b.happy * 5));
     if (hearts !== shownHearts) {
@@ -804,7 +892,7 @@ async function start() {
     if (hungry !== shownHungry) {
       shownHungry = hungry;
       hungryBadge.hidden = !hungry;
-      tagSr.textContent = `, happiness ${hearts} of 5${hungry ? ', hungry' : ''}. Rename`;
+      tagSr.textContent = `, happiness ${hearts} of 5${hungry ? ', hungry' : ''}. Rename${mind ? ', and see her mind' : ''}`;
     }
   }
 
@@ -834,6 +922,7 @@ async function start() {
   if (kitty && showUI && !demo && !short) {
     kitty.on((e) => {
       if (e.type !== 'yarn' || yarnHinted || thrownOnce) return;
+      if (mind?.lastDecision?.verb === 'play' && !mind.lastDecision.yes) return;   // she turned the game down: not the moment for this tip
       yarnHinted = true;
       setTimeout(() => {
         if (thrownOnce) return;
@@ -851,7 +940,9 @@ async function start() {
   const interest = new THREE.Vector3();
   function step(t, dt) {
     let ks = 0;
+    if (kitty && mind && player) kitty.setFriend(player.x, player.z);      // so she can come over to you
     if (kitty) ks = demo ? kitty.simulateTo(t) : kitty.advance(dt, camera.position);
+    if (mind) think(performance.now());
     if (player) {
       if (demo) player.simulateTo(t);
       else {
