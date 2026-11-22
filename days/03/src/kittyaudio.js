@@ -76,7 +76,7 @@ export function createKittyAudio() {
         case 'swat': play('swat', 0.6 * v); break;
         case 'leap': play('swat', 0.35 * v, { rate: 0.8 }); break;
         case 'land': play('step', 0.7 * v, { rate: 0.85 }); break;
-        case 'jingle': case 'wake': play('bell', 0.4 * v); break;
+        case 'jingle': case 'wake': play('bell', 0.4 * v, { rate: vary() }); break;
         case 'bowl': play('bell', 0.3, { rate: 0.7 }); break;
         case 'refill': play('bell', 0.26, { rate: 0.8 }); break;
         case 'purr':

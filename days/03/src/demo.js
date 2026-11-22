@@ -4,7 +4,12 @@
 // requestAnimationFrame / performance.now gets identical frames on every run.
 
 export const DEMOS = ['orbit', 'reveal', 'kitty', 'kittycall', 'kittypet', 'kittywalk', 'kittyname', 'kittyfeed', 'kittyplay', 'kittynap',
-  'kittytoken', 'kittydress'];
+  'kittytoken', 'kittydress', 'shopwalk', 'kittytoy'];
+
+// Day 3: where the shop's doormat is, and where the kitty waits beside it (town.js works these out from SHOP)
+const SHOP_DOOR = [19.97, -21.57], SHOP_WAIT = [12.84, -23.42];
+// you, standing by her left side, turned to her (used by the close shots)
+const BESIDE = { start: { x: -3.1, z: 3.3, heading: Math.atan2(3.1, -3.3) } };
 
 const lerp = (a, b, k) => a + (b - a) * k;
 const DEG = Math.PI / 180;
@@ -66,6 +71,21 @@ export const KITTY_DEMOS = {
     start: () => ({ x: 0, z: 0, heading: 0.2, mode: 'sit' }),
     script: [{ t: 0.7, type: 'pet' }],
     viewer: () => [Math.sin(0.2) * 20, Math.cos(0.2) * 20],
+    player: { ...BESIDE, script: [{ t: 1.6, type: 'wave' }] },
+  },
+  // Day 3: you run to the shop, and she trots along and waits by the door
+  shopwalk: {
+    start: () => ({ x: -1, z: 3, heading: 0.6, mode: 'sit' }),
+    script: [{ t: 0.5, type: 'call', x: SHOP_WAIT[0], z: SHOP_WAIT[1] }],
+    viewer: () => [8, 20],
+    player: { start: { x: 6, z: 8, heading: Math.atan2(SHOP_DOOR[0] - 6, SHOP_DOOR[1] - 8) },
+      script: [{ t: 0.35, type: 'go', x: SHOP_DOOR[0], z: SHOP_DOOR[1] }, { t: 4.6, type: 'face', x: 25, z: -27 }] },
+  },
+  // Day 3: a toy from the shop: the felt mouse comes out and she is after it
+  kittytoy: {
+    start: () => ({ x: 0, z: 0, heading: 0.35, mode: 'sit' }),
+    script: [{ t: 0.05, type: 'wear', id: 'toymouse' }, { t: 0.3, type: 'play' }],
+    viewer: () => [Math.sin(0.35) * 30, Math.cos(0.35) * 30],
   },
   // Day 3: the wardrobe, one thing after another, then the full royal look and a happy purr
   kittydress: {
@@ -78,6 +98,7 @@ export const KITTY_DEMOS = {
     ],
     viewer: () => [Math.sin(0.2) * 20, Math.cos(0.2) * 20],
     wallet: { tokens: 0 },
+    player: { ...BESIDE, script: [{ t: 5.9, type: 'wave' }] },
   },
   // she strolls across the plate; the camera tracks alongside
   kittywalk: {
@@ -147,6 +168,13 @@ export function demoPose(name, t, home, kitty = null) {
     const pos = [kx + Math.sin(a) * d, 4.0, kz + Math.cos(a) * d];
     return { position: pos, look: [kx, 6.4, kz], shift: 0 };
   }
+  if (name === 'shopwalk' && kitty.player) {
+    // behind your shoulder as you run: the shop grows ahead, the kitty comes into view beside you
+    const p = kitty.player, dx = SHOP_DOOR[0] - 6, dz = SHOP_DOOR[1] - 8, d = Math.hypot(dx, dz), ux = dx / d, uz = dz / d;
+    const back = lerp(15, 12.5, easeInOut(t / 5)), sidew = lerp(4.5, 2.5, easeInOut(t / 5));
+    const pos = [p.x - ux * back - uz * sidew, lerp(6.4, 5.4, easeInOut(t / 5)), p.z - uz * back + ux * sidew];
+    return { position: pos, look: [p.x + ux * 7, 4.6, p.z + uz * 7], shift: 0 };
+  }
   if (name === 'kittytoken') {
     // like the pet shot, a little wider and looking higher: room for the token to rise and fly off
     const a = 0.2 + 0.4 - 0.04 * easeInOut(t / 5), d = lerp(16.5, 15, easeInOut(t / 5));
@@ -171,9 +199,9 @@ export function demoPose(name, t, home, kitty = null) {
     const pos = [kx + Math.sin(a) * dist, 3.2, kz + Math.cos(a) * dist];
     return { position: pos, look: [kx, 5.2, kz], shift: 0 };
   }
-  if (name === 'kittyfeed' || name === 'kittyplay') {
+  if (name === 'kittyfeed' || name === 'kittyplay' || name === 'kittytoy') {
     // a wider shot that keeps her and the bowl (or the yarn) in frame, eased in once it appears
-    const thing = name === 'kittyfeed' ? kitty.bowl : kitty.yarn;
+    const thing = name === 'kittyfeed' ? kitty.bowl : kitty.yarn;     // (the yarn's place is the toy's place)
     const ramp = easeInOut((t - 0.3) / 1.4) * (name === 'kittyfeed' ? 0.5 : 0.42);
     const fx = thing ? kx + (thing.x - kx) * ramp : kx, fz = thing ? kz + (thing.z - kz) * ramp : kz;
     // feeding: wide while she runs over, then in close while she eats; playing: a little wider throughout
