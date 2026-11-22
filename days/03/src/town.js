@@ -1,6 +1,6 @@
 // Day 3: the kitty shop, a real place on the plate (the owner's idea: "the shop you open by going to a
 // physical shop"). models/shop.glb was built in Blender (art/day03/build_shop.py). Walk up to its counter
-// and the wardrobe opens.
+// and the wardrobe opens (just getting close is enough).
 import * as THREE from '../vendor/three/three.module.js';
 import { GLTFLoader } from '../vendor/three/addons/loaders/GLTFLoader.js';
 import { skyReflections } from './outfits.js';
@@ -10,7 +10,7 @@ export const SHOP = { x: 25, z: -27, scale: 14 };
 SHOP.rot = Math.atan2(-SHOP.x, -SHOP.z);
 // in its own frame (+Z = out of the counter): the walls, the spot you stand on, how near counts as "at the shop"
 const BOX = { cz: -0.3, hx: 7.6, hz: 4.4 };
-const STAND = 7.4, NEAR = 3.4, LEAVE = 7.5;
+const STAND = 7.4, NEAR = 15, LEAVE = 20;       // within NEAR of the building (any side) the shop opens; past LEAVE it can open again
 const toWorld = (lx, lz) => {
   const c = Math.cos(SHOP.rot), s = Math.sin(SHOP.rot);
   return { x: SHOP.x + c * lx + s * lz, z: SHOP.z - s * lx + c * lz };
@@ -21,8 +21,8 @@ export const SHOP_BOX = { ...toWorld(0, BOX.cz), hx: BOX.hx, hz: BOX.hz, rot: SH
 export const SHOP_DOOR = toWorld(0, STAND);
 /** a place for the kitty to wait, beside the doormat */
 export const SHOP_WAIT = toWorld(-6.5, STAND + 3.5);
-export const atShop = (x, z) => Math.hypot(x - SHOP_DOOR.x, z - SHOP_DOOR.z) < NEAR;
-export const leftShop = (x, z) => Math.hypot(x - SHOP_DOOR.x, z - SHOP_DOOR.z) > LEAVE;
+export const atShop = (x, z) => Math.hypot(x - SHOP_BOX.x, z - SHOP_BOX.z) < NEAR;
+export const leftShop = (x, z) => Math.hypot(x - SHOP_BOX.x, z - SHOP_BOX.z) > LEAVE;
 /** Keep a spot the kitty is sent to out of the building (she is big: a wide berth). */
 export function outOfShop(x, z, berth = 11.5) {
   const dx = x - SHOP_BOX.x, dz = z - SHOP_BOX.z, d = Math.hypot(dx, dz);
