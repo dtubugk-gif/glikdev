@@ -6,9 +6,10 @@
 //   - Everything else is a real recording too (sounds/*.mp3, cut from the Sonniss GDC bundle by
 //     art/day03/sounds/build_sounds.py): the token's ting, coins and a happy sting when you buy, cloth and a pop
 //     when she puts something on, the shop opening and closing, soft pats for paws, your steps and the toy
-//     landing, a whoosh for her swats, kibble crunches, button clicks, the felt mouse's squeak, and a meadow
-//     (birds, insects, wind in the grass) looping quietly underneath.
+//     landing, a whoosh for her swats, kibble crunches, button clicks and the felt mouse's squeak.
 //     Until a recording has loaded (or if it cannot), the synthesised version of that sound plays instead.
+//   - Underneath plays the game's own music (sounds/music.mp3: an original tune written and synthesised by
+//     tools/gamemusic.mjs), looping quietly with no seam. If it cannot load there is simply no music.
 // Sounds from her get quieter the further she is from the camera and sit left or right where she is on screen.
 import * as S from './kittysound.js';
 
@@ -21,15 +22,27 @@ const FILES = {
   // her voice: real cats (the owner's meow recording; a public-domain purr from Wikimedia Commons)
   meow: ['sounds/meow1.mp3', 'sounds/meow2.mp3', 'sounds/meow3.mp3'], trill: ['sounds/trill.mp3'], chirp: ['sounds/chirp.mp3'],
   purr: ['sounds/purr.mp3'],
-  meadow: ['sounds/meadow.mp3'],
+  music: ['sounds/music.mp3'],
 };
+
+/** The music file holds the tune and then its first two seconds again; looping from `start` for `seconds`
+ *  (24 bars at 84 bpm) lands on the same sound at both ends, whatever padding the MP3 decoder adds. */
+export const MUSIC = { start: 0.5, seconds: 24 * 4 * 60 / 84, level: 0.5 };
 
 /** @param {{url?:(path:string)=>string}} [o]  url: adds the build stamp to a file path */
 export function createKittyAudio(o = {}) {
-  let ctx = null, master = null, bufs = null, makers = null, purring = null, n = 0, muted = false, bed = null;
+  let ctx = null, master = null, musicBus = null, bufs = null, makers = null, purring = null, n = 0, muted = false, bed = null;
   const rec = {};                                          // name -> [AudioBuffer]: the recordings that have loaded
   const LEVEL = 0.62;
   const url = o.url || ((p) => p);
+
+  // nothing keeps playing behind a hidden page (another tab, the home screen, a locked phone)
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => {
+      if (!ctx) return;
+      if (document.hidden) ctx.suspend(); else ctx.resume();
+    });
+  }
 
   function unlock() {
     if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return; }
@@ -42,6 +55,10 @@ export function createKittyAudio(o = {}) {
     const comp = ctx.createDynamicsCompressor();
     comp.threshold.value = -16; comp.knee.value = 14; comp.ratio.value = 3; comp.attack.value = 0.004; comp.release.value = 0.18;
     master.connect(comp).connect(ctx.destination);
+    // the music goes round the compressor, so a burst of effects never makes it pump
+    musicBus = ctx.createGain();
+    musicBus.gain.value = muted ? 0 : LEVEL;
+    musicBus.connect(ctx.destination);
     const sr = ctx.sampleRate;
     const make = (f) => { const b = ctx.createBuffer(1, f.length, sr); b.copyToChannel(f, 0); return b; };
     const many = (fn, k) => Array.from({ length: k }, (_, v) => make(fn(sr, v)));
@@ -60,7 +77,7 @@ export function createKittyAudio(o = {}) {
     const order = ['bell', 'trill', 'purr', 'meow', 'chirp', 'mew', 'yawn', 'sigh'];
     const warm = () => { const k = order.find((x) => !bufs[x]); if (!k) return; bufs[k] = makers[k](); setTimeout(warm, 40); };
     setTimeout(warm, 60);
-    // the recordings: fetched and decoded in the background, small ones first, the meadow last
+    // the recordings: fetched and decoded in the background, small ones first, the music last
     (async () => {
       for (const [name, paths] of Object.entries(FILES)) {
         try {
@@ -71,40 +88,28 @@ export function createKittyAudio(o = {}) {
             list.push(await ctx.decodeAudioData(await r.arrayBuffer()));
           }
           rec[name] = list;
-          if (name === 'meadow') startBed(seamless(list[0]), 0.5);
+          if (name === 'music') startMusic(list[0]);
         } catch (err) {
-          console.warn('Glikdev: a sound did not load, using its stand-in', name, err);
-          if (name === 'meadow') startBed(make(S.wind(sr, 9)), 0.16);
+          console.warn(name === 'music' ? 'Glikdev: the music did not load' : 'Glikdev: a sound did not load, using its stand-in', name, err);
         }
       }
     })();
   }
 
-  /** A loop with no seam: the recording's last second is folded back over its first (MP3s also carry a few
-   *  milliseconds of padding at both ends, which are cut away first). */
-  function seamless(b) {
-    const sr = b.sampleRate, pad = Math.floor(sr * 0.06), over = Math.floor(sr * 1.2);
-    const src = b.getChannelData(0);
-    const n2 = src.length - 2 * pad - over;
-    if (n2 < sr * 3) return b;
-    const out = ctx.createBuffer(1, n2, sr);
-    const d = out.getChannelData(0);
-    for (let i = 0; i < n2; i++) d[i] = src[pad + i];
-    for (let i = 0; i < over; i++) {
-      const k = i / over;
-      d[i] = src[pad + i] * Math.sqrt(k) + src[pad + n2 + i] * Math.sqrt(1 - k);
-    }
-    return out;
-  }
-  function startBed(buffer, level) {
+  /** The music, round and round: it fades in over three seconds, then loops inside the file (see MUSIC). */
+  function startMusic(buffer) {
     if (bed) return;
     const src = ctx.createBufferSource();
     src.buffer = buffer;
     src.loop = true;
+    if (buffer.duration >= MUSIC.start + MUSIC.seconds + 0.05) {
+      src.loopStart = MUSIC.start;
+      src.loopEnd = MUSIC.start + MUSIC.seconds;
+    }
     const g = ctx.createGain();
-    g.gain.value = 0;
-    g.gain.linearRampToValueAtTime(level, ctx.currentTime + 4);
-    src.connect(g).connect(master);
+    g.gain.setValueAtTime(0, ctx.currentTime);
+    g.gain.linearRampToValueAtTime(MUSIC.level, ctx.currentTime + 3);
+    src.connect(g).connect(musicBus);
     src.start();
     bed = src;
   }
@@ -155,6 +160,7 @@ export function createKittyAudio(o = {}) {
     setMuted(m) {
       muted = m;
       if (master) master.gain.setTargetAtTime(m ? 0 : LEVEL, ctx.currentTime, 0.05);
+      if (musicBus) musicBus.gain.setTargetAtTime(m ? 0 : LEVEL, ctx.currentTime, 0.05);
     },
     /**
      * feed it events (the kitty's, and the game's); `near` is 0-1 (1 = close to the camera),
