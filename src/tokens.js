@@ -6,8 +6,8 @@
 //   she finishes a bowl of food                 +3
 //   she bats the yarn (three times a game)      +1 each
 //   she comes when you call her                 +1 (at most once every 20 s)
-// Tokens buy things for her to wear. One thing per slot (hat, face, neck, back); what she owns and what
-// she has on stay on this device.
+// Tokens buy things for her to wear, and toys. One thing per slot (hat, face, neck, back, and the toy she
+// plays with); what she owns and what is out stay on this device.
 
 /** What the shop sells. `node` is the object's name in models/outfits.glb, `fit` the fitting frame it uses. */
 export const ITEMS = [
@@ -19,8 +19,14 @@ export const ITEMS = [
   { id: 'wizardhat', name: 'Wizard hat', node: 'WizardHat', slot: 'hat', fit: 'hat', price: 20 },
   { id: 'wings', name: 'Angel wings', node: 'Wings', slot: 'back', fit: 'back', price: 30 },
   { id: 'crown', name: 'Royal crown', node: 'Crown', slot: 'hat', fit: 'hat', price: 40 },
+  // toys: the one that is out takes the yarn ball's place in her game (roll: it rolls like a ball;
+  // bounce: how much of its fall it keeps; jingle: it rings when it lands or is batted)
+  { id: 'toyball', name: 'Rainbow ball', node: 'ToyBall', slot: 'toy', price: 6, roll: true, bounce: 0.66 },
+  { id: 'toymouse', name: 'Felt mouse', node: 'ToyMouse', slot: 'toy', price: 10, roll: false, bounce: 0.2 },
+  { id: 'toyjingle', name: 'Jingle ball', node: 'ToyJingle', slot: 'toy', price: 14, roll: true, bounce: 0.5, jingle: true },
+  { id: 'toyfish', name: 'Plush fish', node: 'ToyFish', slot: 'toy', price: 18, roll: false, bounce: 0.25 },
 ];
-export const SLOTS = ['hat', 'face', 'neck', 'back'];
+export const SLOTS = ['hat', 'face', 'neck', 'back', 'toy'];
 export const itemById = (id) => ITEMS.find((i) => i.id === id) || null;
 
 export const CALL_COOLDOWN = 20;

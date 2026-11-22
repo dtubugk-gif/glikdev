@@ -13,7 +13,9 @@ const clamp01 = (x) => Math.min(1, Math.max(0, x));
  * Something for the gold, the jewels and the lenses to reflect: the game's own daylight (blue sky, a pale
  * horizon, the grey plate below and a bright sun), prefiltered once. Only the outfits use it.
  */
-function skyReflections(renderer) {
+let skyTex = null;
+export function skyReflections(renderer) {
+  if (skyTex) return skyTex;
   const sky = new THREE.Scene();
   const geo = new THREE.SphereGeometry(50, 32, 16);
   const col = new Float32Array(geo.attributes.position.count * 3);
@@ -30,10 +32,10 @@ function skyReflections(renderer) {
   sun.position.set(-22, 34, 18);
   sky.add(sun);
   const pm = new THREE.PMREMGenerator(renderer);
-  const tex = pm.fromScene(sky, 0.03).texture;
+  skyTex = pm.fromScene(sky, 0.03).texture;
   pm.dispose();
   geo.dispose();
-  return tex;
+  return skyTex;
 }
 
 /**
@@ -81,7 +83,7 @@ export async function createWardrobe(o) {
     h.removeFromParent();
     h.clear();
     const it = itemById(wearing[slot]);
-    const f = it && fit[cat]?.[it.fit];
+    const f = it && it.fit && fit[cat]?.[it.fit];           // toys are not worn: main.js hands them to the kitty
     if (!it || !f) return;
     frame.compose(p.fromArray(f.p), q.fromArray(f.q), s3.fromArray(f.s));
     if (!o.kitty.attach(f.bone, h, frame)) return;
@@ -105,6 +107,8 @@ export async function createWardrobe(o) {
 
   return {
     token,
+    /** the model of a shop item (a toy, to hand to the kitty) */
+    part: (id) => parts[id] || null,
     /** @param {{hat,face,neck,back}} w item ids or null; `t` = now on the kitty's clock (for the pop-in) */
     dress(w, t = -10) {
       for (const slot of SLOTS) {

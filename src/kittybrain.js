@@ -356,7 +356,7 @@ export function createBrain(o = {}) {
         y.y = YARN.radius;
         const hit = -y.vy;
         if (hit > 5) {                                   // a bounce: loses height and a little speed
-          y.vy = hit * YARN.bounce;
+          y.vy = hit * (b.toyBounce ?? YARN.bounce);       // Day 3: each toy has its own bounce
           y.vx *= 0.82; y.vz *= 0.82;
           emit('thud', { x: y.x, z: y.z, soft: hit < 12 });
         } else {                                         // down: rolling from here

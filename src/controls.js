@@ -30,6 +30,7 @@ export class OrbitRig {
     this.az = 0; this.pol = 1.1; this.dist = 50;
     this.goal = { az: 0, pol: 1.1, dist: 50 };
     this.enabled = true;
+    this.moveKeys = true;                             // false once there is a player: WASD and the arrows walk them instead
     this.keys = new Set();
     this.pointers = new Map();
     this.pinchStart = 0;
@@ -149,6 +150,7 @@ export class OrbitRig {
       if (!this.enabled || e.altKey || e.ctrlKey || e.metaKey) return;
       if (e.target && e.target.closest && e.target.closest('dialog, input, textarea, [contenteditable]')) return;
       if (!KEYS.includes(e.code)) return;
+      if (!this.moveKeys && (e.code.startsWith('Arrow') || ['KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(e.code))) return;
       e.preventDefault();
       this.keys.add(e.code);
       this._interact();

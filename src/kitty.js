@@ -294,6 +294,9 @@ export async function createKitty(o) {
 
   // ---------------------------------------------------------------- state
   let brain, mixer, actions, cur, curKey, heartLog, callLog, bowlLog, scriptAt, look, lastSpin;
+  // Day 3: the toy that is out (it takes the yarn's place): does it roll, how well does it bounce
+  const toy = { roll: true, bounce: undefined, yaw: 0 };
+  const UP = new THREE.Vector3(0, 1, 0);
   const listeners = [];
   const startOpts = { seed: o.seed ?? 2, ...o.start, viewer: o.viewer, ...(o.needs || {}) };
   const yq = new THREE.Quaternion(), dq = new THREE.Quaternion(), axis = new THREE.Vector3();
@@ -307,6 +310,7 @@ export async function createKitty(o) {
 
   function reset() {
     brain = createBrain(startOpts);
+    brain.toyBounce = toy.bounce;
     newMixer();
     heartLog = []; callLog = null; bowlLog = null; scriptAt = 0; lastSpin = 0;
     look = { yaw: 0, pitch: 0, w: 0 };
@@ -420,7 +424,12 @@ export async function createKitty(o) {
     if (y) {
       const d = y.spin - lastSpin;
       lastSpin = y.spin;
-      if (d) { axis.set(y.ax, 0, y.az).normalize(); dq.setFromAxisAngle(axis, d); yq.premultiply(dq); }
+      if (!toy.roll) {                           // a mouse or a fish slides nose first, and wriggles as it goes
+        const v = Math.hypot(y.vx, y.vz);
+        if (v > 0.4) toy.yaw = Math.atan2(y.vx, y.vz);
+        else if (y.held && Math.hypot(y.hx - y.x, y.hz - y.z) > 0.05) toy.yaw = Math.atan2(y.hx - y.x, y.hz - y.z);
+        yq.setFromAxisAngle(UP, toy.yaw + 0.22 * Math.sin(y.spin * 0.9) * Math.min(1, v / 3));
+      } else if (d) { axis.set(y.ax, 0, y.az).normalize(); dq.setFromAxisAngle(axis, d); yq.premultiply(dq); }
     }
     for (const e of brain.drain()) onEvent(e);
   }
@@ -616,6 +625,23 @@ export async function createKitty(o) {
       obj.matrix.multiplyMatrices(b.inverse, frame);
       b.bone.add(obj);
       return true;
+    },
+    /**
+     * Day 3: the toy she plays with. `obj` takes the yarn ball's place (null = the yarn again);
+     * cfg.roll false = it slides nose first instead of rolling; cfg.bounce = how well it bounces.
+     */
+    setToy(obj, cfg = {}) {
+      const next = obj || yarn;
+      if (yarnRoot.children[0] !== next) {
+        yarnRoot.clear();
+        next.position.set(0, 0, 0);
+        yarnRoot.add(next);
+        shadowy(yarnRoot);
+        yq.identity();
+      }
+      toy.roll = obj ? cfg.roll !== false : true;
+      toy.bounce = obj ? cfg.bounce : undefined;
+      brain.toyBounce = toy.bounce;
     },
     /** her own collar and bell (the ginger kitty's): hidden under a bow tie or a scarf */
     setCollar(visible) {

@@ -18,7 +18,7 @@ test('every shop item is well formed and has its picture', () => {
     ids.add(it.id);
     assert.ok(SLOTS.includes(it.slot), `${it.id} slot`);
     assert.ok(Number.isInteger(it.price) && it.price > 0, `${it.id} price`);
-    assert.ok(it.name && it.node && it.fit);
+    assert.ok(it.name && it.node && (it.fit || it.slot === 'toy'));
     assert.ok(existsSync(join(GAME, 'models', 'shop', `${it.id}.webp`)), `${it.id}.webp`);
   }
   assert.ok(existsSync(join(GAME, 'models', 'shop', 'token.webp')));
@@ -28,7 +28,7 @@ test('every shop item is well formed and has its picture', () => {
 test('the fit file places every kind of piece on every cat', () => {
   const fit = JSON.parse(readFileSync(join(GAME, 'models', 'outfits_fit.json'), 'utf8'));
   for (const cat of ['ginger', 'realistic', 'tabby']) {
-    for (const kind of new Set(ITEMS.map((i) => i.fit))) {
+    for (const kind of new Set(ITEMS.map((i) => i.fit).filter(Boolean))) {
       const f = fit[cat]?.[kind];
       assert.ok(f, `${cat} ${kind}`);
       assert.ok(['head', 'neck', 'chest', 'spine'].includes(f.bone));
@@ -101,7 +101,7 @@ test('wallet: earn, buy (puts it on), one thing per slot, take off', () => {
   assert.equal(w.buy('bowtie'), false, 'already hers');
   assert.equal(w.buy('strawhat'), true);
   assert.equal(w.tokens, 0);
-  assert.deepEqual(w.wearing, { hat: 'strawhat', face: null, neck: 'bowtie', back: null });
+  assert.deepEqual(w.wearing, { hat: 'strawhat', face: null, neck: 'bowtie', back: null, toy: null });
   assert.equal(w.wear('crown'), false, 'not hers yet');
   w.earn(10);
   assert.equal(w.buy('flowercrown'), true);
@@ -137,7 +137,7 @@ test('wallet: saving and loading, and a broken save never throws', () => {
 });
 
 test('the Day 3 demos exist and only dress her in real pieces', () => {
-  for (const d of ['kittytoken', 'kittydress']) { assert.ok(DEMOS.includes(d)); assert.ok(KITTY_DEMOS[d]); }
+  for (const d of ['kittytoken', 'kittydress', 'shopwalk', 'kittytoy']) { assert.ok(DEMOS.includes(d)); assert.ok(KITTY_DEMOS[d]); }
   for (const s of KITTY_DEMOS.kittydress.script) {
     if (s.type !== 'wear') continue;
     if (s.id === null) assert.ok(SLOTS.includes(s.slot)); else assert.ok(itemById(s.id), s.id);

@@ -283,7 +283,8 @@ async function start() {
       return createKitty({ ...first, ...catOpts('ginger') });
     });
     const focus = new THREE.Vector3();
-    world.setShadowFocus(() => kitty.focus(focus));
+    // the sun's shadows follow her, or the middle between her and you
+    world.setShadowFocus(() => (player ? focus.set((player.x + kitty.brain.x) / 2, 0, (player.z + kitty.brain.z) / 2) : kitty.focus(focus)), 22);
     if (live) {
       audio = createKittyAudio();
       audio.setMuted(care.muted);
@@ -294,6 +295,47 @@ async function start() {
       });
     }
   } catch (err) { console.warn('Glikdev: the kitty did not load', err); kitty = null; }
+
+  // ------------------------------------------------------------ the shop and you (Day 3: the owner's ideas)
+  let player = null, store = null, town = null;
+  const pd = kd ? kd.player : null;                        // a recording shows the player only when its demo says so
+  try { town = await import('./town.js'); } catch (err) { console.warn('Glikdev: the shop did not load', err); }
+  const building = town ? town.createShop({ scene: world.scene, url: stamped('models/shop.glb'), renderer })
+    .then((s) => { store = s; }).catch((err) => { console.warn('Glikdev: the shop did not load', err); town = null; }) : null;
+  if (!live) await building;                               // recordings: it is there from the first frame
+  if (kitty && (live || pd)) {
+    try {
+      const { createPlayer } = await import('./player.js');
+      player = await createPlayer({ scene: world.scene, url: stamped('models/player.glb'),
+        start: pd ? pd.start : { x: 6.5, z: 5.5, heading: home.az },
+        boxes: town ? [town.SHOP_BOX] : [],
+        circles: [() => ({ x: kitty.brain.x, z: kitty.brain.z, r: 2.4 })],
+        script: pd ? pd.script || [] : null });
+      rig.moveKeys = false;
+    } catch (err) { console.warn('Glikdev: the player did not load', err); player = null; }
+  }
+  const kittyBusy = () => { const b = kitty.brain; return ['eat', 'pounce', 'bat'].includes(b.mode) || b.goal === 'eat' || b.goal === 'yarn' || !!b.yarn?.held; };
+  let wantShop = false, shopArmed = true, openShop = () => {};
+  /** you walk there; she comes along (unless she is busy), to a spot beside where you are going */
+  function walkTo(x, z) {
+    wantShop = false;
+    player.goTo(x, z);
+    const b = kitty.brain;
+    if (kittyBusy() || Math.hypot(x - b.x, z - b.z) < 13) return;
+    const dx = x - player.x, dz = z - player.z, d = Math.hypot(dx, dz) || 1;
+    const spot = { x: x - (dz / d) * 5.5 - (dx / d) * 2, z: z + (dx / d) * 5.5 - (dz / d) * 2 };
+    const p = town ? town.outOfShop(spot.x, spot.z) : spot;
+    kitty.call(p.x, p.z);
+  }
+  /** off to the shop: its doormat; the wardrobe opens when you get there */
+  function goShop() {
+    if (!player || !town) { openShop(); return; }
+    if (town.atShop(player.x, player.z)) { player.faceTo(town.SHOP.x, town.SHOP.z); openShop(); return; }
+    player.goTo(town.SHOP_DOOR.x, town.SHOP_DOOR.z);
+    wantShop = true;
+    if (!kittyBusy()) kitty.call(town.SHOP_WAIT.x, town.SHOP_WAIT.z);
+    flashHint('Off to the shop!', 2600);
+  }
   // ------------------------------------------------------------ friendship tokens and her wardrobe (Day 3, idea by @Kowffe)
   // filming: ?have=6 starts the counter at 6, so it keeps counting up from one clip of a Short to the next
   const filmHave = Math.max(0, Math.floor(Number(params.get('have')) || 0));
@@ -303,18 +345,27 @@ async function start() {
   const tokenHead = new THREE.Vector3();
   const tokensEl = $('tokens'), tokensCount = $('tokens-count'), tokensIcon = $('tokens-icon');
   const showTokens = !!kitty && (filmTokens || (showUI && !demo && !short));
+  /** the toy that is out takes the yarn's place in her game */
+  function applyToy() {
+    if (!wardrobe || !kitty) return;
+    const it = itemById({ ...wallet.wearing, ...filmWear }.toy);
+    kitty.setToy(it ? wardrobe.part(it.id) : null, it || {});
+  }
+  const toyOut = () => itemById({ ...wallet.wearing, ...filmWear }.toy);
   if (kitty) {
     kitty.on((e) => {
       if (e.type === 'reset') {                            // a recording starting over
         wallet = freshWallet(); rewardState = {}; filmWear = { ...paramWear };
         tokenFX?.reset();
         wardrobe?.dress({ ...wallet.wearing, ...filmWear });
+        applyToy();
         return;
       }
+      if ((e.type === 'thud' || e.type === 'swat') && toyOut()?.jingle) audio?.event({ type: 'jingle' });
       if (e.type === 'script' && e.what.type === 'wear') { // filming: straight onto her, no shopping
         const it = itemById(e.what.id);
         const slot = it ? it.slot : e.what.slot;
-        if (slot) { filmWear[slot] = it ? it.id : null; wardrobe?.dress({ ...wallet.wearing, ...filmWear }, e.t); }
+        if (slot) { filmWear[slot] = it ? it.id : null; wardrobe?.dress({ ...wallet.wearing, ...filmWear }, e.t); applyToy(); }
         return;
       }
       const n = rewardFor(e, rewardState);
@@ -331,6 +382,7 @@ async function start() {
         wardrobe = await createWardrobe({ kitty, glbUrl: stamped('models/outfits.glb'), fitUrl: stamped('models/outfits_fit.json'), cat: care.cat, renderer });
         tokenFX = createTokenFX({ scene: world.scene, camera, token: wardrobe.token });
         wardrobe.dress({ ...wallet.wearing, ...filmWear });
+        applyToy();
       } catch (err) { console.warn('Glikdev: the wardrobe did not load', err); wardrobe = null; tokenFX = null; }
     })();
     if (!live) await dressing;                             // recordings: every frame has it; live play does not wait for it
@@ -355,7 +407,7 @@ async function start() {
       if (shownTokens !== null && n > shownTokens) bumpAt = t;
       shownTokens = n;
       tokensCount.textContent = String(n);
-      tokensEl.setAttribute('aria-label', `Friendship tokens: ${n}. Open the wardrobe`);
+      tokensEl.setAttribute('aria-label', `Friendship tokens: ${n}. Go to the shop`);
     }
     const a = (t - bumpAt) / 0.32;
     tokensIcon.style.transform = a >= 0 && a < 1 ? `scale(${(1 + 0.34 * Math.sin(a * Math.PI)).toFixed(3)})` : '';
@@ -364,7 +416,8 @@ async function start() {
   const kittyState = () => {
     const b = kitty.brain, h = kitty.headPosition();
     return { x: b.x, z: b.z, heading: b.heading, head: [h.x, h.y, h.z],
-      bowl: b.bowl ? { x: b.bowl.x, z: b.bowl.z } : null, yarn: b.yarn ? { x: b.yarn.x, z: b.yarn.z } : null };
+      bowl: b.bowl ? { x: b.bowl.x, z: b.bowl.z } : null, yarn: b.yarn ? { x: b.yarn.x, z: b.yarn.z } : null,
+      player: player ? { x: player.x, z: player.z } : null };
   };
 
   // taps: on the kitty = pet her; on the ground = call her there (a drag or a pinch is not a tap)
@@ -452,8 +505,10 @@ async function start() {
       const what = kitty.pick(r);
       if (what === 'kitty') { kitty.pet(); dismissHint(); return; }
       if (what === 'yarn') { kitty.play(); dismissHint(); return; }
+      if (store && store.pick(r)) { goShop(); dismissHint(); return; }
       if (r.intersectPlane(groundPlane, hit) && Math.abs(hit.x) < PLATE.half - 4 && Math.abs(hit.z) < PLATE.half - 4) {
-        kitty.call(hit.x, hit.z);
+        if (player) { backToHer(); walkTo(hit.x, hit.z); }
+        else { const p = town ? town.outOfShop(hit.x, hit.z) : hit; kitty.call(p.x, p.z); }
         dismissHint();
       }
     };
@@ -462,8 +517,9 @@ async function start() {
     if (!coarse) {
       canvas.addEventListener('pointermove', (e) => {
         if (e.buttons || carry) return;
-        const what = kitty.pick(rayAt(e.clientX, e.clientY));
-        canvas.style.cursor = what === 'yarn' ? 'grab' : what ? 'pointer' : '';
+        const r = rayAt(e.clientX, e.clientY);
+        const what = kitty.pick(r);
+        canvas.style.cursor = what === 'yarn' ? 'grab' : what || (store && store.pick(r)) ? 'pointer' : '';
       });
     }
   }
@@ -480,11 +536,36 @@ async function start() {
   }
   onFree = () => {
     if (!kitty || demo || short || !showUI) return;
-    followName.textContent = care.name;
+    followName.textContent = player ? 'you' : care.name;
     followBtn.hidden = false;
     dismissHint();
   };
   followBtn.addEventListener('click', () => { backToHer(); canvas.focus?.(); });
+  // WASD and the arrow keys walk you (as seen from the camera)
+  const MOVE = { KeyW: [0, 1], ArrowUp: [0, 1], KeyS: [0, -1], ArrowDown: [0, -1], KeyA: [-1, 0], ArrowLeft: [-1, 0], KeyD: [1, 0], ArrowRight: [1, 0] };
+  const held = new Set();
+  let steering = false;
+  if (player && live) {
+    addEventListener('keydown', (e) => {
+      if (!MOVE[e.code] || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.target?.closest?.('dialog, input, textarea, [contenteditable]')) return;
+      e.preventDefault();
+      held.add(e.code);
+      wantShop = false;
+      backToHer();
+      dismissHint();
+    });
+    addEventListener('keyup', (e) => held.delete(e.code));
+    addEventListener('blur', () => held.clear());
+  }
+  function steerPlayer() {
+    if (!held.size) { if (steering) { steering = false; player.steer(0, 0); } return; }
+    let r = 0, f = 0;
+    for (const k of held) { r += MOVE[k][0]; f += MOVE[k][1]; }
+    const s = Math.sin(rig.az), c = Math.cos(rig.az);       // the camera looks along (-sin az, -cos az); its right is (cos az, -sin az)
+    player.steer(c * r - s * f, -s * r - c * f);
+    steering = true;
+  }
   addEventListener('keydown', (e) => {
     if (e.code !== 'KeyC' || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
     if (e.target?.closest?.('dialog, input, textarea, [contenteditable]')) return;
@@ -494,7 +575,7 @@ async function start() {
   const namer = $('namer'), namerInput = $('namer-input');
   const heartEls = Array.from({ length: 5 }, () => { const i = document.createElement('i'); tagHearts.append(i); return i; });
   let shownHearts = -1, shownHungry = null;
-  function showName(n) { tagName.textContent = n; followName.textContent = n; }
+  function showName(n) { tagName.textContent = n; followName.textContent = player ? 'you' : n; }
   function persist() {
     if (!kitty || !live) return;
     const b = kitty.brain;
@@ -593,7 +674,7 @@ async function start() {
     picker.addEventListener('click', (e) => { if (e.target === picker) picker.close(); });
     picker.addEventListener('close', () => catBtn.focus());
     // ---------------------------------------------------------- the wardrobe: spend tokens, dress her (Day 3)
-    const shop = $('shop'), shopGrid = $('shop-grid'), shopStatus = $('shop-status'), shopHave = $('shop-have');
+    const shop = $('shop'), shopGrid = $('shop-grid'), shopToys = $('shop-toys'), shopItems = $('shop-items'), shopStatus = $('shop-status'), shopHave = $('shop-have');
     const shopCards = ITEMS.map((it) => {
       const b = document.createElement('button');
       b.type = 'button';
@@ -607,7 +688,7 @@ async function start() {
       const tag = document.createElement('span');
       tag.className = 'shop-tag';
       b.append(img, name, tag);
-      shopGrid.append(b);
+      (it.slot === 'toy' ? shopToys : shopGrid).append(b);
       return { it, b, tag };
     });
     const paintShop = () => {
@@ -616,40 +697,45 @@ async function start() {
         const owned = wallet.owns(it.id), on = wallet.isWearing(it.id);
         b.dataset.state = on ? 'on' : owned ? 'owned' : wallet.canBuy(it.id) ? 'buy' : 'dear';
         b.setAttribute('aria-pressed', String(on));
-        tag.textContent = on ? 'Take off' : owned ? 'Wear' : String(it.price);
-        b.setAttribute('aria-label', on ? `${it.name}: she is wearing it. Take it off`
-          : owned ? `${it.name}: hers. Put it on` : `${it.name}: ${it.price} tokens${wallet.canBuy(it.id) ? '. Buy it' : ', not enough yet'}`);
+        const isToy = it.slot === 'toy';
+        tag.textContent = on ? (isToy ? 'Put away' : 'Take off') : owned ? (isToy ? 'Use' : 'Wear') : String(it.price);
+        b.setAttribute('aria-label', on ? (isToy ? `${it.name}: it is out. Put it away` : `${it.name}: she is wearing it. Take it off`)
+          : owned ? (isToy ? `${it.name}: hers. Play with it` : `${it.name}: hers. Put it on`)
+            : `${it.name}: ${it.price} tokens${wallet.canBuy(it.id) ? '. Buy it' : ', not enough yet'}`);
       }
     };
     const dressNow = (sound) => {
       saveWallet(wallet);
       for (const k of Object.keys(filmWear)) delete filmWear[k];   // what she chose in the shop wins over ?wear=
       wardrobe?.dress(wallet.wearing, kitty.t);
+      applyToy();
       audio?.unlock();
       audio?.event({ type: sound });
       paintShop();
       shop.close();
       backToHer();
     };
-    tokensEl.addEventListener('click', () => {
+    openShop = () => {
+      if (shop.open) return;
       shopStatus.textContent = '';
       paintShop();
       if (typeof shop.showModal === 'function') shop.showModal(); else shop.setAttribute('open', '');
       dismissHint();
-    });
-    shopGrid.addEventListener('click', (e) => {
+    };
+    tokensEl.addEventListener('click', () => { audio?.unlock(); goShop(); });
+    shopItems.addEventListener('click', (e) => {
       const card = e.target.closest('.shop-card');
       if (!card) return;
       const it = itemById(card.dataset.item);
       if (wallet.isWearing(it.id)) { wallet.takeOff(it.slot); dressNow('wear'); return; }
-      if (wallet.owns(it.id)) { wallet.wear(it.id); dressNow('wear'); return; }
-      if (wallet.buy(it.id)) { dressNow('buy'); return; }
+      if (wallet.owns(it.id)) { wallet.wear(it.id); dressNow('wear'); if (it.slot === 'toy') setTimeout(() => kitty.play(), 500); return; }
+      if (wallet.buy(it.id)) { dressNow('buy'); if (it.slot === 'toy') setTimeout(() => kitty.play(), 500); return; }
       const need = it.price - wallet.tokens;
       shopStatus.textContent = `${need} more token${need === 1 ? '' : 's'} for the ${it.name.toLowerCase()}. Pet her, feed her or play with her to earn them.`;
     });
     $('shop-close').addEventListener('click', () => shop.close());
     shop.addEventListener('click', (e) => { if (e.target === shop) shop.close(); });
-    shop.addEventListener('close', () => tokensEl.focus());
+    shop.addEventListener('close', () => { tokensEl.focus(); canvas.focus?.(); });
     flashHint = (text, ms) => {
       clearTimeout(yarnHintTimer);
       hintEl.textContent = text;
@@ -692,8 +778,10 @@ async function start() {
 
   // hint, until the first tap that does something
   if (showUI && !demo && !short) {
-    hintEl.textContent = kitty
-      ? (coarse ? 'Tap the ground to call the kitty · Tap her to pet her · Two fingers to move'
+    hintEl.textContent = kitty && player
+      ? (coarse ? 'Tap the ground to walk there · Tap your kitty to pet her · Walk to the shop to spend tokens'
+        : 'Click the ground or use WASD to walk · Click your kitty to pet her · Walk to the shop to spend tokens')
+      : kitty ? (coarse ? 'Tap the ground to call the kitty · Tap her to pet her · Two fingers to move'
         : 'Click the ground to call the kitty · Click her to pet her · Drag to look around · Right-drag or WASD to move')
       : (coarse ? 'Drag to look around · Two fingers to move and zoom' : 'Drag to look around · Right-drag or WASD to move · Scroll to zoom');
     hintEl.hidden = false;
@@ -717,7 +805,7 @@ async function start() {
       yarnHinted = true;
       setTimeout(() => {
         if (thrownOnce) return;
-        hintEl.textContent = 'Drag the yarn ball and let go to throw it';
+        hintEl.textContent = toyOut() ? 'Drag the toy and let go to throw it' : 'Drag the yarn ball and let go to throw it';
         hintEl.dataset.yarn = '1';
         hintEl.hidden = false;
         hintEl.classList.remove('is-gone');
@@ -732,8 +820,29 @@ async function start() {
   function step(t, dt) {
     let ks = 0;
     if (kitty) ks = demo ? kitty.simulateTo(t) : kitty.advance(dt, camera.position);
-    if (kitty && !demo && follow) {                        // the camera keeps her (and what she is after) in the middle
-      const k = 1 - Math.exp(-dt * 1.8), f = kitty.interest(interest);
+    if (player) {
+      if (demo) player.simulateTo(t);
+      else {
+        steerPlayer();
+        player.advance(dt);
+        // at the shop's doormat: the wardrobe opens (once per visit)
+        if (town && shopArmed && town.atShop(player.x, player.z) && (wantShop || !player.walker.moving())) {
+          shopArmed = false; wantShop = false;
+          player.stop();
+          player.faceTo(town.SHOP.x, town.SHOP.z);
+          openShop();
+        } else if (town && !shopArmed && town.leftShop(player.x, player.z)) shopArmed = true;
+      }
+    }
+    if (kitty && !demo && follow) {                        // the camera keeps you in the middle, leaning toward her when she is near
+      const f = kitty.interest(interest);
+      if (player) {
+        // (more toward her while she is at her bowl or after a toy, so the game stays in the picture)
+        const d = Math.hypot(f.x - player.x, f.z - player.z), game = kittyBusy();
+        const w = d < (game ? 60 : 30) ? (game ? 0.62 : 0.36) : 0;
+        f.set(player.x + (f.x - player.x) * w, 0, player.z + (f.z - player.z) * w);
+      }
+      const k = 1 - Math.exp(-dt * (player ? 2.6 : 1.8));
       rig.target[0] += (f.x - rig.target[0]) * k;
       rig.target[2] += (f.z - rig.target[2]) * k;
     }
@@ -765,7 +874,7 @@ async function start() {
     const dt = Math.min(0.05, Math.max(0, (ts - last) / 1000));
     if (dialog.open) { last = ts; return; }                // nothing to see behind the Day log
     // when nobody is touching the camera, 30 fps is plenty
-    if (!demo && rig.idle() && !(kitty && (kitty.busy() || tokenFX?.busy() || wardrobe?.busy(kitty.t)))) { skip = !skip; if (skip) return; }
+    if (!demo && rig.idle() && !player?.busy() && !(kitty && (kitty.busy() || tokenFX?.busy() || wardrobe?.busy(kitty.t)))) { skip = !skip; if (skip) return; }
     last = ts;
     step((ts - t0) / 1000, dt);
   }
@@ -779,7 +888,7 @@ async function start() {
   const v = new THREE.Vector3();
   window.__glikdev = {
     world, rig, home, daysLoaded, build: BUILD, kitty,
-    get wallet() { return wallet; }, get wardrobe() { return wardrobe; },
+    get wallet() { return wallet; }, get wardrobe() { return wardrobe; }, get player() { return player; }, get store() { return store; },
     /** Screen height fraction (from the top) of the visible horizon: the plate's far edge. */
     horizonFrac() {
       camera.updateMatrixWorld();
