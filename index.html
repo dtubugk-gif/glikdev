@@ -16,40 +16,40 @@
   <meta property="og:image:height" content="900">
   <meta property="og:image:alt" content="A big ginger tabby kitty in a gold crown, a bow tie and angel wings sits on a grey baseplate under a daylight sky">
   <meta name="twitter:card" content="summary_large_image">
-  <link rel="icon" href="logo.svg?v=34a73c2e8274" type="image/svg+xml">
+  <link rel="icon" href="logo.svg?v=0ed71b832ace" type="image/svg+xml">
   <link rel="preload" href="fonts/fredoka-700.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/rubik-latin.woff2" as="font" type="font/woff2" crossorigin>
   <!-- Cache safety: every module is loaded with the same ?v= build stamp (tools/deploy.mjs rewrites
-       "?v=34a73c2e8274" everywhere in this file). New modules must be added to this import map. -->
+       "?v=0ed71b832ace" everywhere in this file). New modules must be added to this import map. -->
   <script type="importmap">
   {
     "imports": {
-      "./src/main.js": "./src/main.js?v=34a73c2e8274",
-      "./src/daylog.js": "./src/daylog.js?v=34a73c2e8274",
-      "./src/demo.js": "./src/demo.js?v=34a73c2e8274",
-      "./src/world.js": "./src/world.js?v=34a73c2e8274",
-      "./src/controls.js": "./src/controls.js?v=34a73c2e8274",
-      "./src/kitty.js": "./src/kitty.js?v=34a73c2e8274",
-      "./src/kittybrain.js": "./src/kittybrain.js?v=34a73c2e8274",
-      "./src/kittysound.js": "./src/kittysound.js?v=34a73c2e8274",
-      "./src/kittyaudio.js": "./src/kittyaudio.js?v=34a73c2e8274",
-      "./src/tokens.js": "./src/tokens.js?v=34a73c2e8274",
-      "./src/outfits.js": "./src/outfits.js?v=34a73c2e8274",
-      "./vendor/three/three.module.js": "./vendor/three/three.module.js?v=34a73c2e8274",
-      "./vendor/three/addons/loaders/GLTFLoader.js": "./vendor/three/addons/loaders/GLTFLoader.js?v=34a73c2e8274",
-      "./vendor/three/addons/utils/BufferGeometryUtils.js": "./vendor/three/addons/utils/BufferGeometryUtils.js?v=34a73c2e8274"
+      "./src/main.js": "./src/main.js?v=0ed71b832ace",
+      "./src/daylog.js": "./src/daylog.js?v=0ed71b832ace",
+      "./src/demo.js": "./src/demo.js?v=0ed71b832ace",
+      "./src/world.js": "./src/world.js?v=0ed71b832ace",
+      "./src/controls.js": "./src/controls.js?v=0ed71b832ace",
+      "./src/kitty.js": "./src/kitty.js?v=0ed71b832ace",
+      "./src/kittybrain.js": "./src/kittybrain.js?v=0ed71b832ace",
+      "./src/kittysound.js": "./src/kittysound.js?v=0ed71b832ace",
+      "./src/kittyaudio.js": "./src/kittyaudio.js?v=0ed71b832ace",
+      "./src/tokens.js": "./src/tokens.js?v=0ed71b832ace",
+      "./src/outfits.js": "./src/outfits.js?v=0ed71b832ace",
+      "./vendor/three/three.module.js": "./vendor/three/three.module.js?v=0ed71b832ace",
+      "./vendor/three/addons/loaders/GLTFLoader.js": "./vendor/three/addons/loaders/GLTFLoader.js?v=0ed71b832ace",
+      "./vendor/three/addons/utils/BufferGeometryUtils.js": "./vendor/three/addons/utils/BufferGeometryUtils.js?v=0ed71b832ace"
     }
   }
   </script>
-  <link rel="modulepreload" href="vendor/three/three.module.js?v=34a73c2e8274">
-  <link rel="stylesheet" href="style.css?v=34a73c2e8274">
-  <script type="module" src="src/main.js?v=34a73c2e8274"></script>
+  <link rel="modulepreload" href="vendor/three/three.module.js?v=0ed71b832ace">
+  <link rel="stylesheet" href="style.css?v=0ed71b832ace">
+  <script type="module" src="src/main.js?v=0ed71b832ace"></script>
 </head>
 <body>
   <!-- shown while the world loads (and as the backdrop when 3D is not available) -->
   <picture class="poster" id="poster">
-    <source media="(orientation: portrait)" srcset="poster-portrait.jpg?v=34a73c2e8274" width="780" height="1688">
-    <img src="poster.jpg?v=34a73c2e8274" alt="" width="1440" height="900" fetchpriority="high" decoding="async">
+    <source media="(orientation: portrait)" srcset="poster-portrait.jpg?v=0ed71b832ace" width="780" height="1688">
+    <img src="poster.jpg?v=0ed71b832ace" alt="" width="1440" height="900" fetchpriority="high" decoding="async">
   </picture>
 
   <canvas id="world" role="img" aria-label="A big ginger tabby kitty in a gold crown, a polka-dot bow tie and white angel wings sits on the grey baseplate under a daylight sky"></canvas>
@@ -57,7 +57,7 @@
   <div class="ui" id="ui">
     <header class="title">
       <p class="eyebrow">
-        <img class="logo" src="logo.svg?v=34a73c2e8274" alt="Glikdev" width="36" height="36">
+        <img class="logo" src="logo.svg?v=0ed71b832ace" alt="Glikdev" width="36" height="36">
         <span>A game built by YouTube comments</span>
       </p>
       <h1><span class="title-day">Day 3.</span> <span class="title-line">Earn tokens. Dress her up.</span></h1>
@@ -112,7 +112,7 @@
 
   <!-- Day 3: her friendship tokens; tap to open the wardrobe -->
   <button class="chip tokens" id="tokens" type="button" aria-haspopup="dialog" aria-controls="shop" aria-label="Friendship tokens: 0. Open the wardrobe" hidden>
-    <img id="tokens-icon" src="models/shop/token.webp?v=34a73c2e8274" alt="" width="34" height="34">
+    <img id="tokens-icon" src="models/shop/token.webp?v=0ed71b832ace" alt="" width="34" height="34">
     <span class="tokens-count" id="tokens-count">0</span>
   </button>
 
@@ -161,7 +161,7 @@
     <div class="namer-card">
       <div class="shop-head">
         <h2 id="shop-title">Wardrobe</h2>
-        <p class="shop-purse"><img src="models/shop/token.webp?v=34a73c2e8274" alt="" width="28" height="28"><span id="shop-have">0</span><span class="shop-purse-label"> tokens</span></p>
+        <p class="shop-purse"><img src="models/shop/token.webp?v=0ed71b832ace" alt="" width="28" height="28"><span id="shop-have">0</span><span class="shop-purse-label"> tokens</span></p>
       </div>
       <p class="namer-sub">Pet her, feed her and play with her to earn friendship tokens.</p>
       <div class="shop-grid" id="shop-grid" role="group" aria-labelledby="shop-title"></div>
