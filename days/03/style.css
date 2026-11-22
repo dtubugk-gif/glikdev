@@ -224,6 +224,46 @@ html.has-care .hint { bottom: calc(var(--gutter) + var(--safe-b) + 66px); }
 .nametag-hearts i { width: 11px; height: 10px; font-style: normal;
   background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 11'%3E%3Cpath d='M6 10.2C2.3 7.6.6 5.6.6 3.5A2.9 2.9 0 0 1 6 2a2.9 2.9 0 0 1 5.4 1.5c0 2.1-1.7 4.1-5.4 6.7Z' fill='%23f06b78' stroke='%232f2620' stroke-width='1.2'/%3E%3C/svg%3E") no-repeat center / contain; }
 .nametag-hearts i.off { filter: grayscale(1) opacity(0.35); }
+/* what is on her mind: a small thought bubble over her name tag (Day 3: she has a mind of her own) */
+.thought {
+  position: fixed; left: 0; top: 0; z-index: 2; margin: 0;
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 28px; padding: 0 11px;
+  border: 2px solid var(--ink); border-radius: 14px;
+  background: #fff; color: var(--ink);
+  font: 600 14px/1 var(--display);
+  white-space: nowrap; pointer-events: none;
+  will-change: transform;
+  transition: opacity 180ms ease;
+}
+.thought[hidden] { display: none; }
+.thought.is-out { opacity: 0; }
+.thought::before, .thought::after {                 /* the two little puffs leading down to her */
+  content: ''; position: absolute; left: 50%; background: #fff; border: 2px solid var(--ink); border-radius: 50%;
+}
+.thought::before { width: 9px; height: 9px; bottom: -9px; margin-left: -12px; }
+.thought::after { width: 5px; height: 5px; bottom: -15px; margin-left: -4px; }
+.thought.is-no { background: var(--ink); color: var(--paper); }
+.thought.is-no::before, .thought.is-no::after { background: var(--ink); }
+.thought.is-want { color: var(--accent); }
+.thought-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+html.no-ui .thought, html.capture-short .thought { display: none !important; }
+/* she is asking for this: the button that answers her beckons */
+.care-btn.is-wanted { border-color: var(--accent); animation: wanted 900ms ease-in-out infinite; }
+@keyframes wanted { 50% { transform: translateY(-3px); box-shadow: 0 6px 0 rgba(47, 38, 32, 0.22); } }
+/* the "her mind" card under her name */
+.mind { margin-top: 18px; padding-top: 14px; border-top: 2px solid var(--line); }
+.mind[hidden] { display: none; }
+.mind h3 { margin: 0 0 8px; }
+.mind-temper { margin: 0 0 10px; font: 700 20px/1.15 var(--display); }
+.mind-list { margin: 0; display: grid; gap: 7px; }
+.mind-list > div { display: grid; grid-template-columns: 6.4em 1fr; gap: 10px; align-items: baseline; }
+.mind-list dt { font: 600 14px/1.3 var(--text); color: var(--ink-3); }
+.mind-list dd { margin: 0; font: 500 15px/1.35 var(--text); color: var(--ink); }
+.mind-dots { display: inline-flex; gap: 4px; vertical-align: middle; }
+.mind-dots i { width: 11px; height: 11px; border-radius: 50%; border: 2px solid var(--ink); background: var(--accent-fill); }
+.mind-dots i.off { background: transparent; }
+.mind-note { margin: 12px 0 0; font-size: 14px; line-height: 1.4; color: var(--ink-2); }
 .nametag-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 html.no-ui .nametag:not(.is-filmed), html.capture-short .nametag:not(.is-filmed) { display: none !important; }
 .nametag.is-filmed { pointer-events: none; font-size: 21px; min-height: 42px; padding: 0 15px; gap: 8px; }
@@ -523,7 +563,8 @@ html.capture-short .bubble { font-size: 16px; max-width: 100%; }
 
 @media (prefers-reduced-motion: reduce) {
   .daylog[open] .sheet { animation: none; }
-  .chip, .hint, .poster, .care-btn, .cat-card, .shop-card { transition: none; }
+  .chip, .hint, .poster, .care-btn, .cat-card, .shop-card, .thought { transition: none; }
+  .care-btn.is-wanted { animation: none; }
   .cat-card.is-loading::before { animation-duration: 2.4s; }
   .care-badge, .nametag.is-filmed.is-pop { animation: none; }
 }
