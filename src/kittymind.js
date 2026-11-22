@@ -144,6 +144,7 @@ export function createMind(o = {}) {
       if (s.asleep) { z -= 2.6 - 1.4 * B; why = 'asleep'; }
       else if (s.mode === 'eat' && s.hunger > 0.25) { z -= 3.2; why = 'eating'; }
       else if (s.playing) { z -= 1.6 + m.play; why = 'playing'; }
+      else if (s.bedtime || m.sleepy >= 0.85) { z -= 3; why = 'tired'; if (s.bedtime) hard = true; }   // off to bed: she is not coming along now
       else if (s.energy < 0.2) why = 'tired';
     } else if (verb === 'pet') {
       while (m.pets.length && s.t - m.pets[0] > 10) m.pets.shift();
@@ -165,6 +166,7 @@ export function createMind(o = {}) {
       why = 'tired';
       if (ask === 'play') z += 2.5;
       if (s.energy < 0.12) hard = true;                    // worn out: she needs her nap
+      if (s.bedtime || m.sleepy >= 0.85) { z -= 2.5; if (s.bedtime) hard = true; }   // it is bedtime
       if (s.hunger > 0.85) { z -= 1.6; why = 'hungry'; }
       else if (s.ateAgo < 12) { z -= 0.9; if (s.energy > 0.4) why = 'justate'; }
     }
@@ -287,6 +289,7 @@ export function createMind(o = {}) {
    */
   m.choose = (s) => {
     const T = temper, B = m.bond;
+    if (m.sleepy >= 0.85 || s.energy < 0.18) { m.decisions++; return 'nap'; }   // sleepy: nothing else will do
     const far = s.friendDist ?? 0;
     const u = {
       sit: 0.45,
@@ -315,6 +318,7 @@ export function createMind(o = {}) {
   m.thought = (s) => {
     if (s.asleep) return null;
     if (m.mood.anger >= 0.45) return { want: 'alone', kind: 'no', text: m.mood.anger >= 0.75 ? 'Leave me alone!' : 'Cross with you' };
+    if (s.bedtime) return { want: 'nap', text: 'Off to bed' };
     if (s.asking === 'cuddle') return { want: 'cuddle', text: 'Wants a cuddle' };
     if (s.asking === 'play') return { want: 'play', text: 'Wants to play' };
     if (s.hunger > 0.7) return { want: 'food', text: 'Hungry' };

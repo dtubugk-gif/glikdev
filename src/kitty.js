@@ -295,6 +295,7 @@ export async function createKitty(o) {
 
   // ---------------------------------------------------------------- state
   let brain, mixer, actions, cur, curKey, heartLog, callLog, bowlLog, scriptAt, look, lastSpin;
+  let bed = null;                                // Day 3: her bed (town.js BED_SPOT), so she stands and lies ON its cushion
   // Day 3: the toy that is out (it takes the yarn's place): does it roll, how well does it bounce
   const toy = { roll: true, bounce: undefined, yaw: 0 };
   const UP = new THREE.Vector3(0, 1, 0);
@@ -313,6 +314,7 @@ export async function createKitty(o) {
     // a recording starts her mind afresh every time it starts over (o.mind is then a function that makes one)
     brain = createBrain({ ...startOpts, mind: typeof o.mind === 'function' ? o.mind() : o.mind || null });
     brain.toyBounce = toy.bounce;
+    brain.bed = bed;
     newMixer();
     heartLog = []; callLog = null; bowlLog = null; scriptAt = 0; lastSpin = 0;
     look = { yaw: 0, pitch: 0, w: 0 };
@@ -367,7 +369,12 @@ export async function createKitty(o) {
   }
 
   function place() {
-    root.position.set(brain.x, 0, brain.z);
+    let lift = 0;                                // on her bed she is up on the cushion; the step up is eased over the bolster
+    if (bed) {
+      const d = Math.hypot(brain.x - bed.x, brain.z - bed.z), k = Math.min(1, Math.max(0, (bed.outer - d) / (bed.outer - bed.r * 0.7)));
+      lift = bed.h * k * k * (3 - 2 * k);
+    }
+    root.position.set(brain.x, lift, brain.z);
     root.rotation.y = brain.heading;
   }
 
@@ -619,6 +626,8 @@ export async function createKitty(o) {
     call(x, z, opt) { return brain.call(x, z, opt); },
     pet(opt) { return brain.pet(opt); },
     feed() { return brain.feed(); },
+    /** Day 3: her bed (see town.js BED_SPOT): where she goes to sleep, and how high its cushion is */
+    setBed(spot) { bed = spot; brain.bed = spot; place(); },
     /** Day 3: where you are standing, so she can come over to you of her own accord */
     setFriend(x, z) { brain.friend = [x, z]; },
     play() { brain.play(); },

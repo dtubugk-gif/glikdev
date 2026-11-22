@@ -10,6 +10,9 @@ export const DEMOS = ['orbit', 'reveal', 'kitty', 'kittycall', 'kittypet', 'kitt
 const SHOP_DOOR = [19.97, -21.57], SHOP_WAIT = [12.84, -23.42];
 // you, standing just behind her shoulder, turned to the camera (used by the close shots: in frame, not in her way)
 const BESIDE = { start: { x: -3.81, z: -0.78, heading: 0.75 } };
+// Day 3: her bed (town.js BED) and the way out of its front; you, standing beside it
+const BED = [-19, -13], BED_OUT = Math.atan2(19, 13);
+const BY_BED = { start: { x: BED[0] - 7.4, z: BED[1] + 4.4, heading: BED_OUT + 0.55 } };
 
 const lerp = (a, b, k) => a + (b - a) * k;
 const DEG = Math.PI / 180;
@@ -76,11 +79,11 @@ export const KITTY_DEMOS = {
   // Day 3: she is fast asleep; you pet her awake; she is furious about it (her mind is on in this shot, the same
   // cat every time; ?feel=1 shows her emoji and her thought)
   kittywake: {
-    start: () => ({ x: 0, z: 0, heading: 0.2, mode: 'sleep', timer: 60, energy: 0.3 }),
+    start: () => ({ x: BED[0], z: BED[1], heading: BED_OUT, mode: 'sleep', timer: 60, energy: 0.3 }),
     script: [{ t: 1.7, type: 'pet' }],
-    viewer: () => [Math.sin(0.2) * 20, Math.cos(0.2) * 20],
+    viewer: () => [BED[0] + Math.sin(BED_OUT) * 20, BED[1] + Math.cos(BED_OUT) * 20],
     mind: { seed: 6, sleepy: 0.9 },
-    player: { ...BESIDE, script: [{ t: 1.25, type: 'wave' }] },
+    player: { ...BY_BED, script: [{ t: 1.25, type: 'wave' }] },
   },
   // Day 3: you run to the shop, and she trots along and waits by the door
   shopwalk: {
@@ -187,7 +190,7 @@ export function demoPose(name, t, home, kitty = null) {
   if (name === 'kittywake') {
     // like the token shot but looking well above her: she sits low in the frame, with room over her head for
     // her name, her thought and the big emoji, all under the caption
-    const a = 0.2 + 0.4 - 0.04 * easeInOut(t / 5), d = lerp(20, 19.2, easeInOut(t / 5));
+    const a = BED_OUT + 0.4 - 0.04 * easeInOut(t / 5), d = lerp(20, 19.2, easeInOut(t / 5));
     const pos = [kx + Math.sin(a) * d, 4.4, kz + Math.cos(a) * d];
     return { position: pos, look: [kx, 11.3, kz], shift: 0 };
   }
