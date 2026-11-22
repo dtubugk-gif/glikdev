@@ -182,7 +182,8 @@ async function start() {
   // so the lines run off toward the horizon in perspective.
   const target = [0, PLATE.topY, 0];
   const home = { az: 0.32, pol: 1.05, dist: 32, height: 16, target, shift: 0, shiftX: 0, fov: 60, horizon: 0.42 };
-  let follow = true;                                       // the camera follows the kitty until you move it
+  let follow = true;                                       // the camera follows the kitty until you move it (Day 3: always you)
+  let camZoom = 1;
   let onFree = () => {};
   const rig = new OrbitRig(camera, canvas, { target, minPolar: 0.22, maxPolar: 1.52, minHeight: 1.5,
     bounds: PLATE.half - 8, onInteract: () => { looked = true; },
@@ -229,7 +230,7 @@ async function start() {
     // the visible horizon is the plate's far edge: put that line at spec.horizon
     home.shift = horizonAt(pitch - edgeDip(spec.height, spec.height / Math.tan(pitch), home.az), spec.fov) - spec.horizon;
     home.shiftX = 0;
-    rig.setLimits(6, 170);
+    rig.setLimits(camZoom !== 1 ? 11 : 6, camZoom !== 1 ? 62 : 170);   // locked on the player: never far away
     setShift(home.shift, 0);
   }
   function setShift(sy, sx = 0) {
@@ -243,7 +244,7 @@ async function start() {
   rig.setPose(home);
   // web fonts change the bubble's height: frame again once they are in
   // web fonts and the day's copy change the bubble's height: frame again (unless someone is already looking around)
-  const reframe = () => { layout(); if (!looked) rig.setPose({ az: rig.goal.az, pol: home.pol, dist: home.dist }); };
+  const reframe = () => { layout(); if (!looked) rig.setPose({ az: rig.goal.az, pol: home.pol, dist: home.dist * camZoom }); };
   document.fonts?.ready.then(reframe);
   onCopyChange = reframe;
   addEventListener('resize', () => {
@@ -314,6 +315,12 @@ async function start() {
         circles: [() => ({ x: kitty.brain.x, z: kitty.brain.z, r: 2.4 })],
         script: pd ? pd.script || [] : null });
       rig.moveKeys = false;
+      // third person: the camera is locked on you. Drag turns it round you, pinch or scroll zooms; it cannot wander off.
+      rig.canPan = false;
+      camZoom = 0.74;                                      // a little closer than the wide Day 2 view
+      rig.target[0] = player.x; rig.target[2] = player.z;
+      rig.setLimits(11, 62);
+      rig.setPose({ az: home.az, pol: home.pol, dist: home.dist * camZoom });
     } catch (err) { console.warn('Glikdev: the player did not load', err); player = null; }
   }
   const kittyBusy = () => { const b = kitty.brain; return ['eat', 'pounce', 'bat'].includes(b.mode) || b.goal === 'eat' || b.goal === 'yarn' || !!b.yarn?.held; };
@@ -782,7 +789,7 @@ async function start() {
   if (showUI && !demo && !short) {
     hintEl.textContent = kitty && player
       ? (coarse ? 'Tap the ground to walk there · Tap your kitty to pet her · Walk to the shop to spend tokens'
-        : 'Click the ground or use WASD to walk · Click your kitty to pet her · Walk to the shop to spend tokens')
+        : 'Click the ground or use WASD to walk · Drag to look around · Click your kitty to pet her · Walk to the shop to spend tokens')
       : kitty ? (coarse ? 'Tap the ground to call the kitty · Tap her to pet her · Two fingers to move'
         : 'Click the ground to call the kitty · Click her to pet her · Drag to look around · Right-drag or WASD to move')
       : (coarse ? 'Drag to look around · Two fingers to move and zoom' : 'Drag to look around · Right-drag or WASD to move · Scroll to zoom');
@@ -827,8 +834,8 @@ async function start() {
       else {
         steerPlayer();
         player.advance(dt);
-        // at the shop's doormat: the wardrobe opens (once per visit)
-        if (town && shopArmed && town.atShop(player.x, player.z) && (wantShop || !player.walker.moving())) {
+        // close to the shop: it opens (once per visit; walk away and come back to open it again)
+        if (town && shopArmed && town.atShop(player.x, player.z)) {
           shopArmed = false; wantShop = false;
           player.stop();
           player.faceTo(town.SHOP.x, town.SHOP.z);
@@ -836,15 +843,12 @@ async function start() {
         } else if (town && !shopArmed && town.leftShop(player.x, player.z)) shopArmed = true;
       }
     }
-    if (kitty && !demo && follow) {                        // the camera keeps you in the middle, leaning toward her when she is near
+    if (kitty && !demo && follow) {                        // the camera keeps you in the middle (before Day 3: the kitty)
       const f = kitty.interest(interest);
       if (player) {
-        // (more toward her while she is at her bowl or after a toy, so the game stays in the picture)
-        const d = Math.hypot(f.x - player.x, f.z - player.z), game = kittyBusy();
-        const w = d < (game ? 60 : 30) ? (game ? 0.62 : 0.36) : 0;
-        f.set(player.x + (f.x - player.x) * w, 0, player.z + (f.z - player.z) * w);
+        f.set(player.x, 0, player.z);                       // third person: locked on you
       }
-      const k = 1 - Math.exp(-dt * (player ? 2.6 : 1.8));
+      const k = 1 - Math.exp(-dt * (player ? 7 : 1.8));
       rig.target[0] += (f.x - rig.target[0]) * k;
       rig.target[2] += (f.z - rig.target[2]) * k;
     }

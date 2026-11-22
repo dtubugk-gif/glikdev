@@ -30,6 +30,7 @@ export class OrbitRig {
     this.az = 0; this.pol = 1.1; this.dist = 50;
     this.goal = { az: 0, pol: 1.1, dist: 50 };
     this.enabled = true;
+    this.canPan = true;                               // false once the camera is locked on the player (third person)
     this.moveKeys = true;                             // false once there is a player: WASD and the arrows walk them instead
     this.keys = new Set();
     this.pointers = new Map();
@@ -71,6 +72,7 @@ export class OrbitRig {
 
   /** Move the pivot over the ground by (right, forward) metres as seen from the camera. */
   pan(right, forward) {
+    if (!this.canPan) return;
     if (!this.panGoal) this.panGoal = [this.target[0], this.target[2]];
     const s = Math.sin(this.az), c = Math.cos(this.az);
     // the camera looks along (-sin az, -cos az); its right is (cos az, -sin az)
@@ -94,7 +96,7 @@ export class OrbitRig {
     el.addEventListener('pointerdown', (e) => {
       if (!this.enabled) return;
       try { el.setPointerCapture?.(e.pointerId); } catch { /* pointer already gone */ }
-      const pan = e.pointerType === 'mouse' && (e.button === 1 || e.button === 2 || e.shiftKey);
+      const pan = this.canPan && e.pointerType === 'mouse' && (e.button === 1 || e.button === 2 || e.shiftKey);
       this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, pan });
       if (this.pointers.size === 2) {
         const [a, b] = [...this.pointers.values()];
