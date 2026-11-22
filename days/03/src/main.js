@@ -321,12 +321,16 @@ async function start() {
   } catch (err) { console.warn('Glikdev: the kitty did not load', err); kitty = null; }
 
   // ------------------------------------------------------------ the shop and you (Day 3: the owner's ideas)
-  let player = null, store = null, town = null, PLAYER_EYE = 4;
+  let player = null, store = null, town = null, bedThing = null, PLAYER_EYE = 4;
   const pd = kd ? kd.player : null;                        // a recording shows the player only when its demo says so
   try { town = await import('./town.js'); } catch (err) { console.warn('Glikdev: the shop did not load', err); }
   const building = town ? town.createShop({ scene: world.scene, url: stamped('models/shop.glb'), renderer })
     .then((s) => { store = s; }).catch((err) => { console.warn('Glikdev: the shop did not load', err); town = null; }) : null;
+  // her bed (Day 3): once it stands there she is told where it is (she sleeps on it, and steps up onto its cushion)
+  const bedding = town && kitty ? town.createBed({ scene: world.scene, url: stamped('models/bed.glb'), renderer })
+    .then((b) => { bedThing = b; kitty.setBed(town.BED_SPOT); }).catch((err) => { console.warn('Glikdev: her bed did not load', err); }) : null;
   if (!live) await building;                               // recordings: it is there from the first frame
+  if (!live) await bedding;
   if (kitty && (live || pd)) {
     try {
       const { createPlayer, PLAYER } = await import('./player.js');
@@ -334,7 +338,7 @@ async function start() {
       player = await createPlayer({ scene: world.scene, url: stamped('models/player.glb'),
         start: pd ? pd.start : (params.get('view') === 'first' ? { x: 6, z: 17.5, heading: Math.atan2(-6, -17.5) } : { x: 7.5, z: 7, heading: home.az }),
         boxes: town ? [town.SHOP_BOX] : [],
-        circles: [() => ({ x: kitty.brain.x, z: kitty.brain.z, r: 2.8 })],
+        circles: [() => ({ x: kitty.brain.x, z: kitty.brain.z, r: 2.8 }), ...(town ? [() => town.BED_CIRCLE] : [])],
         script: pd ? pd.script || [] : null,
         onStep: (running) => audio?.event({ type: 'footstep', strong: running }) });
       rig.moveKeys = false;

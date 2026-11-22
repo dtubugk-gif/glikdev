@@ -78,3 +78,46 @@ export async function createShop(o) {
     pick(ray) { local.copy(ray).applyMatrix4(inv); return !!local.intersectBox(box, hit); },
   };
 }
+
+// ---------------------------------------------------------------- her bed (the owner: "lie down on a bed and go to sleep")
+// models/bed.glb (art/day03/build_bed.py): a round bolster bed, its low front (+Z in its own frame) turned to the
+// middle of the plate. Sizes are the model's (metres at cat scale) times its scale.
+export const BED = { x: -19, z: -13, scale: 14 };
+BED.rot = Math.atan2(-BED.x, -BED.z);
+const BED_MODEL = { outer: 0.43, cushion: 0.292, top: 0.062 };
+/** what the kitty needs to know: where it is, how big the cushion is, how high, and which way is out of its front */
+export const BED_SPOT = { x: BED.x, z: BED.z, r: BED_MODEL.cushion * BED.scale, outer: BED_MODEL.outer * BED.scale,
+  h: BED_MODEL.top * BED.scale, ex: Math.sin(BED.rot), ez: Math.cos(BED.rot) };
+/** you walk round it (player.js circles) */
+export const BED_CIRCLE = { x: BED.x, z: BED.z, r: BED_MODEL.outer * BED.scale * 0.9 };
+
+/** @param {{scene:THREE.Scene, url:string, renderer:THREE.WebGLRenderer}} o */
+export async function createBed(o) {
+  const gltf = await new GLTFLoader().loadAsync(o.url);
+  const env = skyReflections(o.renderer);
+  const group = gltf.scene;
+  group.name = 'Bed';
+  group.position.set(BED.x, 0, BED.z);
+  group.rotation.y = BED.rot;
+  group.scale.setScalar(BED.scale);
+  group.traverse((m) => {
+    if (!m.isMesh) return;
+    m.castShadow = true; m.receiveShadow = true;
+    for (const mat of [].concat(m.material)) { mat.envMap = env; mat.envMapIntensity = 0.35; }
+  });
+  o.scene.add(group);
+  // a soft patch of shade on the ground round it
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d'), gr = g.createRadialGradient(64, 64, 34, 64, 64, 63);
+  gr.addColorStop(0, 'rgba(38,32,28,0.5)'); gr.addColorStop(0.75, 'rgba(38,32,28,0.22)'); gr.addColorStop(1, 'rgba(38,32,28,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+  const shade = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({
+    map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1 }));
+  shade.rotation.x = -Math.PI / 2;
+  shade.scale.set(BED_SPOT.outer * 2.5, BED_SPOT.outer * 2.5, 1);
+  shade.position.set(BED.x, 0.03, BED.z);
+  shade.renderOrder = 1;
+  o.scene.add(shade);
+  return { group };
+}

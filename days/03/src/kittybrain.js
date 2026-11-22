@@ -125,6 +125,8 @@ export function createBrain(o = {}) {
   b.feeling = null;                   // how she feels (an id from kittymind's EMOTIONS); 'feel' events say when it changes
   b.feelAt = 0;
   b.stormed = false;                  // furious, and already stalked off for it
+  b.bed = null;                       // her bed: { x, z, r (cushion), outer, h (cushion height), ex, ez (unit vector out of its front) }
+  b.bedAt = 0;                        // not before this time does she set off for bed again
   const playing = () => !!b.yarn && (b.goal === 'yarn' || ['pounce', 'bat'].includes(b.mode) || b.face?.then === 'pounce');
   const toyDown = () => !!(b.yarn && !b.yarn.held && !b.yarn.air && b.yarn.flying === 0);
   const friendSpot = () => b.friend || [b.x + (b.viewer[0] - b.x) * 0.4, b.z + (b.viewer[1] - b.z) * 0.4];
@@ -133,6 +135,7 @@ export function createBrain(o = {}) {
     const f = friendSpot();
     return { t: b.t, hunger: b.hunger, energy: b.energy, happy: b.happy, mode: b.mode, asleep: lying(), playing: playing(),
       moving: ['walk', 'trot', 'run'].includes(b.mode), food: foodLeft(), ateAgo: b.t - b.ateAt, toy: toyDown(),
+      bedtime: ['bed', 'bedin', 'bedside', 'spot'].includes(b.goal) || b.face?.then === 'nap' || b.after === 'nap',
       asking: b.asking ? b.asking.what : null, friend: true, friendDist: Math.hypot(f[0] - b.x, f[1] - b.z) };
   }
   b.sense = sense;
@@ -197,6 +200,30 @@ export function createBrain(o = {}) {
     }
     go({ x: f[0] + (dx / d) * 4.6, z: f[1] + (dz / d) * 4.6 }, 'ask', d > 22);
   }
+  /**
+   * Bedtime. With a bed (b.bed, Day 3) she walks round to its front, steps in over the low part of the bolster,
+   * goes to the middle of the cushion, turns to face out and lies down. Without one she naps in her own spot.
+   */
+  function goBed() {
+    const sat = b.mode === 'sit';
+    const lieDown = () => { if (sat) { enter('liedown', 1.4); emit('sigh'); } else { b.after = 'nap'; enter('sitdown', KITTY.clips.Sit); } };
+    const bd = b.bed;
+    if (!bd) {
+      const s = mind.spot;                                 // a nap is taken in her spot, once she has one
+      if (s && Math.hypot(s.x - b.x, s.z - b.z) > 7) go({ x: s.x, z: s.z }, 'spot', false);
+      else lieDown();
+      return;
+    }
+    const dx = b.x - bd.x, dz = b.z - bd.z, d = Math.hypot(dx, dz);
+    if (d < bd.r * 0.4) { b.target = null; b.goal = null; lieDown(); return; }     // on it already
+    const front = dx * bd.ex + dz * bd.ez;                 // how far out in front of the bed she is
+    const gate = { x: bd.x + bd.ex * (bd.outer + 4.5), z: bd.z + bd.ez * (bd.outer + 4.5) };
+    if (d < bd.r || front > d * 0.82) go({ x: bd.x, z: bd.z }, 'bedin', false);   // on the cushion, or straight in front: in she goes
+    else if (front < bd.outer * 0.6) {                     // beside or behind it: round the nearer side first, not through it
+      const side = (dx * -bd.ez + dz * bd.ex) >= 0 ? 1 : -1;
+      go({ x: bd.x - bd.ez * side * (bd.outer + 5) + bd.ex * 2, z: bd.z + bd.ex * side * (bd.outer + 5) + bd.ez * 2 }, 'bedside', d > 34);
+    } else go(gate, 'bed', d > 34);
+  }
   /** Nobody is telling her what to do: she chooses. */
   function onHerOwn() {
     const sat = b.mode === 'sit';
@@ -208,12 +235,7 @@ export function createBrain(o = {}) {
       case 'groom':
         if (sat) enter('groom', 4 + rand() * 3); else { b.after = 'groom'; enter('sitdown', KITTY.clips.Sit); }
         break;
-      case 'nap': {
-        const s = mind.spot;                               // a nap is taken in her spot, once she has one
-        if (s && Math.hypot(s.x - b.x, s.z - b.z) > 7) { go({ x: s.x, z: s.z }, 'spot', false); break; }
-        if (sat) { enter('liedown', 1.4); emit('sigh'); } else { b.after = 'nap'; enter('sitdown', KITTY.clips.Sit); }
-        break;
-      }
+      case 'nap': goBed(); break;
       case 'wander': go(pickWander(), null, false); break;
       case 'eat': b.after = null; emit('chirp'); goEat(); break;
       case 'cuddle': comeAsk('cuddle'); break;
@@ -231,6 +253,7 @@ export function createBrain(o = {}) {
       const a = rand() * TAU, r = Math.sqrt(rand()) * KITTY.roam;
       const x = Math.sin(a) * r, z = Math.cos(a) * r;
       const d = Math.hypot(x - b.x, z - b.z);
+      if (b.bed && Math.hypot(x - b.bed.x, z - b.bed.z) < b.bed.outer + 4) continue;   // not onto her bed
       if (d > 8 && d < 26) return { x, z };
     }
     return { x: -b.x * 0.5, z: -b.z * 0.5 };
@@ -265,6 +288,7 @@ export function createBrain(o = {}) {
   // ---------------------------------------------------------------- the player's verbs
   b.call = (x, z, opt = {}) => {
     const p = inside({ x, z });
+    if (mind && opt.quiet && lying()) return false;      // you walking off never wakes her
     const d = wants('call', opt.quiet);
     if (!d.yes) return false;                            // she heard you; she is not coming
     emit('call', p);
@@ -336,6 +360,10 @@ export function createBrain(o = {}) {
       return;
     }
     const bowl = besideHer(10, 3);
+    if (b.bed) {                                         // never on her bed
+      const ox = bowl.x - b.bed.x, oz = bowl.z - b.bed.z, od = Math.hypot(ox, oz) || 1, need = b.bed.outer + 3;
+      if (od < need) { bowl.x = b.bed.x + (ox / od) * need; bowl.z = b.bed.z + (oz / od) * need; }
+    }
     b.bowl = { ...bowl, t: b.t, left: 3, bites: 0, eatenAt: null };
     emit('bowl', { x: bowl.x, z: bowl.z });
     if (!d.yes) return false;
@@ -480,6 +508,16 @@ export function createBrain(o = {}) {
       return;
     }
     if (g === 'spot') { b.after = 'nap'; enter('sitdown', KITTY.clips.Sit); return; }   // her spot: a nap
+    if (b.bed && g === 'bedside') {                        // round the side: now to the front
+      go({ x: b.bed.x + b.bed.ex * (b.bed.outer + 4.5), z: b.bed.z + b.bed.ez * (b.bed.outer + 4.5) }, 'bed', false);
+      return;
+    }
+    if (b.bed && g === 'bed') { go({ x: b.bed.x, z: b.bed.z }, 'bedin', false); return; }   // in over the low front
+    if (b.bed && g === 'bedin') {                          // on the cushion: turn to face out, then down she goes
+      b.face = { x: b.bed.x + b.bed.ex * 40, z: b.bed.z + b.bed.ez * 40, then: 'nap' };
+      enter('face');
+      return;
+    }
     if (g === 'eat' && b.bowl) { b.face = { x: b.bowl.x, z: b.bowl.z, then: 'eat' }; enter('face'); return; }
     if (g === 'yarn' && b.yarn) { b.face = { x: b.yarn.x, z: b.yarn.z, then: 'pounce' }; enter('face'); return; }
     if (b.after) { enter('sitdown', KITTY.clips.Sit); return; }
@@ -587,6 +625,14 @@ export function createBrain(o = {}) {
     if (anger >= 0.45 && (sitting() || b.mode === 'idle')) b.snub = Math.max(b.snub, b.t + 0.6);
     if (anger >= 0.75 && !b.stormed && (b.mode === 'sit' || b.mode === 'idle')) { b.stormed = true; emit('grumble'); walkOff(); }
     if (anger < 0.3) b.stormed = false;
+    // sleepy means bed, and now: she does not sit about being sleepy, hungry or not (unless she is still furious)
+    if ((mind.sleepy >= 0.85 || b.energy < 0.18) && (b.mode === 'sit' || b.mode === 'idle') && !b.goal && !b.target && !b.face
+      && !b.asking && !b.yarn?.held && anger < 0.75 && b.t >= b.bedAt) {
+      b.bedAt = b.t + 3;
+      mind.did('nap');
+      emit('mind', { does: 'nap' });
+      goBed();
+    }
     if (sitting() || b.mode === 'idle') b.energy = clamp(b.energy + dt / 100, 0, 1);     // resting helps a little; a nap far more
     if (b.asking && b.t > b.asking.until) {                // she asked and nothing came of it
       mind.outcome('ignored');
@@ -642,8 +688,8 @@ export function createBrain(o = {}) {
       case 'sleep':
         b.energy = clamp(b.energy + dt / (mind ? 30 : 15), 0, 1);
         if (!mind) { if (b.timer <= 0) wake(null); break; }
-        // she sleeps until she has had enough (or hunger gets her up, or it has been long enough)
-        if (b.timer <= 0 && ((b.energy >= 0.999 && mind.sleepy < 0.12) || b.hunger > 0.85 || b.timer < -75)) {
+        // she sleeps until she has had enough (or it has been long enough)
+        if (b.timer <= 0 && ((b.energy >= 0.999 && mind.sleepy < 0.12) || b.timer < -75)) {
           mind.feel('rested');
           wake(null);
         }
@@ -678,7 +724,7 @@ export function createBrain(o = {}) {
         if (b.mode === 'trot' && left > KITTY.runFrom) { enter('run'); emit('jingle'); }
         else if (b.mode === 'run' && left < KITTY.runTo) enter('trot');
         const fast = b.mode !== 'walk';
-        const exact = b.goal === 'eat' || b.goal === 'yarn';
+        const exact = b.goal === 'eat' || b.goal === 'yarn' || b.goal === 'bed' || b.goal === 'bedin' || b.goal === 'bedside';
         const top = b.mode === 'run' ? KITTY.runSpeed : fast ? KITTY.trotSpeed : KITTY.walkSpeed;
         const dist = steer(dt, top, b.mode === 'run' ? 2.6 : fast ? 3.2 : 2.0);
         if (dist < (exact ? 0.5 : fast ? 4.5 : 3.0)) arrive();
@@ -695,6 +741,7 @@ export function createBrain(o = {}) {
             b.eatStart = b.t; b.bowl.bites = 0; emit('eat');
           }
           else if (f.then === 'pounce') { enter('pounce', KITTY.clips.Pounce); emit('wiggle'); }
+          else if (f.then === 'nap') { b.after = 'nap'; enter('sitdown', KITTY.clips.Sit); }
           else enter('sitdown', KITTY.clips.Sit);
         }
         break;
