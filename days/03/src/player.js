@@ -97,6 +97,13 @@ export function createWalker(o = {}) {
     // a wall in the way of a tapped spot: give up after a moment rather than walk on the spot for ever
     if (w.target && Math.hypot(nx - w.x, nz - w.z) < w.speed * dt * 0.2) { w.stuck = (w.stuck || 0) + dt; if (w.stuck > 0.8) { w.target = null; w.stuck = 0; } } else w.stuck = 0;
     w.x = nx; w.z = nz;
+    // footfalls: one every stride's length (longer strides when running), for the sound of your steps
+    if (w.speed > 0.6) {
+      const run = w.speed > PLAYER.walk * 1.35;
+      w.stride = (w.stride ?? 1.2) + w.speed * dt;
+      const len = run ? 3.3 : 2.05;
+      if (w.stride >= len) { w.stride -= len; w.onStep?.(run); }
+    } else w.stride = 1.2;                                   // the first step lands soon after setting off
   };
   w.moving = () => w.speed > 0.3;
   /** which clip, and how fast it plays */
@@ -111,7 +118,8 @@ export function createWalker(o = {}) {
 
 /**
  * @param {{scene:THREE.Scene, url:string, start?:object, boxes?:object[], circles?:Function[],
- *          script?:{t:number, type:string, x?:number, z?:number}[], renderer?:THREE.WebGLRenderer}} o
+ *          script?:{t:number, type:string, x?:number, z?:number}[], renderer?:THREE.WebGLRenderer,
+ *          onStep?:(running:boolean)=>void}} o
  */
 export async function createPlayer(o) {
   const gltf = await new GLTFLoader().loadAsync(o.url);
@@ -141,6 +149,7 @@ export async function createPlayer(o) {
   let walker, mixer, actions, cur, curName, scriptAt, acc = 0;
   function reset() {
     walker = createWalker(startOpts);
+    walker.onStep = o.onStep || null;
     if (mixer) { mixer.stopAllAction(); mixer.uncacheRoot(mixer.getRoot()); }
     mixer = new THREE.AnimationMixer(model);
     actions = Object.fromEntries(CLIPS.map((n) => [n, mixer.clipAction(clips[n])]));
