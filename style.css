@@ -311,7 +311,8 @@ html.no-ui .nametag:not(.is-filmed), html.capture-short .nametag:not(.is-filmed)
 .tokens img { width: 34px; height: 34px; flex: none; will-change: transform; }
 .tokens-count { min-width: 1ch; text-align: center; }
 html.no-ui .tokens:not(.is-filmed), html.capture-short .tokens:not(.is-filmed), html.no-webgl .tokens { display: none !important; }
-.tokens.is-filmed { pointer-events: none; top: 60px; right: 16px; min-height: 50px; padding: 0 18px 0 8px; font-size: 24px; }
+/* filmed for a Short: inside the safe area (the platform's own buttons cover the top 73 px and the right 47 px) */
+.tokens.is-filmed { pointer-events: none; top: 76px; right: 52px; min-height: 50px; padding: 0 18px 0 8px; font-size: 24px; }
 .tokens.is-filmed img { width: 38px; height: 38px; }
 
 .shop { max-width: min(560px, 100%); }
