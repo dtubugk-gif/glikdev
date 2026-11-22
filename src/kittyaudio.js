@@ -89,6 +89,10 @@ export function createKittyAudio() {
           play('bell', 0.25 * v);
           break;
         case 'purr-end': stopPurr(0.6); break;
+        // Day 3: a token pops out (a bright little ring), something new to wear (two rings and a happy trill)
+        case 'token': for (let k = 0; k < Math.min(3, e.n || 1); k++) play('bell', 0.3, { rate: 1.75 + 0.12 * k, delay: k * 0.14 }); break;
+        case 'buy': play('bell', 0.34, { rate: 1.3 }); play('bell', 0.3, { rate: 1.95, delay: 0.12 }); play('trill', 0.6, { delay: 0.2 }); break;
+        case 'wear': play('swat', 0.3, { rate: 1.4 }); play('bell', 0.2, { rate: 1.5, delay: 0.05 }); break;
         default:
       }
     },

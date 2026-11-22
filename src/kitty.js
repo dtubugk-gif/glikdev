@@ -218,6 +218,16 @@ export async function createKitty(o) {
     B = { head: bone('head'), neck: bone('neck'), spine: bone('spine'), chest: bone('chest'),
       ears: [bone('ear_L'), bone('ear_R')], paws: ['frontpaw_L', 'frontpaw_R', 'hindpaw_L', 'hindpaw_R'].map(bone) };
   }
+  /** A bone of the current cat with its inverse bind matrix (model space at rest -> the bone's own space). */
+  function boneBind(name) {
+    let found = null;
+    model.traverse((m) => {
+      if (found || !m.isSkinnedMesh) return;
+      const i = m.skeleton.bones.findIndex((b) => b.name === name);
+      if (i >= 0) found = { bone: m.skeleton.bones[i], inverse: m.skeleton.boneInverses[i] };
+    });
+    return found;
+  }
   checkCat(gltf, o.url);
   mount(gltf, furMap, o.furLayers);
   o.scene.add(root);
@@ -304,14 +314,16 @@ export async function createKitty(o) {
     play(brain.anim(), true);
     mixer.update(0);
     place();
+    emitOut({ t: 0, type: 'reset' });            // a recording starting over: listeners start over too
   }
 
   /** Change cats in place: she keeps her name, needs, spot and whatever she is doing. */
-  async function setCat({ url, furUrl, furLayers }) {
+  async function setCat({ url, furUrl, furLayers, key }) {
     const [g, fur] = await Promise.all([loader.loadAsync(url), loadFur(furUrl)]);
     checkCat(g, url);                            // a broken file leaves the current cat as she is
     const was = cur ? { name: cur.getClip().name, time: cur.time } : null;
     const old = model;
+    emitOut({ t: brain.t, type: 'cat-out' });    // what she wears comes off the old skeleton first
     root.remove(old);
     mount(g, fur, furLayers);
     newMixer();
@@ -320,6 +332,7 @@ export async function createKitty(o) {
     mixer.update(0);
     look.w = 0;                                  // the head turn eases back in on the new skeleton
     disposeTree(old);
+    emitOut({ t: brain.t, type: 'cat-in', cat: key });
   }
 
   function play(a, instant = false) {
@@ -351,7 +364,7 @@ export async function createKitty(o) {
   }
 
   const v1 = new THREE.Vector3(), v2 = new THREE.Vector3(), q1 = new THREE.Quaternion(), q2 = new THREE.Quaternion();
-  const emitOut = (e) => { for (const fn of listeners) fn(e); };
+  function emitOut(e) { for (const fn of listeners) fn(e); }
 
   function addHearts(t, n = 3) {
     root.updateMatrixWorld(true);
@@ -393,6 +406,7 @@ export async function createKitty(o) {
         else if (s.type === 'feed') brain.feed();
         else if (s.type === 'play') brain.play();
         else if (s.type === 'nap') brain.nap();
+        else emitOut({ t: brain.t, type: 'script', what: s });   // not hers: for whoever is listening (Day 3: 'wear')
       }
     }
     brain.step(STEP);
@@ -591,6 +605,22 @@ export async function createKitty(o) {
     feed() { brain.feed(); },
     play() { brain.play(); },
     on(fn) { listeners.push(fn); },
+    /**
+     * Day 3: fix something to one of her bones. `frame` is where it sits in the model's rest pose (model
+     * space, Matrix4); it then follows the bone through every clip. False when this cat has no such bone.
+     */
+    attach(boneName, obj, frame) {
+      const b = boneBind(boneName);
+      if (!b) return false;
+      obj.matrixAutoUpdate = false;
+      obj.matrix.multiplyMatrices(b.inverse, frame);
+      b.bone.add(obj);
+      return true;
+    },
+    /** her own collar and bell (the ginger kitty's): hidden under a bow tie or a scarf */
+    setCollar(visible) {
+      for (const n of ['Collar', 'Bell']) { const m = model.getObjectByName(n); if (m) m.visible = visible; }
+    },
     /** what a ray hits: 'kitty' (two generous spheres: body and head), 'yarn', or null */
     pick(ray) {
       root.updateMatrixWorld(true);

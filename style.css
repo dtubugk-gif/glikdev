@@ -300,6 +300,73 @@ html.no-ui .nametag:not(.is-filmed), html.capture-short .nametag:not(.is-filmed)
 .cat-credits a { color: var(--ink-2); }
 @media (max-width: 380px) { .cats { gap: 7px; } .cat-card { font-size: 14px; border-radius: 14px; } }
 
+/* ---------- Day 3: friendship tokens and the wardrobe ---------- */
+.tokens {
+  position: fixed; z-index: 2;
+  top: calc(var(--gutter) + var(--safe-t) - 5px);
+  right: calc(var(--gutter) + var(--safe-r));
+  padding: 0 16px 0 7px; gap: 7px;
+  font-size: 20px; font-variant-numeric: tabular-nums;
+}
+.tokens img { width: 34px; height: 34px; flex: none; will-change: transform; }
+.tokens-count { min-width: 1ch; text-align: center; }
+html.no-ui .tokens:not(.is-filmed), html.capture-short .tokens:not(.is-filmed), html.no-webgl .tokens { display: none !important; }
+.tokens.is-filmed { pointer-events: none; top: 60px; right: 16px; min-height: 50px; padding: 0 18px 0 8px; font-size: 24px; }
+.tokens.is-filmed img { width: 38px; height: 38px; }
+
+.shop { max-width: min(560px, 100%); }
+.shop .namer-card { max-height: calc(100vh - 32px); max-height: calc(100dvh - 32px); overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; }
+.shop-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.shop-purse { display: inline-flex; align-items: center; gap: 6px; margin: 0; padding: 3px 14px 3px 5px;
+  border: 2.5px solid var(--ink); border-radius: 999px; background: #fff;
+  font: 700 19px/1 var(--display); font-variant-numeric: tabular-nums; }
+.shop-purse img { width: 28px; height: 28px; }
+.shop-purse-label { font-weight: 600; font-size: 15px; color: var(--ink-2); }
+.shop-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.shop-card {
+  position: relative;
+  display: grid; justify-items: center; gap: 3px;
+  padding: 6px 4px 8px;
+  border: 2.5px solid var(--ink); border-radius: 18px;
+  background: #fff; color: var(--ink);
+  box-shadow: var(--drop);
+  font: 600 14px/1.15 var(--display);
+  cursor: pointer;
+  transition: transform 110ms ease, box-shadow 110ms ease, background-color 150ms ease;
+}
+.shop-card img { width: 100%; height: auto; aspect-ratio: 1; object-fit: contain; border-radius: 12px;
+  background: linear-gradient(#cfe6f5, #f3ecdf); }
+.shop-name { text-align: center; text-wrap: balance; min-height: 2.3em; display: grid; align-items: center; }
+.shop-tag {
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+  min-height: 26px; padding: 0 10px; border-radius: 999px;
+  border: 2px solid var(--ink); background: var(--paper);
+  font: 700 14px/1 var(--display); font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.shop-card[data-state="buy"] .shop-tag, .shop-card[data-state="dear"] .shop-tag { padding-left: 5px; }
+.shop-card[data-state="buy"] .shop-tag::before, .shop-card[data-state="dear"] .shop-tag::before {
+  content: ''; width: 18px; height: 18px; background: url(models/shop/token.webp) center / contain no-repeat;
+}
+.shop-card[data-state="buy"] .shop-tag { background: var(--accent-fill); color: #fff; }
+.shop-card[data-state="dear"] img { filter: saturate(0.55) opacity(0.75); }
+.shop-card[data-state="dear"] .shop-tag { color: var(--ink-3); }
+.shop-card[data-state="owned"] .shop-tag { background: #fff; }
+.shop-card[data-state="on"] { background: #ffe9d8; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent), var(--drop); }
+.shop-card[data-state="on"]::after {               /* a tick on what she has on */
+  content: ''; position: absolute; top: -9px; right: -9px; width: 26px; height: 26px; border-radius: 50%;
+  border: 2.5px solid var(--ink);
+  background: var(--accent-fill) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='m6 12.5 4 4 8-9' fill='none' stroke='%23fff' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat center / 16px;
+}
+@media (hover: hover) { .shop-card:hover { transform: translateY(-1px); box-shadow: 0 4px 0 rgba(47, 38, 32, 0.22); } }
+.shop-card:active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(47, 38, 32, 0.22); }
+.shop-card:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+@media (max-width: 480px) { .shop-grid { gap: 8px; } .shop-card { font-size: 13px; border-radius: 14px; padding: 5px 3px 7px; } .shop-tag { font-size: 13px; padding: 0 6px; } }
+@media (max-width: 359px) { .shop-grid { grid-template-columns: repeat(3, 1fr); } .shop-purse-label { display: none; } }
+/* phones held upright: the tagline wraps to two lines so the token counter fits beside it */
+@media (max-width: 759px) and (orientation: portrait) { .eyebrow span { max-width: 9.6em; } }
+@media (max-width: 339px) { .eyebrow span { font-size: 12px; } .tokens { padding: 0 12px 0 6px; font-size: 18px; } .tokens img { width: 30px; height: 30px; } }
+@media (max-height: 500px) and (orientation: landscape) { .tokens { min-height: 40px; top: calc(var(--gutter) + var(--safe-t) - 6px); } .tokens img { width: 28px; height: 28px; } }
+
 .chip-primary { background: var(--accent-fill); color: #fff; }
 @media (hover: hover) { .chip-primary:hover { background: #f07c45; } }
 
@@ -425,7 +492,7 @@ html.capture-short .bubble { font-size: 16px; max-width: 100%; }
   .fallback-card h2 { font-size: 19px; }
   .fallback-card p { font-size: 14px; line-height: 1.4; }
   html.no-webgl .title { max-width: 50%; }
-  html.has-care .hint { top: calc(var(--gutter) + var(--safe-t)); bottom: auto; max-width: 38%; text-align: right; border-radius: 16px; }
+  html.has-care .hint { top: calc(var(--gutter) + var(--safe-t) + 44px); bottom: auto; max-width: 38%; text-align: right; border-radius: 16px; }   /* under the token counter */
 
 }
 
@@ -453,7 +520,7 @@ html.capture-short .bubble { font-size: 16px; max-width: 100%; }
 
 @media (prefers-reduced-motion: reduce) {
   .daylog[open] .sheet { animation: none; }
-  .chip, .hint, .poster, .care-btn, .cat-card { transition: none; }
+  .chip, .hint, .poster, .care-btn, .cat-card, .shop-card { transition: none; }
   .cat-card.is-loading::before { animation-duration: 2.4s; }
   .care-badge, .nametag.is-filmed.is-pop { animation: none; }
 }

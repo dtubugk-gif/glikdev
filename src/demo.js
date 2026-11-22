@@ -3,7 +3,8 @@
 // deterministic: kittybrain.js is seeded and stepped at a fixed rate), so a recorder that controls
 // requestAnimationFrame / performance.now gets identical frames on every run.
 
-export const DEMOS = ['orbit', 'reveal', 'kitty', 'kittycall', 'kittypet', 'kittywalk', 'kittyname', 'kittyfeed', 'kittyplay', 'kittynap'];
+export const DEMOS = ['orbit', 'reveal', 'kitty', 'kittycall', 'kittypet', 'kittywalk', 'kittyname', 'kittyfeed', 'kittyplay', 'kittynap',
+  'kittytoken', 'kittydress'];
 
 const lerp = (a, b, k) => a + (b - a) * k;
 const DEG = Math.PI / 180;
@@ -59,6 +60,24 @@ export const KITTY_DEMOS = {
     start: () => ({ x: 0, z: 0, heading: 0.2, mode: 'sit', timer: 60 }),
     script: [{ t: 0.2, type: 'nap' }],
     viewer: () => [Math.sin(0.2) * 20, Math.cos(0.2) * 20],
+  },
+  // Day 3: petted, she purrs and a friendship token pops out and flies to the counter (?tokens=1 shows it)
+  kittytoken: {
+    start: () => ({ x: 0, z: 0, heading: 0.2, mode: 'sit' }),
+    script: [{ t: 0.7, type: 'pet' }],
+    viewer: () => [Math.sin(0.2) * 20, Math.cos(0.2) * 20],
+  },
+  // Day 3: the wardrobe, one thing after another, then the full royal look and a happy purr
+  kittydress: {
+    start: () => ({ x: 0, z: 0, heading: 0.2, mode: 'sit' }),
+    script: [
+      { t: 0.5, type: 'wear', id: 'bowtie' }, { t: 1.3, type: 'wear', id: 'strawhat' }, { t: 2.1, type: 'wear', id: 'shades' },
+      { t: 3.2, type: 'wear', id: 'wizardhat' }, { t: 3.2, type: 'wear', id: 'scarf' }, { t: 3.2, type: 'wear', slot: 'face', id: null },
+      { t: 4.4, type: 'wear', id: 'flowercrown' }, { t: 4.4, type: 'wear', id: 'wings' }, { t: 4.4, type: 'wear', id: 'bowtie' },
+      { t: 5.6, type: 'wear', id: 'crown' }, { t: 6.0, type: 'pet' },
+    ],
+    viewer: () => [Math.sin(0.2) * 20, Math.cos(0.2) * 20],
+    wallet: { tokens: 0 },
   },
   // she strolls across the plate; the camera tracks alongside
   kittywalk: {
@@ -127,6 +146,18 @@ export function demoPose(name, t, home, kitty = null) {
     const d = lerp(14.5, 12.5, easeInOut(t / 6));
     const pos = [kx + Math.sin(a) * d, 4.0, kz + Math.cos(a) * d];
     return { position: pos, look: [kx, 6.4, kz], shift: 0 };
+  }
+  if (name === 'kittytoken') {
+    // like the pet shot, a little wider and looking higher: room for the token to rise and fly off
+    const a = 0.2 + 0.4 - 0.04 * easeInOut(t / 5), d = lerp(16.5, 15, easeInOut(t / 5));
+    const pos = [kx + Math.sin(a) * d, 4.2, kz + Math.cos(a) * d];
+    return { position: pos, look: [kx, 7.6, kz], shift: 0 };
+  }
+  if (name === 'kittydress') {
+    // front three-quarter, drifting slowly round her so every piece gets its moment
+    const a = 0.2 + 0.5 - 0.085 * t, d = lerp(11.5, 10.2, easeInOut(t / 7));
+    const pos = [kx + Math.sin(a) * d, 4.9, kz + Math.cos(a) * d];
+    return { position: pos, look: [kx, 6.5, kz], shift: 0 };
   }
   if (name === 'kittyname') {
     // close and low, like the pet shot; room above her head for the name tag

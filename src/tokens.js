@@ -1,0 +1,104 @@
+// Day 3: friendship tokens (idea by @Kowffe). Pure logic, no three.js and no DOM, so it runs the same
+// in the browser, in node tests and in frame-exact recordings.
+//
+// Looking after the kitty earns tokens:
+//   she starts to purr (you petted her)         +1
+//   she finishes a bowl of food                 +3
+//   she bats the yarn (three times a game)      +1 each
+//   she comes when you call her                 +1 (at most once every 20 s)
+// Tokens buy things for her to wear. One thing per slot (hat, face, neck, back); what she owns and what
+// she has on stay on this device.
+
+/** What the shop sells. `node` is the object's name in models/outfits.glb, `fit` the fitting frame it uses. */
+export const ITEMS = [
+  { id: 'bowtie', name: 'Bow tie', node: 'BowTie', slot: 'neck', fit: 'neck', price: 5 },
+  { id: 'strawhat', name: 'Straw hat', node: 'StrawHat', slot: 'hat', fit: 'hat', price: 8 },
+  { id: 'flowercrown', name: 'Flower crown', node: 'FlowerCrown', slot: 'hat', fit: 'hat', price: 10 },
+  { id: 'scarf', name: 'Cosy scarf', node: 'Scarf', slot: 'neck', fit: 'neck', price: 12 },
+  { id: 'shades', name: 'Heart shades', node: 'Shades', slot: 'face', fit: 'shades', price: 15 },
+  { id: 'wizardhat', name: 'Wizard hat', node: 'WizardHat', slot: 'hat', fit: 'hat', price: 20 },
+  { id: 'wings', name: 'Angel wings', node: 'Wings', slot: 'back', fit: 'back', price: 30 },
+  { id: 'crown', name: 'Royal crown', node: 'Crown', slot: 'hat', fit: 'hat', price: 40 },
+];
+export const SLOTS = ['hat', 'face', 'neck', 'back'];
+export const itemById = (id) => ITEMS.find((i) => i.id === id) || null;
+
+export const CALL_COOLDOWN = 20;
+export const MAX_TOKENS = 9999;
+
+/**
+ * How many tokens one of the kitty's events is worth. `state` remembers the last paid call
+ * (`state.callAt`, seconds on her clock) and is updated here.
+ * @param {{type:string, t:number, goal?:string}} e
+ * @param {{callAt?:number}} state
+ */
+export function rewardFor(e, state = {}) {
+  switch (e.type) {
+    case 'purr': return 1;
+    case 'eaten': return 3;
+    case 'swat': return 1;
+    case 'arrive':
+      if (e.goal !== 'call') return 0;
+      if (state.callAt != null && e.t - state.callAt < CALL_COOLDOWN) return 0;
+      state.callAt = e.t;
+      return 1;
+    default: return 0;
+  }
+}
+
+const int = (n) => (Number.isFinite(Number(n)) ? Math.max(0, Math.min(MAX_TOKENS, Math.floor(Number(n)))) : 0);
+
+/**
+ * The purse and the wardrobe. `saved` is whatever toJSON() returned earlier (anything else is ignored,
+ * piece by piece: a broken save never loses the rest).
+ */
+export function createWallet(saved = null) {
+  const s = saved && typeof saved === 'object' ? saved : {};
+  let tokens = int(s.tokens);
+  let earned = Math.max(tokens, int(s.earned));
+  const owned = new Set((Array.isArray(s.owned) ? s.owned : []).filter((id) => itemById(id)));
+  const wearing = {};
+  for (const slot of SLOTS) {
+    const id = s.wearing && typeof s.wearing === 'object' ? s.wearing[slot] : null;
+    const it = itemById(id);
+    wearing[slot] = it && it.slot === slot && owned.has(id) ? id : null;
+  }
+  return {
+    get tokens() { return tokens; },
+    /** every token ever earned (spending does not lower it) */
+    get earned() { return earned; },
+    owns: (id) => owned.has(id),
+    /** a copy: {hat, face, neck, back} -> item id or null */
+    get wearing() { return { ...wearing }; },
+    isWearing: (id) => { const it = itemById(id); return !!it && wearing[it.slot] === id; },
+    canBuy: (id) => { const it = itemById(id); return !!it && !owned.has(id) && tokens >= it.price; },
+    earn(n) {
+      const k = int(n);
+      tokens = Math.min(MAX_TOKENS, tokens + k);
+      earned = Math.min(MAX_TOKENS * 100, earned + k);
+      return k;
+    },
+    /** buys it and puts it on; false when it is unknown, already hers or too dear */
+    buy(id) {
+      const it = itemById(id);
+      if (!it || owned.has(id) || tokens < it.price) return false;
+      tokens -= it.price;
+      owned.add(id);
+      wearing[it.slot] = id;
+      return true;
+    },
+    /** puts on something she owns (taking off what was in that slot); false otherwise */
+    wear(id) {
+      const it = itemById(id);
+      if (!it || !owned.has(id)) return false;
+      wearing[it.slot] = id;
+      return true;
+    },
+    takeOff(slot) {
+      if (!SLOTS.includes(slot) || !wearing[slot]) return false;
+      wearing[slot] = null;
+      return true;
+    },
+    toJSON: () => ({ tokens, earned, owned: [...owned], wearing: { ...wearing } }),
+  };
+}

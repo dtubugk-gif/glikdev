@@ -1,7 +1,9 @@
 // Glikdev. Glue: URL modes, UI, Day log, the world, the kitty (Day 2) and the render loop. The title
 // card and the Day log come from days.json at runtime (the newest entry), so a new day only adds an entry there.
-//   ?demo=orbit | reveal | kitty | kittycall | kittypet | kittywalk
+//   ?demo=orbit | reveal | kitty | kittycall | kittypet | kittywalk | kittytoken | kittydress ...
 //                                scripted camera (and kitty), driven only by frame time (for filming)
+//   ?tokens=1                    (filming) show the friendship token counter even with ?ui=0
+//   ?wear=crown,bowtie,wings     (filming, posters) she starts with these on
 //   ?ui=0                        hide every piece of UI
 //   ?tag=Mochi&tagAt=1.5         (filming) show the kitty's name tag, popping in at tagAt seconds
 //   ?capture=short               Shorts layout: record at 360x640 CSS with deviceScaleFactor 3
@@ -11,6 +13,7 @@
 // ?v= through its import map; data and model URLs below get the same stamp (deploy.mjs writes it).
 import { renderDayLog, renderHeadline, latestDay } from './daylog.js';
 import { DEMOS, demoPose, KITTY_DEMOS } from './demo.js';
+import { createWallet, rewardFor, ITEMS, itemById } from './tokens.js';
 
 // Set this to the channel's URL once it exists (for example 'https://www.youtube.com/@glikdev').
 const CHANNEL_URL = 'https://www.youtube.com/@glikdev';
@@ -99,6 +102,14 @@ function loadCare() {
   } catch { return null; }
 }
 function saveCare(d) { try { localStorage.setItem(CARE_KEY, JSON.stringify(d)); } catch { /* private mode: fine */ } }
+// Day 3: her friendship tokens and what she owns and wears (this device only)
+const WALLET_KEY = 'glikdev.tokens.v1';
+function loadWallet() { try { return JSON.parse(localStorage.getItem(WALLET_KEY) || 'null'); } catch { return null; } }
+function saveWallet(w) { try { localStorage.setItem(WALLET_KEY, JSON.stringify(w)); } catch { /* private mode: fine */ } }
+const filmTokens = params.get('tokens') === '1';
+// ?wear=crown,bowtie  (filming, posters) she has these on from the start; the purse is not touched
+const paramWear = {};
+for (const id of (params.get('wear') || '').split(',')) { const it = itemById(id.trim()); if (it) paramWear[it.slot] = it.id; }
 // the cats you can choose (the ginger kitty is Day 2's own; the other two are the owner's Sketchfab picks)
 const CATS = {
   ginger: { label: 'Ginger', url: 'models/kitty.glb', fur: 'models/kitty_fur.png' },
@@ -250,7 +261,7 @@ async function start() {
     muted: !!saved?.muted,
     cat: catOf(params.get('cat')) || catOf(saved?.cat) || 'ginger',
   };
-  const catOpts = (k) => ({ url: stamped(CATS[k].url), furUrl: CATS[k].fur ? stamped(CATS[k].fur) : null, furLayers: coarse ? 6 : 10 });
+  const catOpts = (k) => ({ key: k, url: stamped(CATS[k].url), furUrl: CATS[k].fur ? stamped(CATS[k].fur) : null, furLayers: coarse ? 6 : 10 });
   let needs;
   if (saved && Number.isFinite(saved.hunger) && Number.isFinite(saved.happy)) {
     const away = Math.max(0, Math.min(3600, (Date.now() - (Number(saved.at) || Date.now())) / 1000));
@@ -282,6 +293,71 @@ async function start() {
       });
     }
   } catch (err) { console.warn('Glikdev: the kitty did not load', err); kitty = null; }
+  // ------------------------------------------------------------ friendship tokens and her wardrobe (Day 3, idea by @Kowffe)
+  const freshWallet = () => createWallet(live ? loadWallet() : (kd?.wallet ?? null));
+  let wallet = freshWallet(), wardrobe = null, tokenFX = null, rewardState = {}, filmWear = { ...paramWear };
+  let flashHint = () => {};
+  const tokenHead = new THREE.Vector3();
+  const tokensEl = $('tokens'), tokensCount = $('tokens-count'), tokensIcon = $('tokens-icon');
+  const showTokens = !!kitty && (filmTokens || (showUI && !demo && !short));
+  if (kitty) {
+    kitty.on((e) => {
+      if (e.type === 'reset') {                            // a recording starting over
+        wallet = freshWallet(); rewardState = {}; filmWear = { ...paramWear };
+        tokenFX?.reset();
+        wardrobe?.dress({ ...wallet.wearing, ...filmWear });
+        return;
+      }
+      if (e.type === 'script' && e.what.type === 'wear') { // filming: straight onto her, no shopping
+        const it = itemById(e.what.id);
+        const slot = it ? it.slot : e.what.slot;
+        if (slot) { filmWear[slot] = it ? it.id : null; wardrobe?.dress({ ...wallet.wearing, ...filmWear }, e.t); }
+        return;
+      }
+      const n = rewardFor(e, rewardState);
+      if (n <= 0) return;
+      const first = wallet.earned === 0;
+      wallet.earn(n);
+      tokenFX?.spawn(e.t, kitty.headPosition(tokenHead), n);
+      audio?.event({ type: 'token', n });
+      if (live) { saveWallet(wallet); if (first) flashHint(coarse ? 'A friendship token! Tap the coin to dress her up' : 'A friendship token! Click the coin to dress her up', 7000); }
+    });
+    const dressing = (async () => {
+      try {
+        const { createWardrobe, createTokenFX } = await import('./outfits.js');
+        wardrobe = await createWardrobe({ kitty, glbUrl: stamped('models/outfits.glb'), fitUrl: stamped('models/outfits_fit.json'), cat: care.cat, renderer });
+        tokenFX = createTokenFX({ scene: world.scene, camera, token: wardrobe.token });
+        wardrobe.dress({ ...wallet.wearing, ...filmWear });
+      } catch (err) { console.warn('Glikdev: the wardrobe did not load', err); wardrobe = null; tokenFX = null; }
+    })();
+    if (!live) await dressing;                             // recordings: every frame has it; live play does not wait for it
+  }
+  if (showTokens) {
+    tokensEl.hidden = false;
+    if (filmTokens && (!showUI || short)) tokensEl.classList.add('is-filmed');
+  }
+  // the counter: shows what has landed (tokens still in the air are not counted yet) and bumps as each one lands
+  let shownTokens = null, bumpAt = -10;
+  const hudPoint = { x: 0, y: 0 };
+  function paintTokens(t) {
+    let hud = null;
+    if (showTokens) {
+      const r = tokensIcon.getBoundingClientRect();
+      if (r.width) { hudPoint.x = ((r.left + r.width / 2) / innerWidth) * 2 - 1; hudPoint.y = 1 - ((r.top + r.height / 2) / innerHeight) * 2; hud = hudPoint; }
+    }
+    const flying = tokenFX ? tokenFX.update(t, hud) : 0;
+    if (!showTokens) return;
+    const n = Math.max(0, wallet.tokens - flying);
+    if (n !== shownTokens) {
+      if (shownTokens !== null && n > shownTokens) bumpAt = t;
+      shownTokens = n;
+      tokensCount.textContent = String(n);
+      tokensEl.setAttribute('aria-label', `Friendship tokens: ${n}. Open the wardrobe`);
+    }
+    const a = (t - bumpAt) / 0.32;
+    tokensIcon.style.transform = a >= 0 && a < 1 ? `scale(${(1 + 0.34 * Math.sin(a * Math.PI)).toFixed(3)})` : '';
+  }
+
   const kittyState = () => {
     const b = kitty.brain, h = kitty.headPosition();
     return { x: b.x, z: b.z, heading: b.heading, head: [h.x, h.y, h.z],
@@ -513,16 +589,83 @@ async function start() {
     $('catpick-close').addEventListener('click', () => picker.close());
     picker.addEventListener('click', (e) => { if (e.target === picker) picker.close(); });
     picker.addEventListener('close', () => catBtn.focus());
+    // ---------------------------------------------------------- the wardrobe: spend tokens, dress her (Day 3)
+    const shop = $('shop'), shopGrid = $('shop-grid'), shopStatus = $('shop-status'), shopHave = $('shop-have');
+    const shopCards = ITEMS.map((it) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'shop-card';
+      b.dataset.item = it.id;
+      const img = document.createElement('img');
+      img.src = stamped(`models/shop/${it.id}.webp`); img.alt = ''; img.width = 320; img.height = 320; img.decoding = 'async'; img.loading = 'lazy';
+      const name = document.createElement('span');
+      name.className = 'shop-name';
+      name.textContent = it.name;
+      const tag = document.createElement('span');
+      tag.className = 'shop-tag';
+      b.append(img, name, tag);
+      shopGrid.append(b);
+      return { it, b, tag };
+    });
+    const paintShop = () => {
+      shopHave.textContent = String(wallet.tokens);
+      for (const { it, b, tag } of shopCards) {
+        const owned = wallet.owns(it.id), on = wallet.isWearing(it.id);
+        b.dataset.state = on ? 'on' : owned ? 'owned' : wallet.canBuy(it.id) ? 'buy' : 'dear';
+        b.setAttribute('aria-pressed', String(on));
+        tag.textContent = on ? 'Take off' : owned ? 'Wear' : String(it.price);
+        b.setAttribute('aria-label', on ? `${it.name}: she is wearing it. Take it off`
+          : owned ? `${it.name}: hers. Put it on` : `${it.name}: ${it.price} tokens${wallet.canBuy(it.id) ? '. Buy it' : ', not enough yet'}`);
+      }
+    };
+    const dressNow = (sound) => {
+      saveWallet(wallet);
+      for (const k of Object.keys(filmWear)) delete filmWear[k];   // what she chose in the shop wins over ?wear=
+      wardrobe?.dress(wallet.wearing, kitty.t);
+      audio?.unlock();
+      audio?.event({ type: sound });
+      paintShop();
+      shop.close();
+      backToHer();
+    };
+    tokensEl.addEventListener('click', () => {
+      shopStatus.textContent = '';
+      paintShop();
+      if (typeof shop.showModal === 'function') shop.showModal(); else shop.setAttribute('open', '');
+      dismissHint();
+    });
+    shopGrid.addEventListener('click', (e) => {
+      const card = e.target.closest('.shop-card');
+      if (!card) return;
+      const it = itemById(card.dataset.item);
+      if (wallet.isWearing(it.id)) { wallet.takeOff(it.slot); dressNow('wear'); return; }
+      if (wallet.owns(it.id)) { wallet.wear(it.id); dressNow('wear'); return; }
+      if (wallet.buy(it.id)) { dressNow('buy'); return; }
+      const need = it.price - wallet.tokens;
+      shopStatus.textContent = `${need} more token${need === 1 ? '' : 's'} for the ${it.name.toLowerCase()}. Pet her, feed her or play with her to earn them.`;
+    });
+    $('shop-close').addEventListener('click', () => shop.close());
+    shop.addEventListener('click', (e) => { if (e.target === shop) shop.close(); });
+    shop.addEventListener('close', () => tokensEl.focus());
+    flashHint = (text, ms) => {
+      clearTimeout(yarnHintTimer);
+      hintEl.textContent = text;
+      hintEl.dataset.yarn = '1';
+      hintEl.hidden = false;
+      hintEl.classList.remove('is-gone');
+      yarnHintTimer = setTimeout(hideYarnHint, ms);
+    };
     setInterval(persist, 4000);
     addEventListener('pagehide', persist);
     document.addEventListener('visibilitychange', () => { if (document.hidden) persist(); });
   }
   // every frame: the tag floats over her head; hearts and the hungry badge follow her needs
   const tagPos = new THREE.Vector3();
+  const HAT_LIFT = { strawhat: 0.5, flowercrown: 0.35, crown: 0.75, wizardhat: 1.6 };
   function placeTag(t) {
     if (tag.hidden || !kitty) return;
     kitty.headPosition(tagPos);
-    tagPos.y += 2.6;
+    tagPos.y += 2.6 + (HAT_LIFT[wardrobe?.wearing.hat] ?? 0);   // above her hat, when she has one on
     tagPos.project(camera);
     const vis = tagPos.z < 1 && Math.abs(tagPos.x) < 1.2 && Math.abs(tagPos.y) < 1.2;
     let s = 1;
@@ -603,7 +746,12 @@ async function start() {
     } else {
       rig.update(dt);
     }
-    if (kitty) { kitty.finish(camera.position, ks); placeTag(t); }
+    if (kitty) {
+      kitty.finish(camera.position, ks); placeTag(t);
+      wardrobe?.update(kitty.t);
+      camera.updateMatrixWorld();
+      paintTokens(kitty.t);
+    }
     world.update(t);
     world.render();
   }
@@ -614,7 +762,7 @@ async function start() {
     const dt = Math.min(0.05, Math.max(0, (ts - last) / 1000));
     if (dialog.open) { last = ts; return; }                // nothing to see behind the Day log
     // when nobody is touching the camera, 30 fps is plenty
-    if (!demo && rig.idle() && !(kitty && kitty.busy())) { skip = !skip; if (skip) return; }
+    if (!demo && rig.idle() && !(kitty && (kitty.busy() || tokenFX?.busy() || wardrobe?.busy(kitty.t)))) { skip = !skip; if (skip) return; }
     last = ts;
     step((ts - t0) / 1000, dt);
   }
@@ -628,6 +776,7 @@ async function start() {
   const v = new THREE.Vector3();
   window.__glikdev = {
     world, rig, home, daysLoaded, build: BUILD, kitty,
+    get wallet() { return wallet; }, get wardrobe() { return wardrobe; },
     /** Screen height fraction (from the top) of the visible horizon: the plate's far edge. */
     horizonFrac() {
       camera.updateMatrixWorld();
