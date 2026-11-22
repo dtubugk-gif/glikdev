@@ -1,14 +1,30 @@
 // The game's sounds in the browser. Nothing plays until the player has tapped once (browsers require a
-// gesture). Every sound is synthesised by kittysound.js when audio starts, then played in answer to events:
-// the kitty's voice (meows, trills, chirps, mews, purring, a yawn, a sleepy sigh), her crunching, paw steps,
-// collar bell, the toy landing and her swats; and since Day 3 the friendship tokens, buying and dressing,
-// the shop's door chime, your own footsteps, button ticks, the felt mouse's squeak and a quiet breeze.
+// gesture).
+//   - The kitty's own voice (meows, trills, chirps, mews, purring, a yawn, a sleepy sigh) and her collar bell are
+//     synthesised by kittysound.js.
+//   - Everything else is a real recording (sounds/*.mp3, cut from the Sonniss GDC bundle by
+//     art/day03/sounds/build_sounds.py): the token's ting, coins and a happy sting when you buy, cloth and a pop
+//     when she puts something on, the shop opening and closing, soft pats for paws, your steps and the toy
+//     landing, a whoosh for her swats, kibble crunches, button clicks, the felt mouse's squeak, and a meadow
+//     (birds, insects, wind in the grass) looping quietly underneath.
+//     Until a recording has loaded (or if it cannot), the synthesised version of that sound plays instead.
 // Sounds from her get quieter the further she is from the camera and sit left or right where she is on screen.
 import * as S from './kittysound.js';
 
-export function createKittyAudio() {
-  let ctx = null, master = null, bufs = null, makers = null, purring = null, n = 0, muted = false, breeze = null;
+// (written out in full so the deploy check sees every file the game needs)
+const FILES = {
+  coin: ['sounds/coin.mp3'], coinflip: ['sounds/coinflip.mp3'], buy: ['sounds/buy.mp3'], cloth: ['sounds/cloth.mp3'],
+  pop: ['sounds/pop.mp3'], click: ['sounds/click.mp3'], shopOpen: ['sounds/shopopen.mp3'], shopClose: ['sounds/shopclose.mp3'],
+  nope: ['sounds/nope.mp3'], pat: ['sounds/pat1.mp3', 'sounds/pat2.mp3'], whoosh: ['sounds/whoosh.mp3'],
+  crunch: ['sounds/crunch1.mp3', 'sounds/crunch2.mp3'], squeak: ['sounds/squeak.mp3'], meadow: ['sounds/meadow.mp3'],
+};
+
+/** @param {{url?:(path:string)=>string}} [o]  url: adds the build stamp to a file path */
+export function createKittyAudio(o = {}) {
+  let ctx = null, master = null, bufs = null, makers = null, purring = null, n = 0, muted = false, bed = null;
+  const rec = {};                                          // name -> [AudioBuffer]: the recordings that have loaded
   const LEVEL = 0.62;
+  const url = o.url || ((p) => p);
 
   function unlock() {
     if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return; }
@@ -24,39 +40,72 @@ export function createKittyAudio() {
     const sr = ctx.sampleRate;
     const make = (f) => { const b = ctx.createBuffer(1, f.length, sr); b.copyToChannel(f, 0); return b; };
     const many = (fn, k) => Array.from({ length: k }, (_, v) => make(fn(sr, v)));
-    // each sound is built the first time it is needed, and the rest one by one in the background,
-    // so the first tap never stalls while a whole library is synthesised
+    // each synthesised sound is built the first time it is needed, and the voice in the background,
+    // so the first tap never stalls while a whole library is made
     const one = (fn, ...args) => () => [make(fn(sr, ...args))];
     makers = {
       meow: () => many(S.meow, 3), trill: () => many(S.trill, 3), chirp: () => many(S.chirp, 3), mew: () => many(S.mew, 3),
       purr: one(S.purr, 4.0), bell: () => many(S.bell, 2), yawn: one(S.yawn), sigh: one(S.sigh),
-      bite: () => many(S.bite, 3), step: () => many(S.step, 4), thud: one(S.thud), swat: one(S.swat),
-      coin: () => many(S.coin, 3), buy: one(S.buy), wear: one(S.wear), shopOpen: one(S.shopOpen),
-      shopClose: one(S.shopClose), footstep: () => many(S.footstep, 4), click: () => many(S.click, 3), squeak: () => many(S.squeak, 3),
-      nope: one(S.nope),
+      // stand-ins for the recordings, should one not load
+      coin: () => many(S.coin, 3), coinflip: () => many(S.coin, 1), buy: one(S.buy), cloth: one(S.wear), pop: () => many(S.click, 1),
+      click: () => many(S.click, 3), shopOpen: one(S.shopOpen), shopClose: one(S.shopClose), nope: one(S.nope),
+      pat: () => many(S.step, 4), whoosh: one(S.swat), crunch: () => many(S.bite, 3), squeak: () => many(S.squeak, 3),
     };
     bufs = {};
-    const order = ['click', 'bell', 'trill', 'purr', 'coin', 'footstep', 'meow', 'step', 'chirp', 'swat', 'thud', 'bite', 'mew', 'wear', 'buy',
-      'shopOpen', 'shopClose', 'squeak', 'nope', 'yawn', 'sigh'];
+    const order = ['bell', 'trill', 'purr', 'meow', 'chirp', 'mew', 'yawn', 'sigh'];
     const warm = () => { const k = order.find((x) => !bufs[x]); if (!k) return; bufs[k] = makers[k](); setTimeout(warm, 40); };
     setTimeout(warm, 60);
-    // the breeze: built a moment later (nine seconds of it), then left looping very quietly
-    setTimeout(() => {
-      if (!ctx) return;
-      const src = ctx.createBufferSource();
-      src.buffer = make(S.wind(sr, 9));
-      src.loop = true;
-      const g = ctx.createGain();
-      g.gain.value = 0;
-      g.gain.linearRampToValueAtTime(0.16, ctx.currentTime + 3);
-      src.connect(g).connect(master);
-      src.start();
-      breeze = src;
-    }, 2500);
+    // the recordings: fetched and decoded in the background, small ones first, the meadow last
+    (async () => {
+      for (const [name, paths] of Object.entries(FILES)) {
+        try {
+          const list = [];
+          for (const p of paths) {
+            const r = await fetch(url(p));
+            if (!r.ok) throw new Error(`${p} ${r.status}`);
+            list.push(await ctx.decodeAudioData(await r.arrayBuffer()));
+          }
+          rec[name] = list;
+          if (name === 'meadow') startBed(seamless(list[0]), 0.5);
+        } catch (err) {
+          console.warn('Glikdev: a sound did not load, using its stand-in', name, err);
+          if (name === 'meadow') startBed(make(S.wind(sr, 9)), 0.16);
+        }
+      }
+    })();
+  }
+
+  /** A loop with no seam: the recording's last second is folded back over its first (MP3s also carry a few
+   *  milliseconds of padding at both ends, which are cut away first). */
+  function seamless(b) {
+    const sr = b.sampleRate, pad = Math.floor(sr * 0.06), over = Math.floor(sr * 1.2);
+    const src = b.getChannelData(0);
+    const n2 = src.length - 2 * pad - over;
+    if (n2 < sr * 3) return b;
+    const out = ctx.createBuffer(1, n2, sr);
+    const d = out.getChannelData(0);
+    for (let i = 0; i < n2; i++) d[i] = src[pad + i];
+    for (let i = 0; i < over; i++) {
+      const k = i / over;
+      d[i] = src[pad + i] * Math.sqrt(k) + src[pad + n2 + i] * Math.sqrt(1 - k);
+    }
+    return out;
+  }
+  function startBed(buffer, level) {
+    if (bed) return;
+    const src = ctx.createBufferSource();
+    src.buffer = buffer;
+    src.loop = true;
+    const g = ctx.createGain();
+    g.gain.value = 0;
+    g.gain.linearRampToValueAtTime(level, ctx.currentTime + 4);
+    src.connect(g).connect(master);
+    src.start();
+    bed = src;
   }
 
   function play(name, gain = 1, { rate = 1, delay = 0, pan = 0, which = null } = {}) {
-    const list = bufs[name] || (bufs[name] = makers[name]());
+    const list = rec[name] || bufs[name] || (bufs[name] = makers[name]());
     const src = ctx.createBufferSource();
     src.buffer = list[(which ?? n++) % list.length];
     src.playbackRate.value = rate;
@@ -96,6 +145,8 @@ export function createKittyAudio() {
     unlock,
     get running() { return !!ctx && ctx.state === 'running'; },
     get muted() { return muted; },
+    /** which sounds are recordings right now (for checks) */
+    get recorded() { return Object.keys(rec); },
     setMuted(m) {
       muted = m;
       if (master) master.gain.setTargetAtTime(m ? 0 : LEVEL, ctx.currentTime, 0.05);
@@ -107,43 +158,43 @@ export function createKittyAudio() {
     event(e, near = 1, pan = 0) {
       if (!ctx || ctx.state !== 'running') return;
       const v = 0.35 + 0.65 * near;
-      const o = (extra) => ({ pan, ...extra });
+      const at = (extra) => ({ pan, ...extra });
       switch (e.type) {
-        case 'meow': play('meow', 0.9 * v, o({ rate: vary() })); break;
-        case 'trill': play('trill', 0.72 * v, o({ rate: vary() })); break;
-        case 'chirp': play('chirp', 0.62 * v, o({ rate: vary() })); break;
-        case 'mew': play('mew', 0.7 * v, o({ rate: vary() })); break;
-        case 'yawn': play('yawn', 0.7 * v, o({ delay: e.delay || 0 })); break;
-        case 'sigh': play('sigh', 0.6 * v, o()); break;
-        case 'bite': play('bite', 0.7 * v, o({ rate: vary() })); break;
-        case 'step': play('step', (e.strong ? 0.5 : 0.34) * v, o({ rate: vary() })); break;
-        case 'thud': play('thud', (e.soft ? 0.32 : 0.6) * v, o({ rate: e.soft ? 1.15 : 1 })); break;
-        case 'toss': play('swat', Math.min(0.55, 0.2 + (e.speed || 0) / 80), { rate: 0.7 }); break;
-        case 'swat': play('swat', 0.6 * v, o()); break;
-        case 'leap': play('swat', 0.35 * v, o({ rate: 0.8 })); break;
-        case 'land': play('step', 0.7 * v, o({ rate: 0.85 })); break;
-        case 'jingle': case 'wake': play('bell', 0.38 * v, o({ rate: vary() })); break;
-        case 'bowl': play('bell', 0.28, o({ rate: 0.7 })); break;
-        case 'refill': play('bell', 0.24, o({ rate: 0.8 })); break;
+        case 'meow': play('meow', 0.9 * v, at({ rate: vary() })); break;
+        case 'trill': play('trill', 0.72 * v, at({ rate: vary() })); break;
+        case 'chirp': play('chirp', 0.62 * v, at({ rate: vary() })); break;
+        case 'mew': play('mew', 0.7 * v, at({ rate: vary() })); break;
+        case 'yawn': play('yawn', 0.7 * v, at({ delay: e.delay || 0 })); break;
+        case 'sigh': play('sigh', 0.6 * v, at()); break;
+        case 'bite': play('crunch', 0.75 * v, at({ rate: 0.9 + 0.25 * ((n * 0.37) % 1) })); break;
+        case 'step': play('pat', (e.strong ? 0.42 : 0.28) * v, at({ rate: 1.05 * vary() })); break;
+        case 'thud': play('pat', (e.soft ? 0.4 : 0.7) * v, at({ rate: e.soft ? 0.8 : 0.66 })); break;
+        case 'toss': play('whoosh', Math.min(0.6, 0.25 + (e.speed || 0) / 80), { rate: 0.85 }); break;
+        case 'swat': play('whoosh', 0.5 * v, at({ rate: 1.35 })); play('pat', 0.5 * v, at({ rate: 1.2, delay: 0.07 })); break;
+        case 'leap': play('whoosh', 0.35 * v, at({ rate: 1.0 })); break;
+        case 'land': play('pat', 0.75 * v, at({ rate: 0.78 })); break;
+        case 'jingle': case 'wake': play('bell', 0.38 * v, at({ rate: vary() })); break;
+        case 'bowl': play('pop', 0.4, at({ rate: 0.8 })); play('bell', 0.2, at({ rate: 0.7 })); break;
+        case 'refill': play('pop', 0.35, at({ rate: 0.9 })); break;
         case 'purr': startPurr(v, pan); break;
         case 'pet':
           if (purring) startPurr(v, pan);
-          play('bell', 0.2 * v, o());
+          play('pop', 0.3 * v, at({ rate: 1.25 }));
           break;
         case 'purr-end': stopPurr(0.6); break;
-        // Day 3: a token pops out (one bright ting each, climbing); bought; put on; the shop; you; buttons
-        case 'token': for (let k = 0; k < Math.min(3, e.n || 1); k++) play('coin', 0.5, o({ which: k, delay: k * 0.14 })); break;
-        case 'buy': play('buy', 0.62); play('trill', 0.45, { delay: 0.5, rate: 1.06 }); break;
-        case 'wear': play('wear', 0.6); break;
-        case 'shop-open': play('shopOpen', 0.5); break;
+        // Day 3: a token pops out (one ting each, climbing); bought; put on; the shop; you; buttons
+        case 'token': for (let k = 0; k < Math.min(3, e.n || 1); k++) play('coin', 0.55, at({ which: k, rate: rec.coin ? [1, 1.12, 1.26][k] : 1, delay: k * 0.14 })); break;
+        case 'buy': play('coinflip', 0.5); play('buy', 0.6, { delay: 0.12 }); play('trill', 0.42, { delay: 0.6, rate: 1.06 }); break;
+        case 'wear': play('cloth', 0.6); if (rec.cloth) play('pop', 0.45, { delay: 0.3, rate: 0.9 }); break;
+        case 'shop-open': play('shopOpen', 0.55); break;
         case 'shop-close': play('shopClose', 0.5); break;
-        case 'footstep': play('footstep', e.strong ? 0.34 : 0.24, { rate: vary() }); break;
-        case 'squeak': play('squeak', 0.5 * v, o({ rate: vary() })); break;
+        case 'footstep': play('pat', e.strong ? 0.36 : 0.26, { rate: (e.strong ? 0.8 : 0.72) * vary() }); break;
+        case 'squeak': play('squeak', 0.5 * v, at({ rate: 1.1 * vary() })); break;
         case 'nope': play('nope', 0.5); break;
         case 'click':
-          if (ctx.currentTime - lastClick < 0.05) break;     // one tick per press
+          if (ctx.currentTime - lastClick < 0.05) break;     // one click per press
           lastClick = ctx.currentTime;
-          play('click', 0.5, { rate: vary() });
+          play('click', 0.55, { rate: vary() });
           break;
         default:
       }

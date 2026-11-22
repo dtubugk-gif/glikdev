@@ -116,7 +116,7 @@ for (const id of (params.get('wear') || '').split(',')) { const it = itemById(id
 const CATS = {
   // (her fur shells are off since the Day 3 rework: a clean storybook coat reads better than speckled strands;
   //  ?fur=10 turns them back on for a look)
-  ginger: { label: 'Ginger', url: 'models/kitty.glb', fur: 'models/kitty_fur.png', shells: 0 },
+  ginger: { label: 'Ginger', url: 'models/kitty.glb', fur: 'models/kitty_fur.png', shells: 0, head: 1.14 },   // head: kitten proportions
   realistic: { label: 'Realistic', url: 'models/cat_realistic.glb' },
   tabby: { label: 'Tabby', url: 'models/cat_toti.glb' },
 };
@@ -268,7 +268,7 @@ async function start() {
     muted: !!saved?.muted,
     cat: catOf(params.get('cat')) || catOf(saved?.cat) || 'ginger',
   };
-  const catOpts = (k) => ({ key: k, url: stamped(CATS[k].url), furUrl: CATS[k].fur ? stamped(CATS[k].fur) : null, furLayers: params.has('fur') ? Math.max(0, Math.min(16, Number(params.get('fur')) || 0)) : (CATS[k].shells ?? (coarse ? 6 : 10)) });
+  const catOpts = (k) => ({ key: k, headScale: CATS[k].head ?? 1, url: stamped(CATS[k].url), furUrl: CATS[k].fur ? stamped(CATS[k].fur) : null, furLayers: params.has('fur') ? Math.max(0, Math.min(16, Number(params.get('fur')) || 0)) : (CATS[k].shells ?? (coarse ? 6 : 10)) });
   let needs;
   if (saved && Number.isFinite(saved.hunger) && Number.isFinite(saved.happy)) {
     const away = Math.max(0, Math.min(3600, (Date.now() - (Number(saved.at) || Date.now())) / 1000));
@@ -292,7 +292,7 @@ async function start() {
     // the sun's shadows follow her, or the middle between her and you
     world.setShadowFocus(() => (player ? focus.set((player.x + kitty.brain.x) / 2, 0, (player.z + kitty.brain.z) / 2) : kitty.focus(focus)), 22);
     if (live) {
-      audio = createKittyAudio();
+      audio = createKittyAudio({ url: stamped });
       audio.setMuted(care.muted);
       const head = new THREE.Vector3();
       kitty.on((e) => {
@@ -932,6 +932,7 @@ async function start() {
   const v = new THREE.Vector3();
   window.__glikdev = {
     world, rig, home, daysLoaded, build: BUILD, kitty,
+    get audio() { return audio; },
     get wallet() { return wallet; }, get wardrobe() { return wardrobe; }, get player() { return player; }, get store() { return store; },
     /** Screen height fraction (from the top) of the visible horizon: the plate's far edge. */
     horizonFrac() {
