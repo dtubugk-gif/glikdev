@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createBrain, KITTY, STEP, YARN, rng, headingTo } from '../src/kittybrain.js';
-import { meow, purr, bell, trill, chirp, mew, yawn, sigh, bite, step, thud, swat } from '../src/kittysound.js';
+import { meow, purr, bell, trill, chirp, mew, yawn, sigh, bite, step, thud, swat, coin, buy, wear, shopOpen, shopClose, footstep, click, squeak, nope, wind } from '../src/kittysound.js';
 
 const run = (b, seconds, onStep) => {
   const n = Math.round(seconds / STEP);
@@ -375,11 +375,28 @@ test('every new clip has a mode that shows it', () => {
 });
 
 test('all her voices and sounds render clean', () => {
-  for (const [name, fn] of Object.entries({ trill, chirp, mew, yawn, sigh, bite, step, thud, swat })) {
+  for (const [name, fn] of Object.entries({ trill, chirp, mew, yawn, sigh, bite, step, thud, swat, coin, buy, wear, shopOpen, shopClose, footstep, click, squeak, nope })) {
     const f = fn(48000, 1);
     assert.ok(f.length > 48000 * 0.05, name);
     let peak = 0;
     for (const x of f) { assert.ok(Number.isFinite(x), name); peak = Math.max(peak, Math.abs(x)); }
     assert.ok(peak > 0.2 && peak <= 0.81, `${name} peak ${peak}`);
   }
+});
+
+test('Day 3 sounds: no DC, a clean start and end, and the breeze loops without a seam', () => {
+  for (const [name, f] of Object.entries({ meow: meow(48000, 0), bell: bell(48000, 0), coin: coin(48000, 1), buy: buy(48000), wear: wear(48000), shopOpen: shopOpen(48000),
+    shopClose: shopClose(48000), footstep: footstep(48000, 2), click: click(48000, 0), squeak: squeak(48000, 1), nope: nope(48000), step: step(48000, 1), thud: thud(48000) })) {
+    let dc = 0;
+    for (const x of f) dc += x;
+    assert.ok(Math.abs(dc / f.length) < 0.004, `${name} DC ${dc / f.length}`);
+    assert.ok(Math.abs(f[f.length - 1]) < 0.002, `${name} ends at ${f[f.length - 1]}`);
+    assert.ok(Math.abs(f[0]) < 0.06, `${name} starts at ${f[0]}`);
+  }
+  const w = wind(48000, 3);
+  assert.ok(Math.abs(w[0] - w[w.length - 1]) < 0.02, 'the breeze meets itself at the loop point');
+  let peak = 0;
+  for (const x of w) peak = Math.max(peak, Math.abs(x));
+  assert.ok(peak <= 0.31 && peak > 0.1);
+  assert.notDeepEqual(coin(48000, 0), coin(48000, 1), 'each token rings a little higher');
 });
