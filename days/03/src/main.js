@@ -113,7 +113,9 @@ const paramWear = {};
 for (const id of (params.get('wear') || '').split(',')) { const it = itemById(id.trim()); if (it) paramWear[it.slot] = it.id; }
 // the cats you can choose (the ginger kitty is Day 2's own; the other two are the owner's Sketchfab picks)
 const CATS = {
-  ginger: { label: 'Ginger', url: 'models/kitty.glb', fur: 'models/kitty_fur.png' },
+  // (her fur shells are off since the Day 3 rework: a clean storybook coat reads better than speckled strands;
+  //  ?fur=10 turns them back on for a look)
+  ginger: { label: 'Ginger', url: 'models/kitty.glb', fur: 'models/kitty_fur.png', shells: 0 },
   realistic: { label: 'Realistic', url: 'models/cat_realistic.glb' },
   tabby: { label: 'Tabby', url: 'models/cat_toti.glb' },
 };
@@ -262,7 +264,7 @@ async function start() {
     muted: !!saved?.muted,
     cat: catOf(params.get('cat')) || catOf(saved?.cat) || 'ginger',
   };
-  const catOpts = (k) => ({ key: k, url: stamped(CATS[k].url), furUrl: CATS[k].fur ? stamped(CATS[k].fur) : null, furLayers: coarse ? 6 : 10 });
+  const catOpts = (k) => ({ key: k, url: stamped(CATS[k].url), furUrl: CATS[k].fur ? stamped(CATS[k].fur) : null, furLayers: params.has('fur') ? Math.max(0, Math.min(16, Number(params.get('fur')) || 0)) : (CATS[k].shells ?? (coarse ? 6 : 10)) });
   let needs;
   if (saved && Number.isFinite(saved.hunger) && Number.isFinite(saved.happy)) {
     const away = Math.max(0, Math.min(3600, (Date.now() - (Number(saved.at) || Date.now())) / 1000));
