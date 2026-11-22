@@ -1,5 +1,7 @@
 Sounds in this folder are cut from the Sonniss GDC 2026 Game Audio Bundle (royalty-free, commercial use).
-The kitty's voice is synthesised in src/kittysound.js.
+
+music.mp3  -  the game's own background music: an original tune, written and synthesised note by note
+              by tools/gamemusic.mjs (no samples, no library; made for Glikdev)
 
 coin.mp3  -  a friendship token  -  "Ting Coins" (Cinematic Sound Design, UI Interaction Elements)
 coinflip.mp3  -  coins dropping in when you buy  -  "Foley Coin Flip Single Fast" (Cinematic Sound Design, Hybrid Game & UI Elements)
@@ -16,7 +18,6 @@ whoosh.mp3  -  a paw swat; a throw  -  "Woosh Sweep Slide Infographics Basic" (C
 crunch1.mp3  -  kibble  -  "Cracker" (InMotionAudio, Christmas Cracker)
 crunch2.mp3  -  kibble, a second take  -  "Cracker" (InMotionAudio, Christmas Cracker)
 squeak.mp3  -  the felt mouse  -  "Dry Ice Squeak Metal Animal Mouse Imitation Short 07" (Epic Stock Media, HD Game Materials)
-meadow.mp3  -  the air outside: birds, insects, wind in the grass (looped in the game)  -  "Meadow Pipits calling many Insects humming Wind blowing through Grass" (Just Sound Effects, Highlands of Norway)
 
 Her voice:
 meow1-3.mp3, trill.mp3, chirp.mp3  -  cut from a recording the owner supplied ("Kitty meowing to attract cats")
