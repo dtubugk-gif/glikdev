@@ -8,8 +8,8 @@ export const DEMOS = ['orbit', 'reveal', 'kitty', 'kittycall', 'kittypet', 'kitt
 
 // Day 3: where the shop's doormat is, and where the kitty waits beside it (town.js works these out from SHOP)
 const SHOP_DOOR = [19.97, -21.57], SHOP_WAIT = [12.84, -23.42];
-// you, standing by her left side, turned to her (used by the close shots)
-const BESIDE = { start: { x: -3.1, z: 3.3, heading: Math.atan2(3.1, -3.3) } };
+// you, standing just behind her shoulder, turned to the camera (used by the close shots: in frame, not in her way)
+const BESIDE = { start: { x: -3.81, z: -0.78, heading: 0.75 } };
 
 const lerp = (a, b, k) => a + (b - a) * k;
 const DEG = Math.PI / 180;
