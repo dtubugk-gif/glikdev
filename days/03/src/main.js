@@ -5,6 +5,7 @@
 //   ?tokens=1                    (filming) show the friendship token counter even with ?ui=0
 //   ?wear=crown,bowtie,wings     (filming, posters) she starts with these on
 //   ?have=6                      (filming) the token counter starts at 6
+//   ?view=first                  first person instead of the third-person camera
 //   ?ui=0                        hide every piece of UI
 //   ?tag=Mochi&tagAt=1.5         (filming) show the kitty's name tag, popping in at tagAt seconds
 //   ?capture=short               Shorts layout: record at 360x640 CSS with deviceScaleFactor 3
@@ -232,7 +233,7 @@ async function start() {
     // the visible horizon is the plate's far edge: put that line at spec.horizon
     home.shift = horizonAt(pitch - edgeDip(spec.height, spec.height / Math.tan(pitch), home.az), spec.fov) - spec.horizon;
     home.shiftX = 0;
-    rig.setLimits(camZoom !== 1 ? 11 : 6, camZoom !== 1 ? 62 : 170);   // locked on the player: never far away
+    rig.setLimits(camZoom !== 1 ? 12 : 6, camZoom !== 1 ? 64 : 170);   // locked on the player: never far away
     if (firstPerson) { camera.fov = portrait ? 66 : wide ? 52 : 58; setShift(0, 0); } else setShift(home.shift, 0);
   }
   function setShift(sy, sx = 0) {
@@ -313,21 +314,27 @@ async function start() {
       const { createPlayer, PLAYER } = await import('./player.js');
       PLAYER_EYE = PLAYER.eye;
       player = await createPlayer({ scene: world.scene, url: stamped('models/player.glb'),
-        start: pd ? pd.start : { x: 6, z: 17.5, heading: Math.atan2(-6, -17.5) },
+        start: pd ? pd.start : (params.get('view') === 'first' ? { x: 6, z: 17.5, heading: Math.atan2(-6, -17.5) } : { x: 7.5, z: 7, heading: home.az }),
         boxes: town ? [town.SHOP_BOX] : [],
         circles: [() => ({ x: kitty.brain.x, z: kitty.brain.z, r: 2.8 })],
         script: pd ? pd.script || [] : null });
       rig.moveKeys = false;
       rig.canPan = false;                                  // the camera is yours: it cannot wander off
-      if (live) {
-        // first person (the owner's choice): the camera is your eyes. Drag looks around; you do not see your own body.
+      if (live && params.get('view') === 'first') {
+        // first person (tried on Day 3; kept behind ?view=first): the camera is your eyes, your body is hidden
         firstPerson = true;
         player.setBodyVisible(false);
         rig.minHeight = -1e6;                              // (no orbit to keep above the ground)
-        rig.minPolar = 0.95; rig.maxPolar = 2.0;           // look down at your feet, or up at her face and the roofs
+        rig.minPolar = 0.95; rig.maxPolar = 2.0;
         const az0 = Math.atan2(player.x - kitty.brain.x, player.z - kitty.brain.z);   // facing your kitty
         rig.setPose({ az: az0, pol: Math.PI / 2 + 0.03, dist: 30 });
         layout();
+      } else {
+        // third person (the owner's final choice): locked on you. Drag turns it round you, pinch or scroll zooms.
+        camZoom = 0.8;                                     // a little closer than the wide Day 2 view
+        rig.target[0] = player.x; rig.target[2] = player.z;
+        rig.setLimits(12, 64);
+        rig.setPose({ az: home.az, pol: home.pol, dist: home.dist * camZoom });
       }
     } catch (err) { console.warn('Glikdev: the player did not load', err); player = null; }
   }
@@ -796,8 +803,8 @@ async function start() {
   // hint, until the first tap that does something
   if (showUI && !demo && !short) {
     hintEl.textContent = kitty && player
-      ? (coarse ? 'Drag to look around · Tap the ground to walk there · Tap your kitty to pet her'
-        : 'Drag to look around · Click the ground or use WASD to walk · Click your kitty to pet her')
+      ? (coarse ? 'Tap the ground to walk there · Tap your kitty to pet her · Walk to the shop to spend tokens'
+        : 'Click the ground or use WASD to walk · Drag to look around · Click your kitty to pet her')
       : kitty ? (coarse ? 'Tap the ground to call the kitty · Tap her to pet her · Two fingers to move'
         : 'Click the ground to call the kitty · Click her to pet her · Drag to look around · Right-drag or WASD to move')
       : (coarse ? 'Drag to look around · Two fingers to move and zoom' : 'Drag to look around · Right-drag or WASD to move · Scroll to zoom');
