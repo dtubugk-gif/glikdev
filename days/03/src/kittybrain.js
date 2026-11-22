@@ -18,7 +18,10 @@
 // each of the verbs above is then a request she may turn down (a 'decide' event says what she made of it, a
 // 'refuse' event that she said no), and between requests she chooses what to do from what she feels, who she
 // is and her habits: she naps in her own spot, goes to the bowl when she is hungry, comes over to ask for a
-// cuddle or a game ('ask'), follows you about. Without a mind she behaves exactly as she did on Day 2.
+// cuddle or a game ('ask'), follows you about. She has feelings too ('feel' says when they change): she sleeps
+// when she has had enough of the day, and if you get her up before she has slept enough ('woken') she is cross
+// about it: a grumble, her nose turned away, and when she is furious she stalks off.
+// Without a mind she behaves exactly as she did on Day 2.
 
 export const STEP = 1 / 60;
 
@@ -119,6 +122,9 @@ export function createBrain(o = {}) {
   b.snub = 0;                         // she said no: until this time her nose is turned away
   b.ateAt = -1e9;
   b.solo = false;                     // the game going on is her own idea (nobody threw anything)
+  b.feeling = null;                   // how she feels (an id from kittymind's EMOTIONS); 'feel' events say when it changes
+  b.feelAt = 0;
+  b.stormed = false;                  // furious, and already stalked off for it
   const playing = () => !!b.yarn && (b.goal === 'yarn' || ['pounce', 'bat'].includes(b.mode) || b.face?.then === 'pounce');
   const toyDown = () => !!(b.yarn && !b.yarn.held && !b.yarn.air && b.yarn.flying === 0);
   const friendSpot = () => b.friend || [b.x + (b.viewer[0] - b.x) * 0.4, b.z + (b.viewer[1] - b.z) * 0.4];
@@ -151,6 +157,23 @@ export function createBrain(o = {}) {
     if (!b.asking) return;
     emit('ask-end', { what: b.asking.what, dropped: true });
     b.asking = null;
+  }
+  /**
+   * You got her up (a pet while she slept). If she had slept enough she does not mind; otherwise she is cross:
+   * a grumble as she stretches, then she sits with her nose turned away (and may stalk off: see stepNeeds).
+   */
+  function wakeCross() {
+    b.target = null; b.goal = null;
+    mind.feel('woken');
+    cheer(-0.06);
+    emit('woken', { angry: true });
+    b.after = 'sulk';
+    enter('stretch', KITTY.clips.Stretch);
+    emit('wake');
+    emit('grumble', { delay: 0.35 });
+    b.snub = b.t + KITTY.clips.Stretch + 5;
+    b.feelAt = 0;
+    return false;
   }
   /** Had enough: up and away, a few metres off, the other way from you. */
   function walkOff() {
@@ -260,7 +283,10 @@ export function createBrain(o = {}) {
   };
 
   b.pet = (opt = {}) => {
-    const d = opt.sure ? YES : wants('pet');             // sure: she is not asked (her new name: she just likes it)
+    const asleep = !!mind && !opt.sure && lying();       // a pet while she sleeps gets her up, like it or not
+    if (asleep && !(b.energy > 0.9 && mind.sleepy < 0.25)) return wakeCross();
+    if (asleep) emit('woken', { angry: false });         // she had slept enough: no harm done
+    const d = opt.sure || asleep ? YES : wants('pet');   // sure: she is not asked (her new name: she just likes it)
     if (!d.yes) {
       if (d.why === 'enough' && (sitting() || b.mode === 'idle')) walkOff();
       return false;
@@ -415,6 +441,7 @@ export function createBrain(o = {}) {
     else if (a === 'meow') { enter('meow', KITTY.clips.Meow); emit('meow'); }
     else if (a === 'groom') enter('groom', 4.5 + rand() * 2);
     else if (a === 'nap') { enter('liedown', 1.4); emit('sigh'); }
+    else if (a === 'sulk') enter('sit', 5 + rand() * 3);
     else enter('sit', 5 + rand() * 4);
   }
 
@@ -550,6 +577,16 @@ export function createBrain(o = {}) {
     }
     if (!mind) return;
     mind.step(dt, sense());
+    // her feelings: say so when they change; cross = nose away; furious = she stalks off
+    if (b.t >= b.feelAt) {
+      b.feelAt = b.t + 0.2;
+      const f = mind.emotion(sense());
+      if (f.id !== b.feeling) { b.feeling = f.id; emit('feel', { id: f.id, word: f.word }); }
+    }
+    const anger = mind.mood.anger;
+    if (anger >= 0.45 && (sitting() || b.mode === 'idle')) b.snub = Math.max(b.snub, b.t + 0.6);
+    if (anger >= 0.75 && !b.stormed && (b.mode === 'sit' || b.mode === 'idle')) { b.stormed = true; emit('grumble'); walkOff(); }
+    if (anger < 0.3) b.stormed = false;
     if (sitting() || b.mode === 'idle') b.energy = clamp(b.energy + dt / 100, 0, 1);     // resting helps a little; a nap far more
     if (b.asking && b.t > b.asking.until) {                // she asked and nothing came of it
       mind.outcome('ignored');
@@ -603,8 +640,13 @@ export function createBrain(o = {}) {
         if (b.timer <= 0) { enter('sleep', 14 + rand() * 10); emit('asleep'); if (mind) mind.napAt(b.x, b.z); }
         break;
       case 'sleep':
-        b.energy = clamp(b.energy + dt / 15, 0, 1);
-        if (b.timer <= 0) wake(null);
+        b.energy = clamp(b.energy + dt / (mind ? 30 : 15), 0, 1);
+        if (!mind) { if (b.timer <= 0) wake(null); break; }
+        // she sleeps until she has had enough (or hunger gets her up, or it has been long enough)
+        if (b.timer <= 0 && ((b.energy >= 0.999 && mind.sleepy < 0.12) || b.hunger > 0.85 || b.timer < -75)) {
+          mind.feel('rested');
+          wake(null);
+        }
         break;
       case 'stretch':
         if (b.timer <= 0 && !setOff()) {

@@ -224,6 +224,28 @@ html.has-care .hint { bottom: calc(var(--gutter) + var(--safe-b) + 66px); }
 .nametag-hearts i { width: 11px; height: 10px; font-style: normal;
   background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 11'%3E%3Cpath d='M6 10.2C2.3 7.6.6 5.6.6 3.5A2.9 2.9 0 0 1 6 2a2.9 2.9 0 0 1 5.4 1.5c0 2.1-1.7 4.1-5.4 6.7Z' fill='%23f06b78' stroke='%232f2620' stroke-width='1.2'/%3E%3C/svg%3E") no-repeat center / contain; }
 .nametag-hearts i.off { filter: grayscale(1) opacity(0.35); }
+/* how she feels: a little face in her name tag, and a big one that pops up over her head when a feeling starts */
+.nametag-face { display: inline-flex; width: 22px; height: 22px; margin-left: -5px; flex: none; }
+.nametag-face:empty { display: none; }
+.nametag-face svg, .emote svg, .mind-face svg { display: block; width: 100%; height: 100%; }
+.emote {
+  position: fixed; left: 0; top: 0; z-index: 2; width: 56px; height: 56px;
+  pointer-events: none; opacity: 0; will-change: transform;
+  filter: drop-shadow(0 3px 0 rgba(47, 38, 32, 0.22));
+}
+.emote[hidden] { display: none; }
+.emote.is-on { opacity: 1; }
+.emote svg { transform-origin: 50% 100%; }
+.emote.is-pop svg { animation: emote-pop 2800ms cubic-bezier(.34, 1.56, .64, 1) both; }
+@keyframes emote-pop {
+  0% { transform: scale(0); }
+  10% { transform: scale(1.18) rotate(-6deg); }
+  16% { transform: scale(1) rotate(4deg); }
+  22%, 88% { transform: scale(1) rotate(0); opacity: 1; }
+  100% { transform: scale(0.5); opacity: 0; }
+}
+html.no-ui .emote, html.capture-short .emote { display: none !important; }
+.mind-face { display: inline-block; width: 20px; height: 20px; vertical-align: -4px; margin-right: 6px; }
 /* what is on her mind: a small thought bubble over her name tag (Day 3: she has a mind of her own) */
 .thought {
   position: fixed; left: 0; top: 0; z-index: 2; margin: 0;
@@ -564,7 +586,7 @@ html.capture-short .bubble { font-size: 16px; max-width: 100%; }
 @media (prefers-reduced-motion: reduce) {
   .daylog[open] .sheet { animation: none; }
   .chip, .hint, .poster, .care-btn, .cat-card, .shop-card, .thought { transition: none; }
-  .care-btn.is-wanted { animation: none; }
+  .care-btn.is-wanted, .emote.is-pop svg { animation: none; }
   .cat-card.is-loading::before { animation-duration: 2.4s; }
   .care-badge, .nametag.is-filmed.is-pop { animation: none; }
 }
