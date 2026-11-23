@@ -26,12 +26,12 @@ export const ITEMS = [
   { id: 'toyjingle', name: 'Jingle ball', node: 'ToyJingle', slot: 'toy', price: 14, roll: true, bounce: 0.5, jingle: true },
   { id: 'toyfish', name: 'Plush fish', node: 'ToyFish', slot: 'toy', price: 18, roll: false, bounce: 0.25 },
   // Day 4 (idea by @Darkbacon155): a fish on a stick. You hold the stick; the fish hangs from it on a line and
-  // you cast it about for her to chase (models/wand.glb, not outfits.glb: `wand` marks it). It is a present:
-  // everyone has it from the start (see createWallet's `gift`).
-  { id: 'toywand', name: 'Fish on a stick', slot: 'toy', price: 0, roll: false, bounce: 0.15, wand: true, jingle: true },
+  // you cast it about for her to chase (models/wand.glb, not outfits.glb: `wand` marks it). It is bought in the
+  // shop like every other toy (the owner's choice; for its first hours it was a present: see createWallet).
+  { id: 'toywand', name: 'Fish on a stick', slot: 'toy', price: 12, roll: false, bounce: 0.15, wand: true, jingle: true },
 ];
-/** What everyone is given, once (the day's new thing is in your hand when you arrive). */
-export const GIFTS = ['toywand'];
+/** The day's new thing: the shop shows it first among the toys, with a "New" badge, until it is yours. */
+export const NEW_ITEM = 'toywand';
 export const SLOTS = ['hat', 'face', 'neck', 'back', 'toy'];
 export const itemById = (id) => ITEMS.find((i) => i.id === id) || null;
 
@@ -64,29 +64,20 @@ const int = (n) => (Number.isFinite(Number(n)) ? Math.max(0, Math.min(MAX_TOKENS
 /**
  * The purse and the wardrobe. `saved` is whatever toJSON() returned earlier (anything else is ignored,
  * piece by piece: a broken save never loses the rest).
- * opts.gift: hand over the presents (GIFTS) this save has not had yet; each one is hers and is out at once.
- * It is given once only: put it away, and it stays away.
+ * A save from Day 4's first hours, when the fish on a stick was a present (it lists it under `gifts`), gives it
+ * back: now it has to be bought. Nothing else in such a save changes.
  */
-export function createWallet(saved = null, opts = {}) {
+export function createWallet(saved = null) {
   const s = saved && typeof saved === 'object' ? saved : {};
   let tokens = int(s.tokens);
   let earned = Math.max(tokens, int(s.earned));
-  const owned = new Set((Array.isArray(s.owned) ? s.owned : []).filter((id) => itemById(id)));
+  const given = new Set(Array.isArray(s.gifts) ? s.gifts : []);
+  const owned = new Set((Array.isArray(s.owned) ? s.owned : []).filter((id) => itemById(id) && !given.has(id)));
   const wearing = {};
   for (const slot of SLOTS) {
     const id = s.wearing && typeof s.wearing === 'object' ? s.wearing[slot] : null;
     const it = itemById(id);
     wearing[slot] = it && it.slot === slot && owned.has(id) ? id : null;
-  }
-  const gifts = new Set((Array.isArray(s.gifts) ? s.gifts : []).filter((id) => GIFTS.includes(id)));
-  if (opts.gift) {
-    for (const id of GIFTS) {
-      if (gifts.has(id)) continue;
-      const it = itemById(id);
-      gifts.add(id);
-      owned.add(id);
-      wearing[it.slot] = id;
-    }
   }
   return {
     get tokens() { return tokens; },
@@ -124,6 +115,6 @@ export function createWallet(saved = null, opts = {}) {
       wearing[slot] = null;
       return true;
     },
-    toJSON: () => ({ tokens, earned, owned: [...owned], wearing: { ...wearing }, ...(gifts.size ? { gifts: [...gifts] } : {}) }),
+    toJSON: () => ({ tokens, earned, owned: [...owned], wearing: { ...wearing } }),
   };
 }

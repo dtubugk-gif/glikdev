@@ -418,6 +418,11 @@ html.no-ui .tokens:not(.is-filmed), html.capture-short .tokens:not(.is-filmed), 
 .shop-card[data-state="buy"] .shop-tag { background: var(--accent-fill); color: #fff; }
 .shop-card[data-state="dear"] img { filter: saturate(0.55) opacity(0.75); }
 .shop-card[data-state="dear"] .shop-tag { color: var(--ink-3); }
+.shop-card[data-new][data-state="buy"]::before, .shop-card[data-new][data-state="dear"]::before {   /* the day's new thing, until it is yours */
+  content: 'New'; position: absolute; z-index: 1; top: -9px; left: -7px; padding: 4px 9px; border-radius: 999px;
+  border: 2.5px solid var(--ink); background: #ffd75e; color: var(--ink);
+  font: 700 12px/1 var(--display); letter-spacing: 0.06em; text-transform: uppercase; transform: rotate(-7deg);
+}
 .shop-card[data-state="owned"] .shop-tag { background: #fff; }
 .shop-card[data-state="on"] { background: #ffe9d8; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent), var(--drop); }
 .shop-card[data-state="on"]::after {               /* a tick on what she has on */

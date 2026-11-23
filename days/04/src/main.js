@@ -15,7 +15,7 @@
 // ?v= through its import map; data and model URLs below get the same stamp (deploy.mjs writes it).
 import { renderDayLog, renderHeadline, latestDay } from './daylog.js';
 import { DEMOS, demoPose, KITTY_DEMOS } from './demo.js';
-import { createWallet, rewardFor, ITEMS, itemById } from './tokens.js';
+import { createWallet, rewardFor, ITEMS, NEW_ITEM, itemById } from './tokens.js';
 import { createMind, sayWhy, describeMind } from './kittymind.js';
 import { emoteSVG } from './emotes.js';
 
@@ -376,7 +376,7 @@ async function start() {
   /** recordings: you and the kitty are stepped together, so the line always runs from where your hand really is */
   const syncPlayer = (bt) => { player.simulateTo(bt); if (wandOn) { kitty.setWandTip(player.tip()); aimRod(); } };
   const kittyBusy = () => { const b = kitty.brain; return ['eat', 'pounce', 'bat'].includes(b.mode) || b.goal === 'eat' || b.goal === 'yarn' || !!(b.yarn?.held && !b.yarn.hang); };
-  let wantShop = false, shopArmed = true, openShop = () => {};
+  let wantShop = false, shopArmed = true, openShop = () => {}, repaintShop = () => {};
   /** you walk there; she comes along (unless she is busy), to a spot beside where you are going */
   function walkTo(x, z) {
     wantShop = false;
@@ -400,8 +400,8 @@ async function start() {
   // ------------------------------------------------------------ friendship tokens and her wardrobe (Day 3, idea by @Kowffe)
   // filming: ?have=6 starts the counter at 6, so it keeps counting up from one clip of a Short to the next
   const filmHave = Math.max(0, Math.floor(Number(params.get('have')) || 0));
-  // (live play: Day 4's fish on a stick is a present, in your hand from the start; recordings get it from their script)
-  const freshWallet = () => createWallet(live ? loadWallet() : { ...(kd?.wallet ?? {}), ...(filmHave ? { tokens: filmHave } : {}) }, { gift: live && !!player });
+  // (Day 4's fish on a stick is bought in the shop like any toy; recordings get it from their script)
+  const freshWallet = () => createWallet(live ? loadWallet() : { ...(kd?.wallet ?? {}), ...(filmHave ? { tokens: filmHave } : {}) });
   let wallet = freshWallet(), wardrobe = null, tokenFX = null, rewardState = {}, filmWear = { ...paramWear };
   let flashHint = () => {};
   const tokenHead = new THREE.Vector3();
@@ -449,11 +449,17 @@ async function start() {
       }
       const n = rewardFor(e, rewardState);
       if (n <= 0) return;
-      const first = wallet.earned === 0;
+      const first = wallet.earned === 0, could = wallet.canBuy(NEW_ITEM);
       wallet.earn(n);
       tokenFX?.spawn(e.t, kitty.headPosition(tokenHead), n);
       audio?.event({ type: 'token', n });
-      if (live) { saveWallet(wallet); if (first) flashHint(coarse ? 'A friendship token! Tap the coin to dress her up' : 'A friendship token! Click the coin to dress her up', 7000); }
+      repaintShop();                                       // a token landing while the shop is open: its prices keep up
+      if (live) {
+        saveWallet(wallet);
+        if (first) flashHint(coarse ? 'A friendship token! Tap the coin to dress her up' : 'A friendship token! Click the coin to dress her up', 7000);
+        // the token that makes the day's new thing affordable: say so, once
+        else if (!could && wallet.canBuy(NEW_ITEM) && player) flashHint(`You can buy the ${itemById(NEW_ITEM).name.toLowerCase()} now! ${coarse ? 'Tap' : 'Click'} the coin to go to the shop`, 8000);
+      }
     });
     const dressing = (async () => {
       try {
@@ -783,9 +789,11 @@ async function start() {
       const tag = document.createElement('span');
       tag.className = 'shop-tag';
       b.append(img, name, tag);
-      (it.slot === 'toy' ? shopToys : shopGrid).append(b);
+      if (it.id === NEW_ITEM) { b.dataset.new = '1'; shopToys.prepend(b); }   // the day's new thing: first among the toys
+      else (it.slot === 'toy' ? shopToys : shopGrid).append(b);
       return { it, b, tag };
     });
+    let shownNew = false;
     const paintShop = () => {
       shopHave.textContent = String(wallet.tokens);
       for (const { it, b, tag } of shopCards) {
@@ -799,6 +807,7 @@ async function start() {
             : `${it.name}: ${it.price} tokens${wallet.canBuy(it.id) ? '. Buy it' : ', not enough yet'}`);
       }
     };
+    repaintShop = () => { if (shop.open) paintShop(); };
     const dressNow = (sound) => {
       saveWallet(wallet);
       for (const k of Object.keys(filmWear)) delete filmWear[k];   // what she chose in the shop wins over ?wear=
@@ -818,6 +827,10 @@ async function start() {
       audio?.unlock();
       audio?.event({ type: 'shop-open' });
       dismissHint();
+      if (!shownNew && !wallet.owns(NEW_ITEM)) {             // the first look inside: the new thing is in view
+        shownNew = true;
+        shopCards.find((c) => c.it.id === NEW_ITEM)?.b.scrollIntoView({ block: 'nearest' });
+      }
     };
     tokensEl.addEventListener('click', () => { audio?.unlock(); goShop(); });
     shopItems.addEventListener('click', (e) => {
@@ -998,8 +1011,11 @@ async function start() {
   // hint, until the first tap that does something
   if (showUI && !demo && !short) {
     hintEl.textContent = kitty && player
-      ? (coarse ? 'Tap the ground to walk there · Tap your kitty to pet her · Walk to the shop to spend tokens'
-        : 'Click the ground or use WASD to walk · Drag to look around · Click your kitty to pet her')
+      ? (!wallet.owns(NEW_ITEM)                            // the day's new thing waits in the shop
+        ? (coarse ? 'Tap the ground to walk there · Tap your kitty to pet her · New in the shop: a fish on a stick'
+          : 'Click the ground or use WASD to walk · Click your kitty to pet her · New in the shop: a fish on a stick')
+        : coarse ? 'Tap the ground to walk there · Tap your kitty to pet her · Walk to the shop to spend tokens'
+          : 'Click the ground or use WASD to walk · Drag to look around · Click your kitty to pet her')
       : kitty ? (coarse ? 'Tap the ground to call the kitty · Tap her to pet her · Two fingers to move'
         : 'Click the ground to call the kitty · Click her to pet her · Drag to look around · Right-drag or WASD to move')
       : (coarse ? 'Drag to look around · Two fingers to move and zoom' : 'Drag to look around · Right-drag or WASD to move · Scroll to zoom');
@@ -1007,9 +1023,11 @@ async function start() {
   }
   // the fish on a stick is in your hand: say how to play with it (until the first thing you do)
   onWand = (on) => {
-    if (!on || hinted || !(showUI && !demo && !short)) return;
-    hintEl.textContent = coarse ? 'Tap Play to cast your fish, or to dangle it when she is close · Drag the fish to fling it'
+    if (!on || !(showUI && !demo && !short)) return;
+    const how = coarse ? 'Tap Play to cast your fish, or to dangle it when she is close · Drag the fish to fling it'
       : 'Space or Play casts your fish, or dangles it when she is close · Drag the fish to fling it · WASD to walk';
+    if (hinted) flashHint(how, 10000);                     // just bought, or taken out again: say it for a while
+    else hintEl.textContent = how;
   };
   if (wandOn) onWand(true);
   function dismissHint() {
@@ -1031,9 +1049,8 @@ async function start() {
       if (herMind()?.lastDecision?.verb === 'play' && !herMind().lastDecision.yes) return;   // she turned the game down: not the moment for this tip
       yarnHinted = true;
       setTimeout(() => {
-        if (thrownOnce) return;
+        if (thrownOnce || wandOn) return;                  // (the fish on a stick has its own tip)
         hintEl.textContent = toyOut() ? 'Drag the toy and let go to throw it' : 'Drag the yarn ball and let go to throw it';
-        if (wandOn) return;
         hintEl.dataset.yarn = '1';
         hintEl.hidden = false;
         hintEl.classList.remove('is-gone');
