@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { ITEMS, SLOTS, itemById, rewardFor, createWallet, CALL_COOLDOWN, MAX_TOKENS } from '../src/tokens.js';
+import { ITEMS, SLOTS, itemById, rewardFor, penaltyFor, LOSS, createWallet, CALL_COOLDOWN, MAX_TOKENS } from '../src/tokens.js';
 import { createBrain, STEP } from '../src/kittybrain.js';
 import { KITTY_DEMOS, DEMOS } from '../src/demo.js';
 
@@ -142,4 +142,48 @@ test('the Day 3 demos exist and only dress her in real pieces', () => {
     if (s.type !== 'wear') continue;
     if (s.id === null) assert.ok(SLOTS.includes(s.slot)); else assert.ok(itemById(s.id), s.id);
   }
+});
+
+// ---- Day 4, the owner's rule: "if the cat is angry at me, I lose coins"
+const feel = (id) => ({ type: 'feel', id });
+
+test('her bad feelings cost tokens: crosser costs more, calming down costs nothing', () => {
+  assert.deepEqual(LOSS, { grumpy: 1, angry: 2, furious: 4, sad: 1 });
+  for (const id of ['content', 'happy', 'loving', 'playful', 'sleepy', 'hungry', 'asleep']) assert.equal(penaltyFor(feel(id), {}), 0, id);
+  assert.equal(penaltyFor(feel('grumpy'), {}), 1);
+  assert.equal(penaltyFor(feel('angry'), {}), 2);
+  assert.equal(penaltyFor(feel('furious'), {}), 4, 'woken from her nap');
+  assert.equal(penaltyFor(feel('sad'), {}), 1);
+  assert.equal(penaltyFor({ type: 'swat' }, {}), 0, 'only feelings cost');
+  // she gets crosser step by step: 1, then 1 more, then 2 more = 4 in all
+  const st = {};
+  assert.deepEqual(['content', 'grumpy', 'angry', 'furious'].map((id) => penaltyFor(feel(id), st)), [0, 1, 1, 2]);
+  // and calms down again: nothing; nor is the sadness that shows as her anger wears off charged
+  assert.deepEqual(['angry', 'grumpy', 'sad', 'content'].map((id) => penaltyFor(feel(id), st)), [0, 0, 0, 0]);
+  // pestered again from "a bit cross": one more
+  const again = {};
+  assert.deepEqual(['angry', 'grumpy', 'angry', 'grumpy', 'content', 'grumpy'].map((id) => penaltyFor(feel(id), again)), [2, 0, 1, 0, 0, 1]);
+  // sleep changes nothing: cross, asleep, still cross on waking is not charged twice; got up angry from calm is
+  const nap = {};
+  assert.deepEqual(['grumpy', 'asleep', 'grumpy', 'content', 'asleep', 'furious'].map((id) => penaltyFor(feel(id), nap)), [1, 0, 0, 0, 0, 4]);
+  // sad once, not again while it lasts; sad, then cross as well, costs the crossness
+  const low = {};
+  assert.deepEqual(['sad', 'sad', 'content', 'sad', 'grumpy'].map((id) => penaltyFor(feel(id), low)), [1, 0, 0, 1, 1]);
+});
+
+test('wallet: losing tokens never goes below none, and keeps what she owns and what was earned', () => {
+  const w = createWallet();
+  assert.equal(w.lose(3), 0, 'nothing to lose');
+  w.earn(20);
+  w.buy('bowtie');
+  assert.equal(w.lose(4), 4);
+  assert.equal(w.tokens, 11);
+  assert.equal(w.earned, 20, 'what was earned in all is history');
+  assert.equal(w.owns('bowtie') && w.isWearing('bowtie'), true);
+  assert.equal(w.lose(50), 11, 'only what is there');
+  assert.equal(w.tokens, 0);
+  for (const bad of [-3, NaN, 'x', null, undefined, 0]) assert.equal(w.lose(bad), 0);
+  w.earn(5);
+  assert.equal(w.lose(2.9), 2, 'whole tokens');
+  assert.equal(createWallet(JSON.parse(JSON.stringify(w))).tokens, 3);
 });

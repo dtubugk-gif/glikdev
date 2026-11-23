@@ -119,6 +119,7 @@
   <button class="chip tokens" id="tokens" type="button" aria-haspopup="dialog" aria-controls="shop" aria-label="Friendship tokens: 0. Go to the shop" hidden>
     <img id="tokens-icon" src="models/shop/token.webp?v=4e96e6f1f359" alt="" width="34" height="34">
     <span class="tokens-count" id="tokens-count">0</span>
+    <span class="tokens-loss" id="tokens-loss" aria-hidden="true" hidden></span>
   </button>
 
   <!-- her name, floating over her head; tap it to rename her -->
@@ -183,7 +184,7 @@
         <h2 id="shop-title">Kitty shop</h2>
         <p class="shop-purse"><img src="models/shop/token.webp?v=4e96e6f1f359" alt="" width="28" height="28"><span id="shop-have">0</span><span class="shop-purse-label"> tokens</span></p>
       </div>
-      <p class="namer-sub">Welcome to the kitty shop! Pet her, feed her and play with her to earn friendship tokens.</p>
+      <p class="namer-sub">Welcome to the kitty shop! Pet her, feed her and play with her to earn friendship tokens. Make her angry and you lose some.</p>
       <div id="shop-items">
         <h3 class="shop-sub" id="shop-outfits-title">Outfits</h3>
         <div class="shop-grid" id="shop-grid" role="group" aria-labelledby="shop-outfits-title"></div>

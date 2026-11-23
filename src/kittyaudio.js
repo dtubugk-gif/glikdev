@@ -203,6 +203,7 @@ export function createKittyAudio(o = {}) {
         case 'footstep': play('pat', e.strong ? 0.36 : 0.26, { rate: (e.strong ? 0.8 : 0.72) * vary() }); break;
         case 'squeak': play('squeak', 0.5 * v, at({ rate: 1.1 * vary() })); break;
         case 'nope': play('nope', 0.5); break;
+        case 'lose': play('coinflip', 0.5, { rate: 0.8 }); play('nope', 0.42, { delay: 0.14, rate: 0.9 }); break;   // tokens gone: a coin drops, a low "no"
         case 'grumble': play('meow', 0.7 * v, at({ rate: 0.72, delay: e.delay || 0 })); break;      // a low, cross meow
         case 'refuse': if (e.why !== 'asleep') play('trill', 0.5 * v, at({ rate: 0.8 })); break;   // a low, short "no"
         case 'click':

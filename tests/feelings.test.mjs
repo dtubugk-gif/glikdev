@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { createBrain, STEP } from '../src/kittybrain.js';
 import { createMind, EMOTIONS, describeMind } from '../src/kittymind.js';
 import { EMOTES, emoteSVG } from '../src/emotes.js';
+import { penaltyFor, rewardFor, createWallet } from '../src/tokens.js';
 
 const calm = (over = {}) => ({ t: 0, hunger: 0.4, energy: 0.8, happy: 0.6, mode: 'sit', asleep: false, playing: false, moving: false,
   food: false, ateAgo: 999, toy: false, asking: null, friend: true, friendDist: 12, ...over });
@@ -173,4 +174,30 @@ test('her sleep lasts until she has slept enough', () => {
   assert.ok(b.energy > 0.95);
   assert.ok(types(ev).includes('wake'));
   assert.ok(mind.mood.joy > 0.2, 'she wakes in a good mood');
+});
+
+// ---- Day 4, the owner's rule: "if the cat is angry at me, I lose coins"
+test('the real kitty: wake her from her nap and it costs you tokens; pestering her costs more; a calm visit costs none', () => {
+  /** plays the game's own bookkeeping over her events */
+  const purse = (w, st, ev) => { let lost = 0; for (const e of ev) { lost += w.lose(penaltyFor(e, st)); w.earn(rewardFor(e, st)); } return lost; };
+  const { b } = sleeper(6);
+  const w = createWallet({ tokens: 10 }), st = {};
+  purse(w, st, b.drain());
+  b.pet();                                                  // you got her up
+  const lost = purse(w, st, [...b.drain(), ...run(b, 1.5)]);
+  assert.ok(lost === 2 || lost === 4, `angry or furious: ${lost} tokens`);
+  assert.equal(w.tokens, 10 - lost);
+  const before = w.tokens;
+  for (let i = 0; i < 8; i++) { b.pet(); purse(w, st, [...b.drain(), ...run(b, 0.7)]); }
+  assert.ok(w.tokens <= before, 'pestering never pays');
+  assert.ok(10 - w.tokens <= 4, 'and her anger costs at most 4 in one go');
+  // an ordinary, friendly minute: nothing is taken
+  const calmB = createBrain({ seed: 3, mind: createMind({ seed: 5 }) });
+  calmB.friend = [4, 6];
+  const cw = createWallet({ tokens: 10 }), cst = {};
+  let took = purse(cw, cst, run(calmB, 20));
+  calmB.pet();
+  took += purse(cw, cst, [...calmB.drain(), ...run(calmB, 20)]);
+  assert.equal(took, 0, 'a calm kitty takes nothing');
+  assert.ok(cw.tokens >= 10);
 });
