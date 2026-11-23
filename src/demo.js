@@ -121,7 +121,7 @@ export const KITTY_DEMOS = {
   },
   // Day 4: a close look at the fish hanging from your stick (she watches it from behind)
   fishshow: {
-    start: () => ({ x: -9.5, z: -6.5, heading: Math.atan2(9.5, 9.5), mode: 'sit' }),
+    start: () => ({ x: -9.5, z: -6.5, heading: Math.atan2(9.5, 9.5), mode: 'sit', timer: 60 }),
     script: [{ t: 0.05, type: 'wear', id: 'toywand' }],
     viewer: () => [0, 3],
     player: { start: { x: 0, z: 3, heading: 0.35 } },
