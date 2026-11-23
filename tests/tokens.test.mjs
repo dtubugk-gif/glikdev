@@ -17,7 +17,7 @@ test('every shop item is well formed and has its picture', () => {
     assert.ok(!ids.has(it.id), `duplicate ${it.id}`);
     ids.add(it.id);
     assert.ok(SLOTS.includes(it.slot), `${it.id} slot`);
-    assert.ok(Number.isInteger(it.price) && (it.price > 0 || it.wand), `${it.id} price`);   // (Day 4's fish on a stick is a present)
+    assert.ok(Number.isInteger(it.price) && it.price > 0, `${it.id} price`);
     assert.ok(it.name && (it.node || it.wand) && (it.fit || it.slot === 'toy'));
     assert.ok(existsSync(join(GAME, 'models', 'shop', `${it.id}.webp`)), `${it.id}.webp`);
   }

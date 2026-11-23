@@ -1,11 +1,11 @@
 // Day 4: the fish on a stick (idea by @Darkbacon155). The fish on its line (kittybrain.js), the rod in your
-// hand (the walker in player.js, without three.js), the present in the wallet, the model file and the demos.
+// hand (the walker in player.js, without three.js), buying it in the shop, the model file and the demos.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { ITEMS, GIFTS, itemById, createWallet, rewardFor } from '../src/tokens.js';
+import { ITEMS, NEW_ITEM, itemById, createWallet, rewardFor } from '../src/tokens.js';
 import { createBrain, YARN, WAND, STEP, KITTY } from '../src/kittybrain.js';
 import { DEMOS, KITTY_DEMOS, demoPose } from '../src/demo.js';
 
@@ -29,32 +29,56 @@ function run(b, seconds, each) {
   return events;
 }
 
-test('the fish on a stick is in the shop, is a present, and rings', () => {
+test('the fish on a stick is in the shop, has a price, is the new thing, and rings', () => {
   const it = itemById('toywand');
-  assert.ok(it && it.wand && it.slot === 'toy' && it.price === 0 && it.jingle);
-  assert.deepEqual(GIFTS, ['toywand']);
+  assert.ok(it && it.wand && it.slot === 'toy' && it.jingle);
+  assert.ok(it.price >= 8 && it.price <= 20, 'a few minutes of looking after her');
+  assert.equal(NEW_ITEM, 'toywand');
   assert.equal(ITEMS.filter((i) => i.wand).length, 1);
 });
 
-test('wallet: the present is given once, is out at once, and stays away once put away', () => {
-  assert.equal(createWallet().owns('toywand'), false, 'no present unless asked for (recordings, old tests)');
-  const w = createWallet(null, { gift: true });
-  assert.equal(w.owns('toywand'), true);
-  assert.equal(w.wearing.toy, 'toywand');
-  assert.equal(w.tokens, 0, 'a present costs nothing');
-  // an old save with another toy out: the present still arrives, in your hand
-  const old = createWallet({ tokens: 9, owned: ['toyball'], wearing: { toy: 'toyball' } }, { gift: true });
-  assert.equal(old.wearing.toy, 'toywand');
-  assert.equal(old.owns('toyball'), true);
-  assert.equal(old.tokens, 9);
+test('wallet: the fish on a stick has to be bought; then it is yours, out, and stays yours', () => {
+  const price = itemById('toywand').price;
+  const w = createWallet();
+  assert.equal(w.owns('toywand'), false, 'nobody starts with it');
+  assert.equal(w.wearing.toy, null);
+  assert.equal(w.buy('toywand'), false, 'not without tokens');
+  w.earn(price - 1);
+  assert.equal(w.canBuy('toywand'), false);
+  assert.equal(w.buy('toywand'), false, 'one token short');
+  w.earn(1);
+  assert.equal(w.canBuy('toywand'), true);
+  assert.equal(w.buy('toywand'), true);
+  assert.equal(w.tokens, 0, 'it cost its price');
+  assert.equal(w.wearing.toy, 'toywand', 'bought, it is in your hand');
+  assert.equal(w.buy('toywand'), false, 'not twice');
   // put away, saved, loaded again: it stays away, and is still yours
-  old.takeOff('toy');
-  const again = createWallet(JSON.parse(JSON.stringify(old)), { gift: true });
+  w.takeOff('toy');
+  const again = createWallet(JSON.parse(JSON.stringify(w)));
   assert.equal(again.wearing.toy, null);
   assert.equal(again.owns('toywand'), true);
   assert.equal(again.wear('toywand'), true);
-  // a broken list of presents never throws
-  for (const bad of [{ gifts: 'all' }, { gifts: ['nope', 7] }, { gifts: null }]) assert.equal(createWallet(bad, { gift: true }).owns('toywand'), true);
+  assert.equal(createWallet(JSON.parse(JSON.stringify(again))).wearing.toy, 'toywand');
+});
+
+test('wallet: a save from when it was a present gives it back, keeps everything else, and can buy it', () => {
+  const gifted = { tokens: 9, earned: 30, owned: ['toyball', 'toywand', 'bowtie'], wearing: { toy: 'toywand', neck: 'bowtie' }, gifts: ['toywand'] };
+  const w = createWallet(gifted);
+  assert.equal(w.owns('toywand'), false);
+  assert.equal(w.wearing.toy, null, 'no rod in your hand');
+  assert.equal(w.owns('toyball') && w.owns('bowtie'), true);
+  assert.equal(w.wearing.neck, 'bowtie');
+  assert.equal(w.tokens, 9);
+  assert.equal(w.earned, 30);
+  assert.equal('gifts' in w.toJSON(), false, 'the old list is not written again');
+  w.earn(10);
+  assert.equal(w.buy('toywand'), true);
+  const again = createWallet(JSON.parse(JSON.stringify(w)));
+  assert.equal(again.owns('toywand'), true, 'bought: it stays');
+  assert.equal(again.wearing.toy, 'toywand');
+  // a broken list of presents never throws, and never gives anything away
+  for (const bad of [{ gifts: 'all' }, { gifts: ['nope', 7] }, { gifts: null }]) assert.equal(createWallet(bad).owns('toywand'), false);
+  assert.equal(createWallet({ owned: ['toywand'], gifts: 'all' }).owns('toywand'), true, 'only a real list takes it back');
 });
 
 test('out of its bag, the fish hangs under the tip of the stick and she does not chase it', () => {
