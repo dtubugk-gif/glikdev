@@ -4,7 +4,7 @@
 // requestAnimationFrame / performance.now gets identical frames on every run.
 
 export const DEMOS = ['orbit', 'reveal', 'kitty', 'kittycall', 'kittypet', 'kittywalk', 'kittyname', 'kittyfeed', 'kittyplay', 'kittynap',
-  'kittytoken', 'kittydress', 'shopwalk', 'kittytoy', 'kittywake', 'kittyfish', 'fishwalk', 'fishshow'];
+  'kittytoken', 'kittydress', 'shopwalk', 'kittytoy', 'kittywake', 'kittyfish', 'fishwalk', 'fishshow', 'fishdangle'];
 
 // Day 3: where the shop's doormat is, and where the kitty waits beside it (town.js works these out from SHOP)
 const SHOP_DOOR = [19.97, -21.57], SHOP_WAIT = [12.84, -23.42];
@@ -121,10 +121,17 @@ export const KITTY_DEMOS = {
   },
   // Day 4: a close look at the fish hanging from your stick (she watches it from behind)
   fishshow: {
-    start: () => ({ x: -9.5, z: -6.5, heading: Math.atan2(9.5, 9.5), mode: 'sit' }),
+    start: () => ({ x: -9.5, z: -6.5, heading: Math.atan2(9.5, 9.5), mode: 'sit', timer: 60 }),
     script: [{ t: 0.05, type: 'wear', id: 'toywand' }],
     viewer: () => [0, 3],
     player: { start: { x: 0, z: 3, heading: 0.35 } },
+  },
+  // Day 4: she is close by: you dangle the fish in front of her, and she pounces at it and bats it so it swings
+  fishdangle: {
+    start: () => ({ x: 5.5, z: -5.5, heading: Math.atan2(-6.5, 7.5), mode: 'sit' }),
+    script: [{ t: 0.05, type: 'wear', id: 'toywand' }, { t: 0.6, type: 'dangle' }],
+    viewer: () => [-1, 2],
+    player: { start: { x: -1, z: 2, heading: Math.atan2(6.5, -7.5) } },
   },
   // Day 4: you run off with the fish trailing behind you on its line, and she tears after it
   fishwalk: {
@@ -216,6 +223,12 @@ export function demoPose(name, t, home, kitty = null) {
     const pos = [p.x - uz * side - ux * back, lerp(6.4, 7.0, k), p.z + ux * side - uz * back];
     const ahead = lerp(4.5, 4.8, k);
     return { position: pos, look: [p.x + ux * ahead, 3.4, p.z + uz * ahead], shift: 0 };
+  }
+  if (name === 'fishdangle' && kitty.player) {
+    // from your right again, closer: the rod down, the fish dancing on the floor between you, her going for it
+    const p = kitty.player, ux = 0.655, uz = -0.756;
+    const pos = [p.x - uz * 13.5 - ux * 4.5, 5.6, p.z + ux * 13.5 - uz * 4.5];
+    return { position: pos, look: [p.x + ux * 5.5, 3.2, p.z + uz * 5.5], shift: 0 };
   }
   if (name === 'fishshow' && kitty.yarn) {
     // close on the fish as she turns on her line, drifting round her (you, out of focus of attention, behind her)

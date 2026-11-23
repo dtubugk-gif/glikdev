@@ -57,7 +57,8 @@ export const WAND = { rest: 3.1,   // the line when the fish just hangs from the
   near: 7,            // a cast "to her" lands this far in front of her
   trail: 10.5,        // the least line once the fish is out: walk off and it trails this far behind the tip
   wait: 2.4,          // the game is over: this long, then the fish is reeled in
-  lost: 6 };          // nobody is playing with it: this long, then it is reeled in
+  lost: 6,            // nobody is playing with it: this long, then it is reeled in
+  tease: 7.5 };        // she is this near the hanging fish: Play dangles it in front of her instead of casting it
 
 const TAU = Math.PI * 2;
 const wrap = (a) => ((a + Math.PI) % TAU + TAU) % TAU - Math.PI;   // to [-pi, pi)
@@ -136,7 +137,7 @@ export function createBrain(o = {}) {
   b.stormed = false;                  // furious, and already stalked off for it
   b.bed = null;                       // her bed: { x, z, r (cushion), outer, h (cushion height), ex, ez (unit vector out of its front) }
   b.bedAt = 0;                        // not before this time does she set off for bed again
-  const playing = () => !!b.yarn && (b.goal === 'yarn' || ['pounce', 'bat'].includes(b.mode) || b.face?.then === 'pounce');
+  const playing = () => !!b.yarn && (b.goal === 'yarn' || ['pounce', 'bat'].includes(b.mode) || ['pounce', 'swipe'].includes(b.face?.then));
   const toyDown = () => !!(b.yarn && !b.yarn.held && !b.yarn.air && !b.yarn.reel && b.yarn.flying === 0);
   const friendSpot = () => b.friend || [b.x + (b.viewer[0] - b.x) * 0.4, b.z + (b.viewer[1] - b.z) * 0.4];
   /** What she senses this instant: all her mind gets to go on. */
@@ -400,7 +401,11 @@ export function createBrain(o = {}) {
   }
 
   b.play = () => {
-    if (b.yarn?.wand) { b.castNear(); return; }          // Day 4: the fish on a stick is out: it is cast to her
+    if (b.yarn?.wand) {                                  // Day 4: the fish on a stick is out
+      const y = b.yarn;                                  // she is close by: it is dangled in front of her; otherwise cast to her
+      if (y.hang && Math.hypot(y.x - b.x, y.z - b.z) < WAND.tease) b.dangle(); else b.castNear();
+      return;
+    }
     if (b.yarn?.held) return;                            // it is in your hand
     const d = wants('play');
     if (mind && d.yes && b.asking?.what === 'play') answered();
@@ -430,9 +435,9 @@ export function createBrain(o = {}) {
     const y = b.yarn;
     if (!y) return false;
     Object.assign(y, { held: true, air: false, flying: 0, vx: 0, vz: 0, vy: 0, hx: y.x, hz: y.z });
-    if (y.wand) Object.assign(y, { hang: false, reel: false, idle: 0, line: WAND.max });
+    if (y.wand) Object.assign(y, { hang: false, reel: false, dangle: false, idle: 0, line: WAND.max });
     if (b.goal === 'yarn') { b.target = null; b.goal = null; b.speed = 0; enter('idle', 30); }
-    if (b.mode === 'face' && b.face?.then === 'pounce') { b.face = null; enter('idle', 30); }
+    if (b.mode === 'face' && ['pounce', 'swipe'].includes(b.face?.then)) { b.face = null; enter('idle', 30); }
     emit('grab', { x: y.x, z: y.z });
     return true;
   };
@@ -464,7 +469,7 @@ export function createBrain(o = {}) {
   // it about; walk off and it drags along behind you, and she follows; when the game is over it is reeled in.
   const stopChase = () => {
     if (b.goal === 'yarn') { b.target = null; b.goal = null; b.speed = 0; enter('idle', 1.5); }
-    if (b.mode === 'face' && b.face?.then === 'pounce') { b.face = null; enter('idle', 1.5); }
+    if (b.mode === 'face' && ['pounce', 'swipe'].includes(b.face?.then)) { b.face = null; enter('idle', 1.5); }
   };
   const tipNow = () => b.wandTip || [b.x, 5.4, b.z + 6];
   /** The stick comes out (the fish hangs from it) or is put away. */
@@ -491,7 +496,7 @@ export function createBrain(o = {}) {
     if (mind && d.yes && b.asking?.what === 'play') answered();
     dx = p.x - y.x; dz = p.z - y.z;
     const T = clamp(Math.hypot(dx, dz) / 21, 0.5, 0.85);    // seconds in the air
-    Object.assign(y, { hang: false, held: false, reel: false, air: true, idle: 0, line: WAND.max, cast: true,
+    Object.assign(y, { hang: false, held: false, reel: false, air: true, idle: 0, line: WAND.max, cast: true, dangle: false,
       vx: dx / T, vz: dz / T, vy: (YARN.radius - y.y) / T + 0.5 * YARN.gravity * T, rounds: d.yes ? 0 : 3, drag: YARN.drag });
     emit('cast', { x: p.x, z: p.z, speed: Math.hypot(dx, dz) / T });
     if (d.yes) { b.solo = false; dropAsk(); emit('chirp'); }
@@ -502,6 +507,25 @@ export function createBrain(o = {}) {
     const A = tipNow();
     const dx = A[0] - b.x, dz = A[2] - b.z, d = Math.hypot(dx, dz) || 1;
     return b.cast(b.x + (dx / d) * Math.min(WAND.near, d * 0.6), b.z + (dz / d) * Math.min(WAND.near, d * 0.6));
+  };
+  /**
+   * Dangle it: the fish stays on the end of your rod, lowered to the floor in front of her, and she goes for
+   * it: pounces, and bats it so it swings (three times, like any game of hers). Walk about and she follows it.
+   */
+  b.dangle = () => {
+    const y = b.yarn;
+    if (!y?.wand || !y.hang) return false;
+    const d = wants('play');
+    if (mind && d.yes && b.asking?.what === 'play') answered();
+    if (!d.yes) return false;
+    Object.assign(y, { dangle: true, rounds: 0, idle: 0 });
+    b.solo = false;
+    dropAsk();
+    emit('chirp');
+    emit('dangle');
+    if (lying()) { b.after = null; wake(null); }
+    chaseYarn();
+    return true;
   };
   /** Wind the line in: the fish comes back to hang under the tip. */
   b.reel = () => { const y = b.yarn; if (y?.wand && !y.hang && !y.held) { y.reel = true; y.rounds = 3; } };
@@ -586,6 +610,14 @@ export function createBrain(o = {}) {
   }
 
   const standOff = () => KITTY.pounce + 3.0;             // pounce from here: she lands just short of it
+  /** The fish is dangling right in front of her: she turns to it where she stands and bats it again. */
+  function swipeAgain() {
+    const y = b.yarn, d = Math.hypot(y.x - b.x, y.z - b.z);
+    if (d > 7.5 || d < 0.8) { chaseYarn(); return; }     // it has swung (or been walked) out of reach: after it
+    b.target = null; b.goal = null;
+    b.face = { x: y.x, z: y.z, then: 'swipe' };
+    enter('face');
+  }
 
   function chaseYarn() {
     const y = b.yarn;
@@ -620,6 +652,7 @@ export function createBrain(o = {}) {
       y.y = Math.max(YARN.radius, A[1] - Math.sqrt(WAND.rest * WAND.rest - h * h));
       if (h < 0.004 && Math.hypot(y.vx, y.vz) < 0.02) { y.x = A[0]; y.z = A[2]; y.vx = 0; y.vz = 0; }   // still
       y.vy = 0;
+      if (y.dangle && y.rounds >= 3 && !playing()) { y.dangle = false; emit('dangle-end'); }   // her game is over: up it goes again
       return true;
     }
     if (y.held) return false;                            // in your fingers
@@ -869,7 +902,7 @@ export function createBrain(o = {}) {
       case 'face': {
         b.speed = 0;
         const f = b.face;
-        if (f.then === 'pounce' && b.yarn) { f.x = b.yarn.x; f.z = b.yarn.z; }
+        if ((f.then === 'pounce' || f.then === 'swipe') && b.yarn) { f.x = b.yarn.x; f.z = b.yarn.z; }
         if (turnTo(f.x, f.z, dt) < 0.1) {
           b.face = null;
           if (f.then === 'eat' && b.bowl) {
@@ -877,6 +910,7 @@ export function createBrain(o = {}) {
             b.eatStart = b.t; b.bowl.bites = 0; emit('eat');
           }
           else if (f.then === 'pounce') { enter('pounce', KITTY.clips.Pounce); emit('wiggle'); }
+          else if (f.then === 'swipe') { enter('bat', KITTY.clips.Bat); b.batted = false; }
           else if (f.then === 'nap') { b.after = 'nap'; enter('sitdown', KITTY.clips.Sit); }
           else enter('sitdown', KITTY.clips.Sit);
         }
@@ -921,7 +955,7 @@ export function createBrain(o = {}) {
       }
       case 'bat': {
         const y = b.yarn;
-        if (!b.batted && KITTY.clips.Bat - b.timer > 0.2 && y && !y.held && !y.air) {
+        if (!b.batted && KITTY.clips.Bat - b.timer > 0.2 && y && (!y.held || y.hang) && !y.air) {
           b.batted = true;
           y.rounds += 1;
           y.drag = 0;                                       // her own swats roll on as they always did
@@ -933,12 +967,13 @@ export function createBrain(o = {}) {
           const a = Math.atan2(Math.sin(ahead) * (1 - w) + Math.sin(toMiddle) * w, Math.cos(ahead) * (1 - w) + Math.cos(toMiddle) * w);
           const sp = y.rounds < 3 ? 8 + rand() * 3 : 5;
           y.vx = Math.sin(a) * sp; y.vz = Math.cos(a) * sp;
+          if (y.hang) { y.vx *= 1.6; y.vz *= 1.6; }         // on the end of your rod: it swings away and back
           emit('swat', b.solo ? { round: y.rounds, solo: true } : { round: y.rounds });
           emit(y.rounds < 3 ? 'chirp' : 'trill');
         }
         if (b.timer <= 0) {
           if (y?.held && !y.hang) enter('idle', 30);
-          else if (y && y.rounds < 3) chaseYarn();
+          else if (y && y.rounds < 3) { if (y.dangle) swipeAgain(); else chaseYarn(); }
           else playOver();
         }
         break;

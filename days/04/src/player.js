@@ -27,6 +27,7 @@ export const HOLD = {
   restElev: 0.95,                   // the rod's tilt above level while the fish just hangs (radians)
   restYaw: -0.5,                    // ...and its turn: out to your right, so the fish hangs beside you, not over your face
   outElev: 0.34,                    // ...and while the fish is out on the floor: lower, pointing at it
+  lowElev: 0.27,                    // ...and while you dangle it in front of her: right down, so it dances on the floor
   swing: 0.5,                       // a cast's flick lasts this long (s)
 };
 const STEP = 1 / 60;
@@ -83,8 +84,11 @@ export function createWalker(o = {}) {
   w.wave = () => { if (!w.target && !w.dir && !w.wand) w.waveUntil = w.t + 2.0; };   // (your waving hand holds the stick)
   // ---- the fish on a stick
   w.setWand = (on) => { w.wand = !!on; if (!on) { w.aim = null; w.aimOut = false; w.castAt = -10; } };
-  /** where the fish is ([x, y, z]), and whether it is out (cast, lying on the floor) rather than hanging from the tip */
-  w.setAim = (p, out) => { w.aim = p; w.aimOut = !!out; };
+  /**
+   * where the fish is ([x, y, z]); whether it is out (cast, lying on the floor) rather than hanging from the tip;
+   * and whether you are dangling it in front of her (the rod comes right down, so it dances on the floor)
+   */
+  w.setAim = (p, out, low) => { w.aim = p; w.aimOut = !!out; w.aimLow = !!low; };
   /** the flick of a cast toward (x, z): you turn to face it, unless you are walking */
   w.cast = (x, z) => { w.castAt = w.t; if (!w.target && !w.dir) w.face = { x, z }; };
   /** The rod right now, in your own frame: where the grip is, which way the rod points, which way its tip leans. */
@@ -155,6 +159,7 @@ export function createWalker(o = {}) {
       yawT = clamp(wrap(Math.atan2(w.aim[0] - w.x, w.aim[2] - w.z) - w.heading), -1.25, 1.25);
       elevT = HOLD.outElev + (HOLD.restElev - HOLD.outElev) * clamp(1 - (d - 3) / 4, 0, 1);
     }
+    if (w.wand && w.aimLow) { yawT = -0.15; elevT = HOLD.lowElev + 0.05 * Math.sin(w.t * 7); }   // dangling: low, with a jiggle
     const kr = 1 - Math.exp(-dt * 8);
     w.rodYaw += (yawT - w.rodYaw) * kr;
     w.rodElev += (elevT - w.rodElev) * kr;
@@ -212,7 +217,9 @@ export async function createPlayer(o) {
   // right arm is bent (two-bone IK) so the hand is on the grip, and the rod is laid in it.
   const arm = ['upperarm_R', 'forearm_R', 'hand_R'].map((n) => model.getObjectByName(n));
   const armOK = arm.every(Boolean);
-  const kept = arm.map(() => new THREE.Quaternion());
+  const body = ['spine', 'chest'].map((n) => model.getObjectByName(n)).filter(Boolean);   // they lean into a cast
+  const kept = arm.map(() => new THREE.Quaternion()), keptBody = body.map(() => new THREE.Quaternion());
+  const lean = new THREE.Quaternion(), leanAxis = new THREE.Vector3();
   let bent = false, rod = null, wandOn = false;
   const va = new THREE.Vector3(), vb = new THREE.Vector3(), vS = new THREE.Vector3(), vG = new THREE.Vector3(), vW = new THREE.Vector3(),
     vE = new THREE.Vector3(), vn = new THREE.Vector3(), vp = new THREE.Vector3();
@@ -229,7 +236,21 @@ export async function createPlayer(o) {
     bone.quaternion.copy(qb.multiply(qa));
     bone.updateMatrixWorld(true);
   }
-  function unbend() { if (bent) { arm.forEach((b, k) => b.quaternion.copy(kept[k])); bent = false; } }
+  function unbend() {
+    if (!bent) return;
+    arm.forEach((b, k) => b.quaternion.copy(kept[k]));
+    body.forEach((b, k) => b.quaternion.copy(keptBody[k]));
+    bent = false;
+  }
+  /** lean a bone by `angle` about your own left-right axis (forward is positive), in the world */
+  function leanBone(bone, angle) {
+    leanAxis.set(1, 0, 0).applyQuaternion(root.quaternion);
+    lean.setFromAxisAngle(leanAxis, angle);
+    bone.getWorldQuaternion(qa).premultiply(lean);
+    bone.parent.getWorldQuaternion(qb).invert();
+    bone.quaternion.copy(qb.multiply(qa));
+    bone.updateMatrixWorld(true);
+  }
   function holdRod() {
     if (!rod) return;
     rod.visible = wandOn && model.visible;
@@ -241,7 +262,11 @@ export async function createPlayer(o) {
     if (!armOK) return;
     root.updateMatrixWorld(true);
     arm.forEach((b, k) => kept[k].copy(b.quaternion));
+    body.forEach((b, k) => keptBody[k].copy(b.quaternion));
     bent = true;
+    // your body goes with the cast: back as the rod tips back, forward as it whips out
+    const e = flick(walker.t - walker.castAt);
+    if (e) for (const b of body) leanBone(b, -0.16 * e);
     vG.set(r.grip[0], r.grip[1], r.grip[2]).applyMatrix4(root.matrixWorld);      // the grip, in the world
     arm[0].getWorldPosition(vS);
     arm[1].getWorldPosition(va); arm[2].getWorldPosition(vb);
@@ -330,7 +355,7 @@ export async function createPlayer(o) {
     setWand(on) { wandOn = !!on; walker.setWand(wandOn); if (!wandOn) unbend(); holdRod(); },
     get wand() { return wandOn; },
     cast(x, z) { walker.cast(x, z); },
-    setAim(p, out) { walker.setAim(p, out); },
+    setAim(p, out, low) { walker.setAim(p, out, low); },
     /** where the rod's tip is in the world: [x, y, z] */
     tip() { return walker.tip(); },
     get heading() { return walker.heading; },
