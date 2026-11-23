@@ -1,6 +1,6 @@
 // Glikdev. Glue: URL modes, UI, Day log, the world, the kitty (Day 2) and the render loop. The title
 // card and the Day log come from days.json at runtime (the newest entry), so a new day only adds an entry there.
-//   ?demo=orbit | reveal | kitty | kittycall | kittypet | kittywalk | kittytoken | kittydress ...
+//   ?demo=orbit | reveal | kitty | kittycall | kittypet | kittywalk | kittytoken | kittydress | kittyfish ...
 //                                scripted camera (and kitty), driven only by frame time (for filming)
 //   ?tokens=1                    (filming) show the friendship token counter even with ?ui=0
 //   ?wear=crown,bowtie,wings     (filming, posters) she starts with these on
@@ -361,7 +361,21 @@ async function start() {
       }
     } catch (err) { console.warn('Glikdev: the player did not load', err); player = null; }
   }
-  const kittyBusy = () => { const b = kitty.brain; return ['eat', 'pounce', 'bat'].includes(b.mode) || b.goal === 'eat' || b.goal === 'yarn' || !!b.yarn?.held; };
+  // ------------------------------------------------------------ the fish on a stick (Day 4, idea by @Darkbacon155)
+  // You hold the stick (player.js); the fish on its line is her toy (kittybrain.js); wand.js draws the fish and the line.
+  let wand = null, wandOn = false;
+  const wanding = kitty && player ? (async () => {
+    try {
+      const { createWand } = await import('./wand.js');
+      wand = await createWand({ scene: world.scene, url: stamped('models/wand.glb'), renderer });
+      player.giveRod(wand.rod);
+    } catch (err) { console.warn('Glikdev: the fish on a stick did not load', err); wand = null; }
+  })() : null;
+  /** tell your arm where the fish is (the rod points at it once it is out) */
+  const aimRod = () => { const y = kitty.brain.yarn; player.setAim(y?.wand ? [y.x, y.y, y.z] : null, !!y?.wand && !y.hang); };
+  /** recordings: you and the kitty are stepped together, so the line always runs from where your hand really is */
+  const syncPlayer = (bt) => { player.simulateTo(bt); if (wandOn) { kitty.setWandTip(player.tip()); aimRod(); } };
+  const kittyBusy = () => { const b = kitty.brain; return ['eat', 'pounce', 'bat'].includes(b.mode) || b.goal === 'eat' || b.goal === 'yarn' || !!(b.yarn?.held && !b.yarn.hang); };
   let wantShop = false, shopArmed = true, openShop = () => {};
   /** you walk there; she comes along (unless she is busy), to a spot beside where you are going */
   function walkTo(x, z) {
@@ -386,7 +400,8 @@ async function start() {
   // ------------------------------------------------------------ friendship tokens and her wardrobe (Day 3, idea by @Kowffe)
   // filming: ?have=6 starts the counter at 6, so it keeps counting up from one clip of a Short to the next
   const filmHave = Math.max(0, Math.floor(Number(params.get('have')) || 0));
-  const freshWallet = () => createWallet(live ? loadWallet() : { ...(kd?.wallet ?? {}), ...(filmHave ? { tokens: filmHave } : {}) });
+  // (live play: Day 4's fish on a stick is a present, in your hand from the start; recordings get it from their script)
+  const freshWallet = () => createWallet(live ? loadWallet() : { ...(kd?.wallet ?? {}), ...(filmHave ? { tokens: filmHave } : {}) }, { gift: live && !!player });
   let wallet = freshWallet(), wardrobe = null, tokenFX = null, rewardState = {}, filmWear = { ...paramWear };
   let flashHint = () => {};
   const tokenHead = new THREE.Vector3();
@@ -394,10 +409,21 @@ async function start() {
   const showTokens = !!kitty && (filmTokens || (showUI && !demo && !short));
   /** the toy that is out takes the yarn's place in her game */
   function applyToy() {
-    if (!wardrobe || !kitty) return;
+    if (!kitty) return;
     const it = itemById({ ...wallet.wearing, ...filmWear }.toy);
-    kitty.setToy(it ? wardrobe.part(it.id) : null, it || {});
+    const useWand = !!(it?.wand && wand && player);      // the fish on a stick: in your hand, not on the floor
+    if (useWand) kitty.setToy(wand.stub, it);
+    else if (wardrobe) { const toy = it && !it.wand ? it : null; kitty.setToy(toy ? wardrobe.part(toy.id) : null, toy || {}); }
+    if (useWand === wandOn) return;
+    wandOn = useWand;
+    player.setWand(wandOn);
+    if (wandOn) kitty.setWandTip(player.tip());
+    kitty.setWand(wandOn);
+    wand.setOn(wandOn);
+    if (wandOn) aimRod();
+    onWand(wandOn);
   }
+  let onWand = () => {};
   const toyOut = () => itemById({ ...wallet.wearing, ...filmWear }.toy);
   if (kitty) {
     kitty.on((e) => {
@@ -409,6 +435,7 @@ async function start() {
         return;
       }
       if ((e.type === 'thud' || e.type === 'swat') && toyOut()?.jingle) audio?.event({ type: 'jingle' });
+      if (e.type === 'cast') { player?.cast(e.x, e.z); audio?.event({ type: 'toss', speed: e.speed }); }   // your arm flicks the rod
       if (e.type === 'swat' && toyOut()?.id === 'toymouse') audio?.event({ type: 'squeak' });
       if (e.type === 'script' && e.what.type === 'wear') { // filming: straight onto her, no shopping
         const it = itemById(e.what.id);
@@ -434,6 +461,7 @@ async function start() {
       } catch (err) { console.warn('Glikdev: the wardrobe did not load', err); wardrobe = null; tokenFX = null; }
     })();
     if (!live) await dressing;                             // recordings: every frame has it; live play does not wait for it
+    if (wanding) { if (live) wanding.then(applyToy); else { await wanding; applyToy(); } }
   }
   if (showTokens) {
     tokensEl.hidden = false;
@@ -464,7 +492,7 @@ async function start() {
   const kittyState = () => {
     const b = kitty.brain, h = kitty.headPosition();
     return { x: b.x, z: b.z, heading: b.heading, head: [h.x, h.y, h.z],
-      bowl: b.bowl ? { x: b.bowl.x, z: b.bowl.z } : null, yarn: b.yarn ? { x: b.yarn.x, z: b.yarn.z } : null,
+      bowl: b.bowl ? { x: b.bowl.x, z: b.bowl.z } : null, yarn: b.yarn ? { x: b.yarn.x, y: b.yarn.y, z: b.yarn.z } : null,
       player: player ? { x: player.x, z: player.z } : null };
   };
 
@@ -640,6 +668,17 @@ async function start() {
     careEl.hidden = false;
     root.classList.add('has-care');
     const act = (fn) => () => { audio?.unlock(); backToHer(); fn(); dismissHint(); };
+    // Space (or F) casts the fish: to her when she is near, otherwise straight ahead of you
+    addEventListener('keydown', (e) => {
+      if ((e.code !== 'Space' && e.code !== 'KeyF') || !wandOn || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.target?.closest?.('dialog, input, textarea, button, a, [contenteditable]')) return;
+      e.preventDefault();
+      audio?.unlock();
+      const b = kitty.brain, h = player.heading;
+      if (Math.hypot(b.x - player.x, b.z - player.z) < 20) kitty.castNear();
+      else kitty.cast(player.x + Math.sin(h) * 11, player.z + Math.cos(h) * 11);
+      dismissHint();
+    });
     $('care-pet').addEventListener('click', act(() => kitty.pet()));
     $('care-feed').addEventListener('click', act(() => kitty.feed()));
     $('care-play').addEventListener('click', act(() => kitty.play()));
@@ -962,6 +1001,13 @@ async function start() {
       : (coarse ? 'Drag to look around · Two fingers to move and zoom' : 'Drag to look around · Right-drag or WASD to move · Scroll to zoom');
     hintEl.hidden = false;
   }
+  // the fish on a stick is in your hand: say how to play with it (until the first thing you do)
+  onWand = (on) => {
+    if (!on || hinted || !(showUI && !demo && !short)) return;
+    hintEl.textContent = coarse ? 'Tap Play to cast your fish · Drag the fish to fling it · Tap the ground to walk'
+      : 'Press Space or Play to cast your fish · Drag the fish to fling it · Click the ground or use WASD to walk';
+  };
+  if (wandOn) onWand(true);
   function dismissHint() {
     if (hinted) return;
     hinted = true;
@@ -983,6 +1029,7 @@ async function start() {
       setTimeout(() => {
         if (thrownOnce) return;
         hintEl.textContent = toyOut() ? 'Drag the toy and let go to throw it' : 'Drag the yarn ball and let go to throw it';
+        if (wandOn) return;
         hintEl.dataset.yarn = '1';
         hintEl.hidden = false;
         hintEl.classList.remove('is-gone');
@@ -994,10 +1041,12 @@ async function start() {
   // ------------------------------------------------------------ loop
   let t0 = null, last = null, external = false, skip = false;
   const interest = new THREE.Vector3();
+  const lead = [0, 0];                                    // how far the camera leans toward the fish on its line
   function step(t, dt) {
     let ks = 0;
     if (kitty && mind && player) kitty.setFriend(player.x, player.z);      // so she can come over to you
-    if (kitty) ks = demo ? kitty.simulateTo(t) : kitty.advance(dt, camera.position);
+    if (wandOn && !demo) kitty.setWandTip(player.tip());                   // the line runs from the tip of your stick
+    if (kitty) ks = demo ? kitty.simulateTo(t, player ? syncPlayer : null) : kitty.advance(dt, camera.position);
     clockMs = t * 1000;
     if (mind) think(nowMs());
     if (player) {
@@ -1013,11 +1062,19 @@ async function start() {
           openShop();
         } else if (town && !shopArmed && town.leftShop(player.x, player.z)) shopArmed = true;
       }
+      if (wandOn) aimRod();
     }
     if (kitty && !demo && follow) {                        // the camera keeps you in the middle (before Day 3: the kitty)
       const f = kitty.interest(interest);
       if (player) {
         f.set(player.x, 0, player.z);                       // third person: locked on you
+        // ...leaning toward your fish while it is out on its line, so the chase stays in the picture
+        const y = wandOn ? kitty.brain.yarn : null;
+        let lx = 0, lz = 0;
+        if (y?.wand && !y.hang) { const dx = y.x - player.x, dz = y.z - player.z, d = Math.hypot(dx, dz) || 1, kk = Math.min(0.45, 6.5 / d); lx = dx * kk; lz = dz * kk; }
+        const kl = 1 - Math.exp(-dt * 2.2);
+        lead[0] += (lx - lead[0]) * kl; lead[1] += (lz - lead[1]) * kl;
+        f.x += lead[0]; f.z += lead[1];
       }
       const k = 1 - Math.exp(-dt * (player ? 7 : 1.8));
       rig.target[0] += (f.x - rig.target[0]) * k;
@@ -1052,6 +1109,7 @@ async function start() {
     }
     if (kitty) {
       kitty.finish(camera.position, ks); placeTag(t);
+      if (wand && player) wand.update(dt, kitty.t, kitty.brain.yarn, player.heading);
       wardrobe?.update(kitty.t);
       camera.updateMatrixWorld();
       paintTokens(kitty.t);
@@ -1082,6 +1140,7 @@ async function start() {
     world, rig, home, daysLoaded, build: BUILD, kitty,
     get audio() { return audio; },
     get wallet() { return wallet; }, get wardrobe() { return wardrobe; }, get player() { return player; }, get store() { return store; },
+    get wand() { return wand; }, get wandOn() { return wandOn; },
     /** Screen height fraction (from the top) of the visible horizon: the plate's far edge. */
     horizonFrac() {
       camera.updateMatrixWorld();

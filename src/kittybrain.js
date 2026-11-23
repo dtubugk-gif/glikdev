@@ -49,6 +49,15 @@ export const YARN = { scale: 1.6, radius: 0.034 * KITTY_SCALE * 1.6, decel: 5.5,
   bounce: 0.38,       // ...keeps this much of its fall speed on each bounce
   maxThrow: 36,       // the hardest throw (m/s along the ground)
   drag: 0.32 };       // a thrown ball's extra rolling drag (per m/s): it rolls a way, then settles
+// Day 4 (idea by @Darkbacon155): the fish on a stick. You hold the stick; the fish is on a line from its tip.
+export const WAND = { rest: 3.1,   // the line when the fish just hangs from the tip (m, tip to the middle of the fish)
+  max: 17,            // the most line there is
+  reel: 15,           // how fast the line comes back in (m/s)
+  castMin: 5.5, castMax: 14,   // how near and how far a cast lands (m along the ground from the tip)
+  near: 7,            // a cast "to her" lands this far in front of her
+  trail: 10.5,        // the least line once the fish is out: walk off and it trails this far behind the tip
+  wait: 2.4,          // the game is over: this long, then the fish is reeled in
+  lost: 6 };          // nobody is playing with it: this long, then it is reeled in
 
 const TAU = Math.PI * 2;
 const wrap = (a) => ((a + Math.PI) % TAU + TAU) % TAU - Math.PI;   // to [-pi, pi)
@@ -128,7 +137,7 @@ export function createBrain(o = {}) {
   b.bed = null;                       // her bed: { x, z, r (cushion), outer, h (cushion height), ex, ez (unit vector out of its front) }
   b.bedAt = 0;                        // not before this time does she set off for bed again
   const playing = () => !!b.yarn && (b.goal === 'yarn' || ['pounce', 'bat'].includes(b.mode) || b.face?.then === 'pounce');
-  const toyDown = () => !!(b.yarn && !b.yarn.held && !b.yarn.air && b.yarn.flying === 0);
+  const toyDown = () => !!(b.yarn && !b.yarn.held && !b.yarn.air && !b.yarn.reel && b.yarn.flying === 0);
   const friendSpot = () => b.friend || [b.x + (b.viewer[0] - b.x) * 0.4, b.z + (b.viewer[1] - b.z) * 0.4];
   /** What she senses this instant: all her mind gets to go on. */
   function sense() {
@@ -391,6 +400,7 @@ export function createBrain(o = {}) {
   }
 
   b.play = () => {
+    if (b.yarn?.wand) { b.castNear(); return; }          // Day 4: the fish on a stick is out: it is cast to her
     if (b.yarn?.held) return;                            // it is in your hand
     const d = wants('play');
     if (mind && d.yes && b.asking?.what === 'play') answered();
@@ -420,6 +430,7 @@ export function createBrain(o = {}) {
     const y = b.yarn;
     if (!y) return false;
     Object.assign(y, { held: true, air: false, flying: 0, vx: 0, vz: 0, vy: 0, hx: y.x, hz: y.z });
+    if (y.wand) Object.assign(y, { hang: false, reel: false, idle: 0, line: WAND.max });
     if (b.goal === 'yarn') { b.target = null; b.goal = null; b.speed = 0; enter('idle', 30); }
     if (b.mode === 'face' && b.face?.then === 'pounce') { b.face = null; enter('idle', 30); }
     emit('grab', { x: y.x, z: y.z });
@@ -438,6 +449,7 @@ export function createBrain(o = {}) {
     const d = wants('play');
     if (mind && d.yes && b.asking?.what === 'play') answered();
     Object.assign(y, { held: false, air: true, vx: vx * k, vz: vz * k, vy, rounds: d.yes ? 0 : 3, rim: KITTY.limit, drag: YARN.drag });
+    if (y.wand) { y.idle = 0; y.line = WAND.max; }
     emit('toss', { speed: sp * k });
     if (!d.yes) return;                                  // she watches it go
     b.solo = false;
@@ -445,6 +457,54 @@ export function createBrain(o = {}) {
     emit('chirp');
     chaseYarn();
   };
+
+  // ---------------------------------------------------------------- Day 4: the fish on a stick
+  // The fish is her toy (b.yarn, with wand: true), tied by a line to the tip of the stick you hold (b.wandTip,
+  // which main.js keeps up to date). It hangs there until you cast it; then she chases it, pounces and bats
+  // it about; walk off and it drags along behind you, and she follows; when the game is over it is reeled in.
+  const stopChase = () => {
+    if (b.goal === 'yarn') { b.target = null; b.goal = null; b.speed = 0; enter('idle', 1.5); }
+    if (b.mode === 'face' && b.face?.then === 'pounce') { b.face = null; enter('idle', 1.5); }
+  };
+  const tipNow = () => b.wandTip || [b.x, 5.4, b.z + 6];
+  /** The stick comes out (the fish hangs from it) or is put away. */
+  b.setWand = (on) => {
+    if (!on) {
+      if (b.yarn?.wand) { stopChase(); b.yarn = null; }
+      return;
+    }
+    if (b.yarn?.wand) return;
+    stopChase();
+    const A = tipNow();
+    b.yarn = { x: A[0], y: A[1] - WAND.rest, z: A[2], vx: 0, vz: 0, vy: 0, spin: 0, ax: 1, az: 0, rounds: 3, flying: 0,
+      wand: true, hang: true, held: true, line: WAND.rest, idle: 0, rim: KITTY.limit, drag: YARN.drag };
+  };
+  /** Cast the fish to (x, z): it flies out on its line and lands there (as near as the line and the plate allow). */
+  b.cast = (x, z) => {
+    const y = b.yarn;
+    if (!y?.wand || (y.held && !y.hang)) return false;     // no stick, or the fish is in your fingers
+    const A = tipNow();
+    let dx = x - A[0], dz = z - A[2];
+    const d0 = Math.hypot(dx, dz) || 1, d1 = clamp(d0, WAND.castMin, WAND.castMax);
+    const p = inside({ x: A[0] + (dx / d0) * d1, z: A[2] + (dz / d0) * d1 });
+    const d = wants('play');
+    if (mind && d.yes && b.asking?.what === 'play') answered();
+    dx = p.x - y.x; dz = p.z - y.z;
+    const T = clamp(Math.hypot(dx, dz) / 21, 0.5, 0.85);    // seconds in the air
+    Object.assign(y, { hang: false, held: false, reel: false, air: true, idle: 0, line: WAND.max, cast: true,
+      vx: dx / T, vz: dz / T, vy: (YARN.radius - y.y) / T + 0.5 * YARN.gravity * T, rounds: d.yes ? 0 : 3, drag: YARN.drag });
+    emit('cast', { x: p.x, z: p.z, speed: Math.hypot(dx, dz) / T });
+    if (d.yes) { b.solo = false; dropAsk(); emit('chirp'); }
+    return true;
+  };
+  /** Cast it to her: it lands a few steps in front of her, on your side. */
+  b.castNear = () => {
+    const A = tipNow();
+    const dx = A[0] - b.x, dz = A[2] - b.z, d = Math.hypot(dx, dz) || 1;
+    return b.cast(b.x + (dx / d) * Math.min(WAND.near, d * 0.6), b.z + (dz / d) * Math.min(WAND.near, d * 0.6));
+  };
+  /** Wind the line in: the fish comes back to hang under the tip. */
+  b.reel = () => { const y = b.yarn; if (y?.wand && !y.hang && !y.held) { y.reel = true; y.rounds = 3; } };
 
   b.meow = () => {
     if (b.mode === 'sit' || b.mode === 'purr' || b.mode === 'groom') { enter('meow', KITTY.clips.Meow); emit('meow'); return; }
@@ -539,6 +599,80 @@ export function createBrain(o = {}) {
   function stepYarn(dt) {
     const y = b.yarn;
     if (!y) return;
+    if (!y.wand) { stepFree(dt); return; }
+    if (wandBefore(y, dt)) return;
+    const px = y.x, pz = y.z, wasAir = y.air;
+    stepFree(dt);
+    wandAfter(y, dt, px, pz, wasAir);
+  }
+
+  /** The fish hanging from the tip, and the line being wound in. True = nothing more to do this step. */
+  function wandBefore(y, dt) {
+    const A = tipNow();
+    if (y.hang) {                                        // it swings under the tip like a little pendulum
+      const k = 46, c = 5.5;
+      y.vx += ((A[0] - y.x) * k - y.vx * c) * dt;
+      y.vz += ((A[2] - y.z) * k - y.vz * c) * dt;
+      y.x += y.vx * dt; y.z += y.vz * dt;
+      let hx = y.x - A[0], hz = y.z - A[2], h = Math.hypot(hx, hz);
+      const most = WAND.rest * 0.8;
+      if (h > most) { y.x = A[0] + (hx / h) * most; y.z = A[2] + (hz / h) * most; h = most; }
+      y.y = Math.max(YARN.radius, A[1] - Math.sqrt(WAND.rest * WAND.rest - h * h));
+      if (h < 0.004 && Math.hypot(y.vx, y.vz) < 0.02) { y.x = A[0]; y.z = A[2]; y.vx = 0; y.vz = 0; }   // still
+      y.vy = 0;
+      return true;
+    }
+    if (y.held) return false;                            // in your fingers
+    if (y.reel) {
+      y.line = Math.max(WAND.rest, y.line - WAND.reel * dt);
+      const d = Math.hypot(y.x - A[0], y.y - A[1], y.z - A[2]);
+      if (y.line <= WAND.rest + 1e-6 && d <= WAND.rest + 0.35) {       // home: hanging again
+        Object.assign(y, { hang: true, held: true, air: false, reel: false, cast: false, idle: 0, line: WAND.rest, vy: 0 });
+        y.vx *= 0.35; y.vz *= 0.35;
+        emit('reeled');
+        return wandBefore(y, 0);                         // (hung exactly a line's length under the tip, from this step on)
+      }
+      // it lifts off the floor once the line is too short to let it lie there
+      if (!y.air && y.line < Math.hypot(Math.hypot(y.x - A[0], y.z - A[2]) * 0.55, A[1] - YARN.radius)) { y.air = true; y.vy = 3; }
+      return false;
+    }
+    // lying there with nobody after it: in it comes (sooner once her game is over)
+    if (!y.air && y.flying === 0) {
+      if (playing()) y.idle = 0;
+      else { y.idle += dt; if (y.idle > (y.rounds >= 3 ? WAND.wait : WAND.lost)) b.reel(); }
+    }
+    return false;
+  }
+
+  /** The line: the fish can never be further from the tip than the line is long. */
+  function wandAfter(y, dt, px, pz, wasAir) {
+    const A = tipNow(), R = YARN.radius;
+    if (wasAir && !y.air && !y.reel) {                   // it has landed: take up the slack
+      y.cast = false;
+      y.line = clamp(Math.hypot(y.x - A[0], y.y - A[1], y.z - A[2]) + 0.9, WAND.trail, WAND.max);   // (never so short that it rides at your heels)
+    }
+    const L = y.line;
+    const dx = y.x - A[0], dy = y.y - A[1], dz = y.z - A[2], d = Math.hypot(dx, dy, dz);
+    if (d <= L || d < 1e-6) return;
+    let nx = A[0] + (dx / d) * L, ny = A[1] + (dy / d) * L, nz = A[2] + (dz / d) * L;
+    if (ny < R) {                                        // on the floor: as far out as the line lets it be
+      const h = Math.hypot(dx, dz) || 1, far = Math.sqrt(Math.max(0, L * L - (A[1] - R) * (A[1] - R)));
+      nx = A[0] + (dx / h) * far; nz = A[2] + (dz / h) * far; ny = R;
+    }
+    if (y.air || y.held) {                               // taut in the air: it cannot fly on outward
+      const ux = dx / d, uy = dy / d, uz = dz / d, out = y.vx * ux + (y.vy || 0) * uy + y.vz * uz;
+      if (out > 0) { y.vx -= out * ux; y.vy = (y.vy || 0) - out * uy; y.vz -= out * uz; }
+      if (y.held) { y.hx = nx; y.hz = nz; }
+    } else {                                             // dragged along the floor: it keeps the speed it is pulled at
+      y.vx = clamp((nx - px) / dt, -26, 26); y.vz = clamp((nz - pz) / dt, -26, 26);
+      const v = Math.hypot(y.vx, y.vz);
+      if (v > 1e-3) { y.ax = y.vz / v; y.az = -y.vx / v; }
+    }
+    y.x = nx; y.y = ny; y.z = nz;
+  }
+
+  function stepFree(dt) {
+    const y = b.yarn;
     if (y.held) {                                        // in your hand: it follows it, lifted off the floor
       const k = 1 - Math.exp(-dt * 22);
       const dx = (y.hx - y.x) * k, dz = (y.hz - y.z) * k;
@@ -559,10 +693,12 @@ export function createBrain(o = {}) {
         const hit = -y.vy;
         if (hit > 5) {                                   // a bounce: loses height and a little speed
           y.vy = hit * (b.toyBounce ?? YARN.bounce);       // Day 3: each toy has its own bounce
-          y.vx *= 0.82; y.vz *= 0.82;
+          const keep = y.wand ? 0.3 : 0.82;                // (a plush fish on a line flops down where it lands)
+          y.vx *= keep; y.vz *= keep;
           emit('thud', { x: y.x, z: y.z, soft: hit < 12 });
         } else {                                         // down: rolling from here
           y.vy = 0; y.air = false;
+          if (y.wand) { y.vx *= 0.4; y.vz *= 0.4; }
           if (hit > 2) emit('thud', { x: y.x, z: y.z, soft: true });
           const busy = ['pounce', 'bat', 'face'].includes(b.mode) || b.goal === 'yarn';
           if (!busy && y.rounds < 3) { emit('chirp'); chaseYarn(); }
@@ -627,7 +763,7 @@ export function createBrain(o = {}) {
     if (anger < 0.3) b.stormed = false;
     // sleepy means bed, and now: she does not sit about being sleepy, hungry or not (unless she is still furious)
     if ((mind.sleepy >= 0.85 || b.energy < 0.18) && (b.mode === 'sit' || b.mode === 'idle') && !b.goal && !b.target && !b.face
-      && !b.asking && !b.yarn?.held && anger < 0.75 && b.t >= b.bedAt) {
+      && !b.asking && !(b.yarn?.held && !b.yarn.hang) && anger < 0.75 && b.t >= b.bedAt) {
       b.bedAt = b.t + 3;
       mind.did('nap');
       emit('mind', { does: 'nap' });
@@ -776,7 +912,7 @@ export function createBrain(o = {}) {
           const y = b.yarn;
           const [fx, fz] = fwd();
           const near = y && !y.air && Math.hypot(y.x - (b.x + fx * KITTY.mouth), y.z - (b.z + fz * KITTY.mouth)) < 4.5;
-          if (y?.held) enter('idle', 30);                  // you picked it up mid-leap: she waits for the throw
+          if (y?.held && !y.hang) enter('idle', 30);                  // you picked it up mid-leap: she waits for the throw
           else if (near) { enter('bat', KITTY.clips.Bat); b.batted = false; }
           else if (y && y.rounds < 3) chaseYarn();
           else playOver();
@@ -801,7 +937,7 @@ export function createBrain(o = {}) {
           emit(y.rounds < 3 ? 'chirp' : 'trill');
         }
         if (b.timer <= 0) {
-          if (y?.held) enter('idle', 30);
+          if (y?.held && !y.hang) enter('idle', 30);
           else if (y && y.rounds < 3) chaseYarn();
           else playOver();
         }

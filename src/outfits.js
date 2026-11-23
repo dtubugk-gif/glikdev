@@ -51,6 +51,7 @@ export async function createWardrobe(o) {
   const env = o.renderer ? skyReflections(o.renderer) : null;
   const parts = {};
   for (const it of ITEMS) {
+    if (!it.node) continue;                        // (Day 4's fish on a stick has its own file: wand.js)
     const node = gltf.scene.getObjectByName(it.node);
     if (!node) throw new Error(`outfits.glb has no ${it.node}`);
     parts[it.id] = node;

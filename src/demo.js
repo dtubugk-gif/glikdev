@@ -4,7 +4,7 @@
 // requestAnimationFrame / performance.now gets identical frames on every run.
 
 export const DEMOS = ['orbit', 'reveal', 'kitty', 'kittycall', 'kittypet', 'kittywalk', 'kittyname', 'kittyfeed', 'kittyplay', 'kittynap',
-  'kittytoken', 'kittydress', 'shopwalk', 'kittytoy', 'kittywake'];
+  'kittytoken', 'kittydress', 'shopwalk', 'kittytoy', 'kittywake', 'kittyfish', 'fishwalk', 'fishshow'];
 
 // Day 3: where the shop's doormat is, and where the kitty waits beside it (town.js works these out from SHOP)
 const SHOP_DOOR = [19.97, -21.57], SHOP_WAIT = [12.84, -23.42];
@@ -112,6 +112,27 @@ export const KITTY_DEMOS = {
     wallet: { tokens: 0 },
     player: { ...BESIDE, script: [{ t: 5.9, type: 'wave' }] },
   },
+  // Day 4: the fish on a stick is in your hand; you cast it to her, she pounces and bats it, you cast it again
+  kittyfish: {
+    start: () => ({ x: 4.5, z: -9.5, heading: Math.atan2(-7.5, 13.5), mode: 'sit' }),
+    script: [{ t: 0.05, type: 'wear', id: 'toywand' }, { t: 1.15, type: 'castnear' }, { t: 7.6, type: 'cast', x: -9, z: -6 }],
+    viewer: () => [-3, 4],
+    player: { start: { x: -3, z: 4, heading: Math.atan2(7.5, -13.5) } },
+  },
+  // Day 4: a close look at the fish hanging from your stick (she watches it from behind)
+  fishshow: {
+    start: () => ({ x: -9.5, z: -6.5, heading: Math.atan2(9.5, 9.5), mode: 'sit' }),
+    script: [{ t: 0.05, type: 'wear', id: 'toywand' }],
+    viewer: () => [0, 3],
+    player: { start: { x: 0, z: 3, heading: 0.35 } },
+  },
+  // Day 4: you run off with the fish trailing behind you on its line, and she tears after it
+  fishwalk: {
+    start: () => ({ x: -30, z: -3, heading: Math.PI / 2, mode: 'sit' }),
+    script: [{ t: 0.05, type: 'wear', id: 'toywand' }, { t: 0.35, type: 'cast', x: -24, z: 1 }],
+    viewer: () => [-18, 20],
+    player: { start: { x: -19, z: 3, heading: -Math.PI / 2 }, script: [{ t: 1.5, type: 'go', x: 34, z: 3 }] },
+  },
   // she strolls across the plate; the camera tracks alongside
   kittywalk: {
     start: () => ({ x: -16, z: 2, heading: Math.PI / 2, mode: 'idle' }),
@@ -186,6 +207,27 @@ export function demoPose(name, t, home, kitty = null) {
     const back = lerp(15, 12.5, easeInOut(t / 5)), sidew = lerp(4.5, 2.5, easeInOut(t / 5));
     const pos = [p.x - ux * back - uz * sidew, lerp(6.4, 5.4, easeInOut(t / 5)), p.z - uz * back + ux * sidew];
     return { position: pos, look: [p.x + ux * 7, 4.6, p.z + uz * 7], shift: 0 };
+  }
+  if (name === 'kittyfish' && kitty.player) {
+    // from your right, a little behind you: the stick in your hand near the camera, the fish out in front, her beyond it
+    const p = kitty.player, ux = 0.4856, uz = -0.8742;             // the way you face at the start (toward her)
+    const k = easeInOut((t - 1) / 3.5);
+    const side = lerp(12.5, 16.5, k), back = lerp(7.5, 7.5, k);
+    const pos = [p.x - uz * side - ux * back, lerp(6.4, 7.0, k), p.z + ux * side - uz * back];
+    const ahead = lerp(4.5, 4.8, k);
+    return { position: pos, look: [p.x + ux * ahead, 3.4, p.z + uz * ahead], shift: 0 };
+  }
+  if (name === 'fishshow' && kitty.yarn) {
+    // close on the fish as she turns on her line, drifting round her (you, out of focus of attention, behind her)
+    const y = kitty.yarn, a = -0.37 + 0.09 * t, d = lerp(8.0, 6.6, easeInOut(t / 5)), h = y.y ?? 3.5;
+    const pos = [y.x + Math.sin(a) * d, h + 0.7, y.z + Math.cos(a) * d];
+    return { position: pos, look: [y.x, h + 0.9, y.z], shift: 0 };
+  }
+  if (name === 'fishwalk' && kitty.player) {
+    // tracking beside you as you run: you lead, the fish skips along behind you, she gallops after it
+    const p = kitty.player;
+    const pos = [p.x - 1.5, 4.6, p.z + 25];
+    return { position: pos, look: [p.x - 6.5, 3.6, p.z], shift: 0 };
   }
   if (name === 'kittywake') {
     // like the token shot but looking well above her: she sits low in the frame, with room over her head for

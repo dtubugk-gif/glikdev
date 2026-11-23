@@ -91,7 +91,7 @@ test('the shop: its doormat is in front of the counter, outside its walls, and t
 
 test('toys: one is out at a time, and putting it away brings the yarn back', () => {
   const toys = ITEMS.filter((i) => i.slot === 'toy');
-  assert.equal(toys.length, 4);
+  assert.equal(toys.length, 5);                           // four from Day 3, and Day 4's fish on a stick
   for (const t of toys) {
     assert.equal(typeof t.roll, 'boolean');
     assert.ok(t.bounce > 0 && t.bounce < 0.9);

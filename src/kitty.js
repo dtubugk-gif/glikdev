@@ -298,6 +298,7 @@ export async function createKitty(o) {
   let bed = null;                                // Day 3: her bed (town.js BED_SPOT), so she stands and lies ON its cushion
   // Day 3: the toy that is out (it takes the yarn's place): does it roll, how well does it bounce
   const toy = { roll: true, bounce: undefined, yaw: 0 };
+  let wandOn = false, wandTip = null;            // Day 4: the fish on a stick is out; where the stick's tip is
   const UP = new THREE.Vector3(0, 1, 0);
   const listeners = [];
   const startOpts = { seed: o.seed ?? 2, ...o.start, viewer: o.viewer, ...(o.needs || {}), mind: o.mind || null };
@@ -315,6 +316,8 @@ export async function createKitty(o) {
     brain = createBrain({ ...startOpts, mind: typeof o.mind === 'function' ? o.mind() : o.mind || null });
     brain.toyBounce = toy.bounce;
     brain.bed = bed;
+    brain.wandTip = wandTip;
+    if (wandOn) brain.setWand(true);
     newMixer();
     heartLog = []; callLog = null; bowlLog = null; scriptAt = 0; lastSpin = 0;
     look = { yaw: 0, pitch: 0, w: 0 };
@@ -421,6 +424,8 @@ export async function createKitty(o) {
         else if (s.type === 'feed') brain.feed();
         else if (s.type === 'play') brain.play();
         else if (s.type === 'nap') brain.nap();
+        else if (s.type === 'cast') brain.cast(s.x, s.z);
+        else if (s.type === 'castnear') brain.castNear();
         else emitOut({ t: brain.t, type: 'script', what: s });   // not hers: for whoever is listening (Day 3: 'wear')
       }
     }
@@ -451,7 +456,9 @@ export async function createKitty(o) {
   const tgt = new THREE.Vector3();
   function lookTarget(viewer) {
     const y = brain.yarn, bw = brain.bowl;
-    const chasing = y && (y.held || y.air || brain.goal === 'yarn' || ['pounce', 'bat'].includes(brain.mode) || brain.face?.then === 'pounce');
+    // (the fish hanging from your stick: she watches it while it is near, and you the rest of the time)
+    const dangling = y && y.hang && Math.hypot(y.x - brain.x, y.z - brain.z) < 13 && brain.t % 9 < 5.5;
+    const chasing = y && ((y.held && !y.hang) || dangling || y.air || brain.goal === 'yarn' || ['pounce', 'bat'].includes(brain.mode) || brain.face?.then === 'pounce');
     if (chasing) return tgt.set(y.x, y.y, y.z);
     if (bw && bw.eatenAt == null && (brain.goal === 'eat' || brain.face?.then === 'eat')) return tgt.set(bw.x, 0.6, bw.z);
     if (['walk', 'trot', 'run'].includes(brain.mode)) return null;   // on the move: eyes ahead
@@ -606,10 +613,10 @@ export async function createKitty(o) {
       return n;
     },
     /** recordings: the kitty at exactly t seconds; returns the number of fixed steps taken */
-    simulateTo(t) {
+    simulateTo(t, before = null) {
       if (t < brain.t - STEP * 0.5) reset();
       let n = 0;
-      while (brain.t < t - STEP * 0.5) { tick(); n++; }
+      while (brain.t < t - STEP * 0.5) { before?.(brain.t); tick(); n++; }   // `before`: whoever else must be at this same moment
       return n;
     },
     /** after advance / simulateTo and once the camera is placed: head turn toward it, effects */
@@ -631,6 +638,13 @@ export async function createKitty(o) {
     /** Day 3: where you are standing, so she can come over to you of her own accord */
     setFriend(x, z) { brain.friend = [x, z]; },
     play() { brain.play(); },
+    /** Day 4: the fish on a stick. setWand: it comes out or is put away; setWandTip: where the stick's tip is now. */
+    setWand(on) { wandOn = !!on; brain.setWand(wandOn); },
+    setWandTip(p) { wandTip = p; brain.wandTip = p; },
+    cast(x, z) { return brain.cast(x, z); },
+    castNear() { return brain.castNear(); },
+    reel() { brain.reel(); },
+    get wandOut() { return wandOn; },
     on(fn) { listeners.push(fn); },
     /**
      * Day 3: fix something to one of her bones. `frame` is where it sits in the model's rest pose (model
@@ -659,6 +673,7 @@ export async function createKitty(o) {
       }
       toy.roll = obj ? cfg.roll !== false : true;
       toy.bounce = obj ? cfg.bounce : undefined;
+      toy.wand = !!(obj && cfg.wand);                // the fish on a stick is drawn by wand.js: no blob under it up in the air
       brain.toyBounce = toy.bounce;
     },
     /** her own collar and bell (the ginger kitty's): hidden under a bow tie or a scarf */
@@ -672,7 +687,7 @@ export async function createKitty(o) {
         b.getWorldPosition(v1);
         if (ray.distanceSqToPoint(v1) < rad * rad) return 'kitty';
       }
-      if (brain.yarn && !brain.yarn.flying && ray.distanceSqToPoint(yarnRoot.position) < (YARN.radius * 1.9) ** 2) return 'yarn';
+      if (brain.yarn && !brain.yarn.flying && ray.distanceSqToPoint(yarnRoot.position) < (YARN.radius * (toy.wand ? 2.3 : 1.9)) ** 2) return 'yarn';
       return null;
     },
     headPosition(out = new THREE.Vector3()) { root.updateMatrixWorld(true); return B.head.getWorldPosition(out); },
@@ -693,7 +708,7 @@ export async function createKitty(o) {
     busy() {
       const y = brain.yarn;
       return !['sit', 'idle', 'sleep'].includes(brain.mode) || heartLog.length > 0 || bowl.visible
-        || !!(y && (y.flying || y.held || y.air || y.vx || y.vz));
+        || !!(y && (y.flying || (y.held && !y.hang) || y.air || y.reel || y.vx || y.vz));
     },
   };
 }

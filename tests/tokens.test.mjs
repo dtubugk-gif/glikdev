@@ -17,8 +17,8 @@ test('every shop item is well formed and has its picture', () => {
     assert.ok(!ids.has(it.id), `duplicate ${it.id}`);
     ids.add(it.id);
     assert.ok(SLOTS.includes(it.slot), `${it.id} slot`);
-    assert.ok(Number.isInteger(it.price) && it.price > 0, `${it.id} price`);
-    assert.ok(it.name && it.node && (it.fit || it.slot === 'toy'));
+    assert.ok(Number.isInteger(it.price) && (it.price > 0 || it.wand), `${it.id} price`);   // (Day 4's fish on a stick is a present)
+    assert.ok(it.name && (it.node || it.wand) && (it.fit || it.slot === 'toy'));
     assert.ok(existsSync(join(GAME, 'models', 'shop', `${it.id}.webp`)), `${it.id}.webp`);
   }
   assert.ok(existsSync(join(GAME, 'models', 'shop', 'token.webp')));
@@ -45,7 +45,7 @@ test('the outfits file holds the token and every piece', () => {
   const jsonLen = buf.readUInt32LE(12);
   const gltf = JSON.parse(buf.subarray(20, 20 + jsonLen).toString('utf8'));
   const names = new Set(gltf.nodes.map((n) => n.name));
-  for (const n of ['Token', 'Wing_L', 'Wing_R', 'Temple_L', 'Temple_R', ...ITEMS.map((i) => i.node)]) assert.ok(names.has(n), n);
+  for (const n of ['Token', 'Wing_L', 'Wing_R', 'Temple_L', 'Temple_R', ...ITEMS.filter((i) => i.node).map((i) => i.node)]) assert.ok(names.has(n), n);
   assert.ok(buf.length < 5 * 1024 * 1024, 'under 5 MB');
 });
 
