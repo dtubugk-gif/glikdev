@@ -1,0 +1,338 @@
+// Day 3: you. A little person who walks about the plate (the owner's idea: "a model that the player will
+// be"). models/player.glb was built in Blender (art/day03/build_player.py): clips Idle, Walk, Run, Wave.
+//
+// Like the kitty she is stepped at a fixed rate, so recordings come out the same every time:
+//   advance(dt)      live play
+//   simulateTo(t)    recordings: the player at exactly t seconds, following `script`
+// goTo(x, z) walks (runs, when it is far) to a spot; steer(dx, dz) is the keyboard: a direction to keep
+// walking in. Walls (`boxes`) and round things (`circles`, e.g. the kitty) are walked around, not through.
+import * as THREE from '../vendor/three/three.module.js';
+import { GLTFLoader } from '../vendor/three/addons/loaders/GLTFLoader.js';
+
+export const PLAYER = {
+  scale: 20,                // bigger than the kitty's x14 (the owner: "make me bigger"): 26 cm at cat size, 5.2 m here
+  eye: 4.15,                // where your eyes are (m): the first-person camera sits here
+  walk: 4.6, run: 11.0,     // m/s
+  runFrom: 8,               // a trip longer than this is run
+  radius: 1.8,
+  limit: 118,               // the plate is 128 m from the middle to its edge
+};
+// Day 4 (idea by @Darkbacon155): the fish on a stick, in your right hand. In models/wand.glb the rod's tip is
+// 0.1552 m up from the grip and leans 0.0087 m to one side (art/day04/build_wand.py prints both). The rod is
+// drawn x34 (as long as you are tall, so it reads from across the plate), the fish x24.
+export const HOLD = {
+  scale: 34, fishScale: 24,
+  len: 0.1552 * 34, droop: 0.0087 * 34,
+  grip: [-0.86, 2.42, 0.98],        // where the grip is, in your own frame (x: your right is -x; y up; z ahead), metres
+  restElev: 0.95,                   // the rod's tilt above level while the fish just hangs (radians)
+  restYaw: -0.5,                    // ...and its turn: out to your right, so the fish hangs beside you, not over your face
+  outElev: 0.34,                    // ...and while the fish is out on the floor: lower, pointing at it
+  swing: 0.5,                       // a cast's flick lasts this long (s)
+};
+const STEP = 1 / 60;
+const CLIPS = ['Idle', 'Walk', 'Run', 'Wave'];
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const easeOut = (k) => 1 - (1 - clamp(k, 0, 1)) ** 3;
+const easeInOut = (k) => { k = clamp(k, 0, 1); return k * k * (3 - 2 * k); };
+/** The flick of a cast, s seconds in: the rod tips back over your shoulder (+), whips forward and down (-), settles (0). */
+export function flick(s) {
+  if (s < 0 || s >= HOLD.swing) return 0;
+  if (s < 0.09) return 0.9 * easeOut(s / 0.09);
+  if (s < 0.24) return 0.9 - 1.2 * easeInOut((s - 0.09) / 0.15);
+  return -0.3 * (1 - easeOut((s - 0.24) / (HOLD.swing - 0.24)));
+}
+const wrap = (a) => ((a + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+
+/** Push the point (x, z) out of a box {x, z, hx, hz, rot} grown by `pad`; returns [x, z]. */
+export function outOfBox(x, z, b, pad = 0) {
+  const c = Math.cos(b.rot), s = Math.sin(b.rot);
+  const dx = x - b.x, dz = z - b.z;
+  const lx = c * dx - s * dz, lz = s * dx + c * dz;        // into the box's own frame
+  const hx = b.hx + pad, hz = b.hz + pad;
+  if (Math.abs(lx) >= hx || Math.abs(lz) >= hz) return [x, z];
+  const px = hx - Math.abs(lx), pz = hz - Math.abs(lz);
+  let ox = lx, oz = lz;
+  if (px < pz) ox = Math.sign(lx || 1) * hx; else oz = Math.sign(lz || 1) * hz;
+  return [b.x + c * ox + s * oz, b.z - s * ox + c * oz];
+}
+
+/**
+ * The walking itself (no three.js): position, heading, speed and which clip shows.
+ * @param {{x?:number, z?:number, heading?:number, boxes?:object[], circles?:Function[]}} o
+ */
+export function createWalker(o = {}) {
+  const w = {
+    t: 0, x: o.x ?? 0, z: o.z ?? 0, heading: o.heading ?? 0, speed: 0,
+    target: null, dir: null, waveUntil: -1, arrived: 0,
+    boxes: o.boxes || [], circles: o.circles || [],
+    wand: false, castAt: -10, aim: null, aimOut: false, rodYaw: HOLD.restYaw, rodElev: HOLD.restElev,
+  };
+  const clampIn = (x, z) => {
+    const r = Math.hypot(x, z);
+    if (r > PLAYER.limit) { x *= PLAYER.limit / r; z *= PLAYER.limit / r; }
+    for (const b of w.boxes) [x, z] = outOfBox(x, z, b, PLAYER.radius);
+    return [x, z];
+  };
+  w.goTo = (x, z) => { const [tx, tz] = clampIn(x, z); w.target = { x: tx, z: tz }; w.dir = null; w.waveUntil = -1; };
+  w.steer = (dx, dz) => {
+    const d = Math.hypot(dx, dz);
+    w.dir = d > 1e-3 ? { x: dx / d, z: dz / d } : null;
+    if (w.dir) { w.target = null; w.waveUntil = -1; }
+  };
+  w.stop = () => { w.target = null; w.dir = null; };
+  w.wave = () => { if (!w.target && !w.dir && !w.wand) w.waveUntil = w.t + 2.0; };   // (your waving hand holds the stick)
+  // ---- the fish on a stick
+  w.setWand = (on) => { w.wand = !!on; if (!on) { w.aim = null; w.aimOut = false; w.castAt = -10; } };
+  /** where the fish is ([x, y, z]), and whether it is out (cast, lying on the floor) rather than hanging from the tip */
+  w.setAim = (p, out) => { w.aim = p; w.aimOut = !!out; };
+  /** the flick of a cast toward (x, z): you turn to face it, unless you are walking */
+  w.cast = (x, z) => { w.castAt = w.t; if (!w.target && !w.dir) w.face = { x, z }; };
+  /** The rod right now, in your own frame: where the grip is, which way the rod points, which way its tip leans. */
+  w.rod = () => {
+    const e = flick(w.t - w.castAt);
+    const sway = w.speed > 0.3 ? 0.05 * Math.sin(w.t * (w.speed > PLAYER.walk * 1.35 ? 15 : 9)) : 0.025 * Math.sin(w.t * 1.7);
+    const elev = w.rodElev + e + sway, yaw = w.rodYaw;
+    const back = Math.max(0, e), fore = Math.max(0, -e);
+    const grip = [HOLD.grip[0], HOLD.grip[1] + 0.85 * back - 0.25 * fore, HOLD.grip[2] - 0.55 * back + 0.9 * fore];
+    const ce = Math.cos(elev), dir = [Math.sin(yaw) * ce, Math.sin(elev), Math.cos(yaw) * ce];
+    // the tip leans the way gravity pulls it: straight down, less the part along the rod
+    let lx = dir[0] * dir[1], ly = dir[1] * dir[1] - 1, lz = dir[2] * dir[1];
+    let ll = Math.hypot(lx, ly, lz);
+    if (ll < 1e-3) { lx = Math.sin(yaw); ly = 0; lz = Math.cos(yaw); ll = 1; }
+    return { grip, dir, lean: [lx / ll, ly / ll, lz / ll] };
+  };
+  /** Where the rod's tip is in the world: [x, y, z]. The line to the fish starts here. */
+  w.tip = () => {
+    const r = w.rod(), c = Math.cos(w.heading), s = Math.sin(w.heading);
+    const lx = r.grip[0] + HOLD.len * r.dir[0] + HOLD.droop * r.lean[0];
+    const ly = r.grip[1] + HOLD.len * r.dir[1] + HOLD.droop * r.lean[1];
+    const lz = r.grip[2] + HOLD.len * r.dir[2] + HOLD.droop * r.lean[2];
+    return [w.x + lx * c + lz * s, ly, w.z - lx * s + lz * c];
+  };
+  w.faceTo = (x, z) => { w.face = { x, z }; };
+  w.step = (dt = STEP) => {
+    w.t += dt;
+    let want = 0, hx = 0, hz = 0;
+    if (w.dir) { hx = w.dir.x; hz = w.dir.z; want = PLAYER.run; }
+    else if (w.target) {
+      const dx = w.target.x - w.x, dz = w.target.z - w.z, d = Math.hypot(dx, dz);
+      if (d < 0.25) { w.target = null; w.arrived = w.t; }
+      else {
+        hx = dx / d; hz = dz / d;
+        const top = d > PLAYER.runFrom || w.speed > PLAYER.walk * 1.4 ? PLAYER.run : PLAYER.walk;
+        want = Math.min(top, Math.max(1.2, d * 3.2));       // ease into the spot
+      }
+    }
+    if (want > 0) {
+      const diff = wrap(Math.atan2(hx, hz) - w.heading);
+      w.heading = wrap(w.heading + Math.max(-9 * dt, Math.min(9 * dt, diff)));
+      want *= Math.max(0.25, Math.cos(diff));                // turn first, then go
+      w.face = null;
+    } else if (w.face) {
+      const diff = wrap(Math.atan2(w.face.x - w.x, w.face.z - w.z) - w.heading);
+      w.heading = wrap(w.heading + Math.max(-6 * dt, Math.min(6 * dt, diff)));
+      if (Math.abs(diff) < 0.02) w.face = null;
+    }
+    w.speed += (want - w.speed) * (1 - Math.exp(-dt * (want > w.speed ? 7 : 12)));
+    if (w.speed < 0.02) w.speed = 0;
+    let nx = w.x + Math.sin(w.heading) * w.speed * dt, nz = w.z + Math.cos(w.heading) * w.speed * dt;
+    for (const c of w.circles) {                             // round things: slide round them
+      const q = c();
+      if (!q) continue;
+      const dx = nx - q.x, dz = nz - q.z, d = Math.hypot(dx, dz), r = q.r + PLAYER.radius;
+      if (d < r && d > 1e-4) { nx = q.x + (dx / d) * r; nz = q.z + (dz / d) * r; }
+    }
+    const r = Math.hypot(nx, nz);
+    if (r > PLAYER.limit) { nx *= PLAYER.limit / r; nz *= PLAYER.limit / r; }
+    for (const b of w.boxes) [nx, nz] = outOfBox(nx, nz, b, PLAYER.radius);
+    // a wall in the way of a tapped spot: give up after a moment rather than walk on the spot for ever
+    if (w.target && Math.hypot(nx - w.x, nz - w.z) < w.speed * dt * 0.2) { w.stuck = (w.stuck || 0) + dt; if (w.stuck > 0.8) { w.target = null; w.stuck = 0; } } else w.stuck = 0;
+    w.x = nx; w.z = nz;
+    // the rod: up while the fish hangs from it; lower and turned toward the fish once it is out
+    let yawT = HOLD.restYaw, elevT = HOLD.restElev;
+    if (w.wand && w.aimOut && w.aim) {
+      const d = Math.hypot(w.aim[0] - w.x, w.aim[2] - w.z);
+      yawT = clamp(wrap(Math.atan2(w.aim[0] - w.x, w.aim[2] - w.z) - w.heading), -1.25, 1.25);
+      elevT = HOLD.outElev + (HOLD.restElev - HOLD.outElev) * clamp(1 - (d - 3) / 4, 0, 1);
+    }
+    const kr = 1 - Math.exp(-dt * 8);
+    w.rodYaw += (yawT - w.rodYaw) * kr;
+    w.rodElev += (elevT - w.rodElev) * kr;
+    // footfalls: one every stride's length (longer strides when running), for the sound of your steps
+    if (w.speed > 0.6) {
+      const run = w.speed > PLAYER.walk * 1.35;
+      w.stride = (w.stride ?? 1.2) + w.speed * dt;
+      const len = run ? 3.3 : 2.05;
+      if (w.stride >= len) { w.stride -= len; w.onStep?.(run); }
+    } else w.stride = 1.2;                                   // the first step lands soon after setting off
+  };
+  w.moving = () => w.speed > 0.3;
+  /** which clip, and how fast it plays */
+  w.anim = () => {
+    if (w.speed > PLAYER.walk * 1.35) return { name: 'Run', rate: Math.min(1.5, Math.max(0.8, w.speed / 9.4)) };
+    if (w.speed > 0.3) return { name: 'Walk', rate: Math.min(1.6, Math.max(0.6, w.speed / 4.1)) };
+    if (w.t < w.waveUntil) return { name: 'Wave', rate: 1 };
+    return { name: 'Idle', rate: 1 };
+  };
+  return w;
+}
+
+/**
+ * @param {{scene:THREE.Scene, url:string, start?:object, boxes?:object[], circles?:Function[],
+ *          script?:{t:number, type:string, x?:number, z?:number}[], renderer?:THREE.WebGLRenderer,
+ *          onStep?:(running:boolean)=>void}} o
+ */
+export async function createPlayer(o) {
+  const gltf = await new GLTFLoader().loadAsync(o.url);
+  const clips = Object.fromEntries(gltf.animations.map((c) => [c.name, c]));
+  for (const n of CLIPS) if (!clips[n]) throw new Error(`player.glb has no ${n} clip`);
+  const root = new THREE.Group();
+  root.name = 'Player';
+  const model = gltf.scene;
+  model.scale.setScalar(PLAYER.scale);
+  model.traverse((m) => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; m.frustumCulled = false; } });
+  root.add(model);
+  o.scene.add(root);
+  // a soft contact shadow under her feet
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d'), gr = g.createRadialGradient(32, 32, 2, 32, 32, 31);
+  gr.addColorStop(0, 'rgba(38,32,28,0.85)'); gr.addColorStop(0.6, 'rgba(38,32,28,0.4)'); gr.addColorStop(1, 'rgba(38,32,28,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+  const blob = new THREE.Mesh(new THREE.PlaneGeometry(3.7, 3.7), new THREE.MeshBasicMaterial({
+    map: new THREE.CanvasTexture(c), transparent: true, opacity: 0.5, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1 }));
+  blob.rotation.x = -Math.PI / 2;
+  blob.position.y = 0.04;
+  blob.renderOrder = 1;
+  root.add(blob);
+
+  const startOpts = { ...o.start, boxes: o.boxes, circles: o.circles };
+  let walker, mixer, actions, cur, curName, scriptAt, acc = 0;
+  // ---- Day 4: the stick in your right hand. The clips know nothing of it: after each one has posed you, your
+  // right arm is bent (two-bone IK) so the hand is on the grip, and the rod is laid in it.
+  const arm = ['upperarm_R', 'forearm_R', 'hand_R'].map((n) => model.getObjectByName(n));
+  const armOK = arm.every(Boolean);
+  const kept = arm.map(() => new THREE.Quaternion());
+  let bent = false, rod = null, wandOn = false;
+  const va = new THREE.Vector3(), vb = new THREE.Vector3(), vS = new THREE.Vector3(), vG = new THREE.Vector3(), vW = new THREE.Vector3(),
+    vE = new THREE.Vector3(), vn = new THREE.Vector3(), vp = new THREE.Vector3();
+  const qa = new THREE.Quaternion(), qb = new THREE.Quaternion(), qd = new THREE.Quaternion(), mB = new THREE.Matrix4();
+  const bx = new THREE.Vector3(), by = new THREE.Vector3(), bz = new THREE.Vector3();
+  /** turn `bone` so that the way to `child` points at `target` (all in the world) */
+  function point(bone, child, target) {
+    bone.getWorldPosition(va); child.getWorldPosition(vb);
+    vb.sub(va).normalize();
+    vn.copy(target).sub(va).normalize();
+    qd.setFromUnitVectors(vb, vn);
+    bone.getWorldQuaternion(qa).premultiply(qd);
+    bone.parent.getWorldQuaternion(qb).invert();
+    bone.quaternion.copy(qb.multiply(qa));
+    bone.updateMatrixWorld(true);
+  }
+  function unbend() { if (bent) { arm.forEach((b, k) => b.quaternion.copy(kept[k])); bent = false; } }
+  function holdRod() {
+    if (!rod) return;
+    rod.visible = wandOn && model.visible;
+    if (!wandOn) return;
+    const r = walker.rod();
+    rod.position.set(r.grip[0], r.grip[1], r.grip[2]);
+    by.set(r.dir[0], r.dir[1], r.dir[2]); bz.set(r.lean[0], r.lean[1], r.lean[2]); bx.crossVectors(by, bz);
+    rod.quaternion.setFromRotationMatrix(mB.makeBasis(bx, by, bz));
+    if (!armOK) return;
+    root.updateMatrixWorld(true);
+    arm.forEach((b, k) => kept[k].copy(b.quaternion));
+    bent = true;
+    vG.set(r.grip[0], r.grip[1], r.grip[2]).applyMatrix4(root.matrixWorld);      // the grip, in the world
+    arm[0].getWorldPosition(vS);
+    arm[1].getWorldPosition(va); arm[2].getWorldPosition(vb);
+    const l1 = va.distanceTo(vS), l2 = vb.distanceTo(va);
+    vW.copy(vG).sub(vS);
+    vW.setLength(Math.max(0.01, vW.length() - 0.22)).add(vS);                    // the wrist: a palm's length short of the grip
+    vn.copy(vW).sub(vS);
+    const d = clamp(vn.length(), Math.abs(l1 - l2) + 0.02, l1 + l2 - 0.02);
+    vn.normalize();
+    const a = (l1 * l1 + d * d - l2 * l2) / (2 * d), h = Math.sqrt(Math.max(0, l1 * l1 - a * a));
+    vp.set(-0.5, -1, -0.3).applyQuaternion(root.quaternion);                     // the elbow: down, out and a little back
+    vp.addScaledVector(vn, -vp.dot(vn)).normalize();
+    vE.copy(vS).addScaledVector(vn, a).addScaledVector(vp, h);
+    vW.copy(vS).addScaledVector(vn, d);
+    point(arm[0], arm[1], vE);
+    point(arm[1], arm[2], vW);
+  }
+  function reset() {
+    unbend();
+    walker = createWalker(startOpts);
+    walker.onStep = o.onStep || null;
+    walker.setWand(wandOn);
+    if (mixer) { mixer.stopAllAction(); mixer.uncacheRoot(mixer.getRoot()); }
+    mixer = new THREE.AnimationMixer(model);
+    actions = Object.fromEntries(CLIPS.map((n) => [n, mixer.clipAction(clips[n])]));
+    cur = null; curName = ''; scriptAt = 0;
+    show(walker.anim(), true);
+    mixer.update(0);
+    place();
+    holdRod();
+  }
+  function show(a, instant = false) {
+    const act = actions[a.name];
+    if (a.name === curName) { act.timeScale = a.rate; return; }
+    act.reset();
+    act.setLoop(THREE.LoopRepeat, Infinity);
+    act.timeScale = a.rate;
+    act.setEffectiveWeight(1);
+    act.play();
+    if (cur && !instant) act.crossFadeFrom(cur, 0.18, false); else if (cur) cur.stop();
+    cur = act; curName = a.name;
+  }
+  function place() { root.position.set(walker.x, 0, walker.z); root.rotation.y = walker.heading; }
+  function tick() {
+    if (o.script) {
+      while (scriptAt < o.script.length && o.script[scriptAt].t <= walker.t + 1e-6) {
+        const s = o.script[scriptAt++];
+        if (s.type === 'go') walker.goTo(s.x, s.z);
+        else if (s.type === 'wave') walker.wave();
+        else if (s.type === 'face') walker.faceTo(s.x, s.z);
+      }
+    }
+    walker.step(STEP);
+    show(walker.anim());
+    unbend();                                              // the clips pose your arm as they always did...
+    mixer.update(STEP);
+    place();
+    holdRod();                                             // ...and then it takes hold of the stick
+  }
+  reset();
+  return {
+    root,
+    get walker() { return walker; },
+    get x() { return walker.x; }, get z() { return walker.z; }, get t() { return walker.t; },
+    goTo(x, z) { walker.goTo(x, z); },
+    steer(dx, dz) { walker.steer(dx, dz); },
+    stop() { walker.stop(); },
+    wave() { walker.wave(); },
+    faceTo(x, z) { walker.faceTo(x, z); },
+    advance(dt) {
+      acc = Math.min(acc + dt, 0.25);
+      let n = 0;
+      while (acc >= STEP) { tick(); acc -= STEP; n++; }
+      return n;
+    },
+    simulateTo(t) {
+      if (t < walker.t - STEP * 0.5) reset();
+      while (walker.t < t - STEP * 0.5) tick();
+    },
+    position(out = new THREE.Vector3()) { return out.set(walker.x, 0, walker.z); },
+    /** first person: you do not see your own body (your shadow stays) */
+    setBodyVisible(v) { model.visible = v; if (rod) rod.visible = wandOn && v; },
+    busy() { return walker.moving() || !!walker.target || !!walker.dir || !!walker.face || walker.t < walker.waveUntil || walker.t - walker.castAt < HOLD.swing + 0.1; },
+    /** Day 4: the fish on a stick. giveRod: the rod's model (a group, drawn at HOLD.scale); setWand: in your hand or put away */
+    giveRod(obj) { rod = obj; root.add(obj); holdRod(); },
+    setWand(on) { wandOn = !!on; walker.setWand(wandOn); if (!wandOn) unbend(); holdRod(); },
+    get wand() { return wandOn; },
+    cast(x, z) { walker.cast(x, z); },
+    setAim(p, out) { walker.setAim(p, out); },
+    /** where the rod's tip is in the world: [x, y, z] */
+    tip() { return walker.tip(); },
+    get heading() { return walker.heading; },
+  };
+}

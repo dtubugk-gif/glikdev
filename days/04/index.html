@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="build" content="4bc4d159aff0">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Glikdev – Day 4: a fish on a stick</title>
+  <meta name="description" content="A game built one YouTube comment at a time. Day 4: you hold a fish on a stick. Cast it, fling it or drag it along, and your kitty chases, pounces and bats it. Comment what Day 5 should add.">
+  <meta name="theme-color" content="#a9cfee">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Glikdev">
+  <meta property="og:title" content="Glikdev – Day 4: a fish on a stick">
+  <meta property="og:description" content="A game built one YouTube comment at a time. Day 4: you hold a fish on a stick. Cast it and your kitty chases, pounces and bats it. What should Day 5 add?">
+  <meta property="og:url" content="https://dtubugk-gif.github.io/glikdev/days/04/">
+  <meta property="og:image" content="https://dtubugk-gif.github.io/glikdev/days/04/poster.jpg">
+  <meta property="og:image:width" content="1440">
+  <meta property="og:image:height" content="900">
+  <meta property="og:image:alt" content="A small person holds a fishing-rod cat toy with a blue plush fish on its line; a ginger kitty runs to pounce on it">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="logo.svg?v=4bc4d159aff0" type="image/svg+xml">
+  <link rel="preload" href="fonts/fredoka-700.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/rubik-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <!-- Cache safety: every module is loaded with the same ?v= build stamp (tools/deploy.mjs rewrites
+       "?v=4bc4d159aff0" everywhere in this file). New modules must be added to this import map. -->
+  <script type="importmap">
+  {
+    "imports": {
+      "./src/main.js": "./src/main.js?v=4bc4d159aff0",
+      "./src/daylog.js": "./src/daylog.js?v=4bc4d159aff0",
+      "./src/demo.js": "./src/demo.js?v=4bc4d159aff0",
+      "./src/world.js": "./src/world.js?v=4bc4d159aff0",
+      "./src/controls.js": "./src/controls.js?v=4bc4d159aff0",
+      "./src/kitty.js": "./src/kitty.js?v=4bc4d159aff0",
+      "./src/kittybrain.js": "./src/kittybrain.js?v=4bc4d159aff0",
+      "./src/emotes.js": "./src/emotes.js?v=4bc4d159aff0",
+      "./src/kittymind.js": "./src/kittymind.js?v=4bc4d159aff0",
+      "./src/kittysound.js": "./src/kittysound.js?v=4bc4d159aff0",
+      "./src/kittyaudio.js": "./src/kittyaudio.js?v=4bc4d159aff0",
+      "./src/tokens.js": "./src/tokens.js?v=4bc4d159aff0",
+      "./src/player.js": "./src/player.js?v=4bc4d159aff0",
+      "./src/town.js": "./src/town.js?v=4bc4d159aff0",
+      "./src/outfits.js": "./src/outfits.js?v=4bc4d159aff0",
+      "./src/wand.js": "./src/wand.js?v=4bc4d159aff0",
+      "./vendor/three/three.module.js": "./vendor/three/three.module.js?v=4bc4d159aff0",
+      "./vendor/three/addons/loaders/GLTFLoader.js": "./vendor/three/addons/loaders/GLTFLoader.js?v=4bc4d159aff0",
+      "./vendor/three/addons/utils/BufferGeometryUtils.js": "./vendor/three/addons/utils/BufferGeometryUtils.js?v=4bc4d159aff0"
+    }
+  }
+  </script>
+  <link rel="modulepreload" href="vendor/three/three.module.js?v=4bc4d159aff0">
+  <link rel="stylesheet" href="style.css?v=4bc4d159aff0">
+  <script type="module" src="src/main.js?v=4bc4d159aff0"></script>
+</head>
+<body>
+  <!-- shown while the world loads (and as the backdrop when 3D is not available) -->
+  <picture class="poster" id="poster">
+    <source media="(orientation: portrait)" srcset="poster-portrait.jpg?v=4bc4d159aff0" width="780" height="1688">
+    <img src="poster.jpg?v=4bc4d159aff0" alt="" width="1440" height="900" fetchpriority="high" decoding="async">
+  </picture>
+
+  <canvas id="world" role="img" aria-label="A small person in an orange hoodie holds a fishing-rod cat toy; a blue plush fish with a pink bow hangs from its line, and a big ginger tabby kitty is running to pounce on it, on the grey baseplate"></canvas>
+
+  <div class="ui" id="ui">
+    <header class="title">
+      <p class="eyebrow">
+        <img class="logo" src="logo.svg?v=4bc4d159aff0" alt="Glikdev" width="36" height="36">
+        <span>A game built by YouTube comments</span>
+      </p>
+      <h1><span class="title-day">Day 4.</span> <span class="title-line">Cast the fish. She pounces.</span></h1>
+      <!-- static fallback; main.js rewrites the day, the headline and the bubble from the newest days.json entry -->
+      <p class="bubble">What should Day 5 add? Comment it.</p>
+    </header>
+
+    <p class="status" id="status" role="status" aria-live="polite">Loading the world…</p>
+    <p class="hint" id="hint" hidden></p>
+
+    <nav class="corner" aria-label="Glikdev">
+      <button class="chip" id="daylog-open" type="button" aria-haspopup="dialog" aria-controls="daylog">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path class="fill" d="M5 4.5h11.5A2.5 2.5 0 0 1 19 7v8H7.5A2.5 2.5 0 0 0 5 17.5Z"/><path d="M5 4.5h11.5A2.5 2.5 0 0 1 19 7v12.5H7.5A2.5 2.5 0 0 1 5 17V4.5Z"/><path d="M5 17a2.5 2.5 0 0 1 2.5-2.5H19M9 8.5h6"/></svg>
+        <span>Day log</span>
+      </button>
+      <a class="chip" id="channel" href="https://www.youtube.com/@glikdev" target="_blank" rel="noopener" aria-label="Glikdev on YouTube (opens in a new tab)" hidden>
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect class="fill" x="3" y="5.5" width="18" height="13" rx="4"/><path d="m10.5 9.5 4 2.5-4 2.5Z"/></svg>
+        <span><span class="chip-extra">Glikdev on </span>YouTube</span>
+      </a>
+    </nav>
+
+    <!-- Day 2: looking after the kitty (shown once she has loaded) -->
+    <div class="care" id="care" role="group" aria-label="Look after the kitty" hidden>
+      <button class="care-btn care-cat" id="care-cat" type="button" aria-haspopup="dialog" aria-controls="catpick" aria-label="Choose your cat">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path class="fill" d="M4.6 3.6 8.4 7.4a9 7.6 0 0 1 7.2 0l3.8-3.8.8 7.6A8.2 7.8 0 0 1 12 20.4a8.2 7.8 0 0 1-8.2-9.2Z"/><path d="M4.6 3.6 8.4 7.4a9 7.6 0 0 1 7.2 0l3.8-3.8.8 7.6A8.2 7.8 0 0 1 12 20.4a8.2 7.8 0 0 1-8.2-9.2Z"/><path d="M8.6 12.2v.6M15.4 12.2v.6M11 15.3h2l-1 1.1Z"/></svg>
+        <span class="care-label">Cat</span>
+      </button>
+      <button class="care-btn" id="care-pet" type="button">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><ellipse class="fill" cx="12" cy="15.5" rx="4.6" ry="3.9"/><ellipse cx="12" cy="15.5" rx="4.6" ry="3.9"/><ellipse cx="6" cy="10" rx="1.9" ry="2.4"/><ellipse cx="9.6" cy="6.6" rx="1.9" ry="2.5"/><ellipse cx="14.4" cy="6.6" rx="1.9" ry="2.5"/><ellipse cx="18" cy="10" rx="1.9" ry="2.4"/></svg>
+        <span class="care-label">Pet</span>
+      </button>
+      <button class="care-btn" id="care-feed" type="button">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path class="fill" d="M3.5 12h17a8.5 6.5 0 0 1-17 0Z"/><path d="M3.5 12h17a8.5 6.5 0 0 1-17 0ZM7 18.6h10"/><circle cx="9" cy="9.6" r="1.4"/><circle cx="12.6" cy="8.6" r="1.4"/><circle cx="15.6" cy="10" r="1.3"/></svg>
+        <span class="care-label">Feed</span>
+        <span class="care-badge" id="care-hungry" hidden>!</span>
+      </button>
+      <button class="care-btn" id="care-play" type="button">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle class="fill" cx="11" cy="11" r="7.5"/><circle cx="11" cy="11" r="7.5"/><path d="M5 7.5c4 1 8 4.2 9.5 10.5M8.2 4.2c3.6 2 6 5.5 6.6 9.8M4.2 13c3-.6 6.3.3 9 2.8M16.8 16.4c1.5 1.4 2.7 2.4 4.2 3"/></svg>
+        <span class="care-label">Play</span>
+      </button>
+      <button class="care-btn care-sound" id="care-sound" type="button" aria-pressed="true" aria-label="Sound on">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path class="fill" d="M4 9.5h3.6L12 5.6v12.8l-4.4-3.9H4Z"/><path d="M4 9.5h3.6L12 5.6v12.8l-4.4-3.9H4Z"/><path class="wave" d="M15.4 9.2a4 4 0 0 1 0 5.6M18 6.8a7.4 7.4 0 0 1 0 10.4"/><path class="cross" d="m15.5 9.5 5 5m0-5-5 5"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- the free camera: shown once you move the camera away from her -->
+  <button class="chip follow-chip" id="follow" type="button" hidden>
+    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle class="fill" cx="12" cy="12" r="3.2"/><circle cx="12" cy="12" r="7.5"/><path d="M12 1.8v3.4M12 18.8v3.4M1.8 12h3.4M18.8 12h3.4"/></svg>
+    <span>Back to <span class="follow-name" id="follow-name">Kitty</span></span>
+  </button>
+
+  <!-- Day 3: her friendship tokens; tap to open the wardrobe -->
+  <button class="chip tokens" id="tokens" type="button" aria-haspopup="dialog" aria-controls="shop" aria-label="Friendship tokens: 0. Go to the shop" hidden>
+    <img id="tokens-icon" src="models/shop/token.webp?v=4bc4d159aff0" alt="" width="34" height="34">
+    <span class="tokens-count" id="tokens-count">0</span>
+  </button>
+
+  <!-- her name, floating over her head; tap it to rename her -->
+  <button class="nametag" id="nametag" type="button" aria-haspopup="dialog" aria-controls="namer" hidden>
+    <span class="nametag-face" id="nametag-face" aria-hidden="true"></span>
+    <span class="nametag-name" id="nametag-name">Kitty</span>
+    <span class="nametag-hearts" id="nametag-hearts" aria-hidden="true"></span>
+    <span class="nametag-sr" id="nametag-sr"></span>
+  </button>
+
+  <div class="emote" id="emote" aria-hidden="true" hidden></div>
+  <p class="thought" id="thought" role="status" aria-live="polite" hidden><span class="thought-sr" id="thought-who"></span><span id="thought-text"></span></p>
+
+  <dialog class="namer" id="namer" aria-labelledby="namer-title">
+    <form class="namer-card" method="dialog" id="namer-form">
+      <h2 id="namer-title">Name your kitty</h2>
+      <p class="namer-sub">Only you see it. It stays on this device.</p>
+      <label class="namer-field">
+        <span class="namer-label">Her name</span>
+        <input id="namer-input" name="name" type="text" maxlength="18" autocomplete="off" spellcheck="false" enterkeyhint="done" required>
+      </label>
+      <section class="mind" id="mind" aria-labelledby="mind-title" hidden>
+        <h3 class="namer-label" id="mind-title">Her mind</h3>
+        <p class="mind-temper" id="mind-temper"></p>
+        <dl class="mind-list">
+          <div><dt>Feels</dt><dd id="mind-feels"></dd></div>
+          <div><dt>Trusts you</dt><dd><span class="mind-dots" id="mind-trust" aria-hidden="true"></span><span class="thought-sr" id="mind-trust-sr"></span></dd></div>
+          <div><dt>Likes most</dt><dd id="mind-likes"></dd></div>
+          <div><dt>Habits</dt><dd id="mind-habits"></dd></div>
+        </dl>
+        <p class="mind-note">She decides for herself. She can say no, and she learns what you two do together.</p>
+      </section>
+      <div class="namer-actions">
+        <button class="chip" type="button" id="namer-cancel">Cancel</button>
+        <button class="chip chip-primary" type="submit" id="namer-save">Save name</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog class="namer catpick" id="catpick" aria-labelledby="catpick-title">
+    <div class="namer-card">
+      <h2 id="catpick-title">Choose your cat</h2>
+      <p class="namer-sub">She keeps her name and her hearts.</p>
+      <div class="cats" id="cats" role="group" aria-labelledby="catpick-title"></div>
+      <p class="cat-status" id="cat-status" role="status" aria-live="polite"></p>
+      <p class="cat-credits">
+        Ginger: made in Blender for Day&nbsp;2.
+        Realistic: “Realistic cat” by <a href="https://sketchfab.com/3d-models/realistic-cat-pets-for-your-project-ec407d89f7304194bc04f2b4710eab8c" target="_blank" rel="noopener">Micael Martins</a>.
+        Tabby: “cat” by <a href="https://sketchfab.com/3d-models/cat-51cc3bfb49b64128aa54ffa29f36d8c1" target="_blank" rel="noopener">toti.shroom</a>,
+        <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>.
+        Both on Sketchfab, rigged and animated here.
+      </p>
+      <div class="namer-actions">
+        <button class="chip" type="button" id="catpick-close">Done</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog class="namer shop" id="shop" aria-labelledby="shop-title">
+    <div class="namer-card">
+      <div class="shop-head">
+        <h2 id="shop-title">Kitty shop</h2>
+        <p class="shop-purse"><img src="models/shop/token.webp?v=4bc4d159aff0" alt="" width="28" height="28"><span id="shop-have">0</span><span class="shop-purse-label"> tokens</span></p>
+      </div>
+      <p class="namer-sub">Welcome to the kitty shop! Pet her, feed her and play with her to earn friendship tokens.</p>
+      <div id="shop-items">
+        <h3 class="shop-sub" id="shop-outfits-title">Outfits</h3>
+        <div class="shop-grid" id="shop-grid" role="group" aria-labelledby="shop-outfits-title"></div>
+        <h3 class="shop-sub" id="shop-toys-title">Toys</h3>
+        <div class="shop-grid" id="shop-toys" role="group" aria-labelledby="shop-toys-title"></div>
+      </div>
+      <p class="cat-status" id="shop-status" role="status" aria-live="polite"></p>
+      <p class="cat-credits">Idea by @Kowffe. Every toy and outfit was made in Blender for Day&nbsp;3. The fish on a stick is Day&nbsp;4’s, an idea by @Darkbacon155: it is a present, and it is yours already.</p>
+      <div class="namer-actions">
+        <button class="chip" type="button" id="shop-close">Done</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog class="daylog" id="daylog" aria-labelledby="daylog-title">
+    <div class="sheet">
+      <div class="sheet-head">
+        <div>
+          <h2 id="daylog-title">Day log</h2>
+          <p class="sheet-sub">One new thing every day, picked from the comments.</p>
+        </div>
+        <button class="close" id="daylog-close" type="button" aria-label="Close the Day log">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+      <ol class="daylog-list" id="daylog-list"><li class="daylog-empty">Loading…</li></ol>
+    </div>
+  </dialog>
+
+  <section class="fallback" id="fallback" hidden aria-labelledby="fallback-title">
+    <div class="fallback-card">
+      <h2 id="fallback-title">Your browser can’t show 3D</h2>
+      <p>This world is drawn with WebGL 2, which is missing or switched off here. Try an up-to-date Chrome, Safari, Firefox or Edge, or turn on hardware acceleration in your browser settings.</p>
+      <p>The Day log still works.</p>
+    </div>
+  </section>
+
+  <noscript><p class="noscript">Glikdev needs JavaScript to show its world. Turn it on and reload.</p></noscript>
+</body>
+</html>
