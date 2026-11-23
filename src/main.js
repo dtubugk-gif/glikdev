@@ -372,7 +372,7 @@ async function start() {
     } catch (err) { console.warn('Glikdev: the fish on a stick did not load', err); wand = null; }
   })() : null;
   /** tell your arm where the fish is (the rod points at it once it is out) */
-  const aimRod = () => { const y = kitty.brain.yarn; player.setAim(y?.wand ? [y.x, y.y, y.z] : null, !!y?.wand && !y.hang); };
+  const aimRod = () => { const y = kitty.brain.yarn; player.setAim(y?.wand ? [y.x, y.y, y.z] : null, !!y?.wand && !y.hang, !!y?.wand && !!y.dangle); };
   /** recordings: you and the kitty are stepped together, so the line always runs from where your hand really is */
   const syncPlayer = (bt) => { player.simulateTo(bt); if (wandOn) { kitty.setWandTip(player.tip()); aimRod(); } };
   const kittyBusy = () => { const b = kitty.brain; return ['eat', 'pounce', 'bat'].includes(b.mode) || b.goal === 'eat' || b.goal === 'yarn' || !!(b.yarn?.held && !b.yarn.hang); };
@@ -430,12 +430,16 @@ async function start() {
       if (e.type === 'reset') {                            // a recording starting over
         wallet = freshWallet(); rewardState = {}; filmWear = { ...paramWear };
         tokenFX?.reset();
+        wand?.event(e, null);
         wardrobe?.dress({ ...wallet.wearing, ...filmWear });
         applyToy();
         return;
       }
       if ((e.type === 'thud' || e.type === 'swat') && toyOut()?.jingle) audio?.event({ type: 'jingle' });
       if (e.type === 'cast') { player?.cast(e.x, e.z); audio?.event({ type: 'toss', speed: e.speed }); }   // your arm flicks the rod
+      if (e.type === 'dangle') audio?.event({ type: 'jingle' });
+      if (e.type === 'reeled') audio?.event({ type: 'click' });
+      wand?.event(e, kitty.brain.yarn);                    // stars, rings, squash: the fish's own little effects
       if (e.type === 'swat' && toyOut()?.id === 'toymouse') audio?.event({ type: 'squeak' });
       if (e.type === 'script' && e.what.type === 'wear') { // filming: straight onto her, no shopping
         const it = itemById(e.what.id);
@@ -675,7 +679,7 @@ async function start() {
       e.preventDefault();
       audio?.unlock();
       const b = kitty.brain, h = player.heading;
-      if (Math.hypot(b.x - player.x, b.z - player.z) < 20) kitty.castNear();
+      if (Math.hypot(b.x - player.x, b.z - player.z) < 20) kitty.play();      // to her (or dangled in front of her, when she is close)
       else kitty.cast(player.x + Math.sin(h) * 11, player.z + Math.cos(h) * 11);
       dismissHint();
     });
@@ -1004,8 +1008,8 @@ async function start() {
   // the fish on a stick is in your hand: say how to play with it (until the first thing you do)
   onWand = (on) => {
     if (!on || hinted || !(showUI && !demo && !short)) return;
-    hintEl.textContent = coarse ? 'Tap Play to cast your fish · Drag the fish to fling it · Tap the ground to walk'
-      : 'Press Space or Play to cast your fish · Drag the fish to fling it · Click the ground or use WASD to walk';
+    hintEl.textContent = coarse ? 'Tap Play to cast your fish, or to dangle it when she is close · Drag the fish to fling it'
+      : 'Space or Play casts your fish, or dangles it when she is close · Drag the fish to fling it · WASD to walk';
   };
   if (wandOn) onWand(true);
   function dismissHint() {
@@ -1124,7 +1128,7 @@ async function start() {
     const dt = Math.min(0.05, Math.max(0, (ts - last) / 1000));
     if (dialog.open) { last = ts; return; }                // nothing to see behind the Day log
     // when nobody is touching the camera, 30 fps is plenty
-    if (!demo && rig.idle() && !player?.busy() && !(kitty && (kitty.busy() || tokenFX?.busy() || wardrobe?.busy(kitty.t)))) { skip = !skip; if (skip) return; }
+    if (!demo && rig.idle() && !player?.busy() && !(kitty && (kitty.busy() || tokenFX?.busy() || wardrobe?.busy(kitty.t) || (wandOn && wand.busy())))) { skip = !skip; if (skip) return; }
     last = ts;
     step((ts - t0) / 1000, dt);
   }

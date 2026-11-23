@@ -426,6 +426,7 @@ export async function createKitty(o) {
         else if (s.type === 'nap') brain.nap();
         else if (s.type === 'cast') brain.cast(s.x, s.z);
         else if (s.type === 'castnear') brain.castNear();
+        else if (s.type === 'dangle') brain.dangle();
         else emitOut({ t: brain.t, type: 'script', what: s });   // not hers: for whoever is listening (Day 3: 'wear')
       }
     }

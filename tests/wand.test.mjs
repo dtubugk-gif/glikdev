@@ -123,6 +123,33 @@ test('Play casts the fish to her; a second cast in mid game sends her after it a
   assert.ok(ev.some((e) => e.type === 'swat'), 'and she batted it there');
 });
 
+test('dangle: she is close, the fish stays on your rod and she pounces at it and bats it so it swings', () => {
+  const b = createBrain({ x: 5, z: 2.5 });                  // close to the hanging fish
+  b.wandTip = TIP.slice();
+  b.setWand(true);
+  run(b, 0.5);
+  b.play();                                                 // Play, with her this near, dangles it
+  assert.equal(b.yarn.hang, true, 'the fish is not cast: it stays on the rod');
+  assert.equal(b.yarn.dangle, true);
+  let swung = 0;
+  const ev = run(b, 26, (k) => {
+    assert.ok(far(k.yarn, TIP) <= WAND.rest + 0.05, 'always on the end of the rod');
+    swung = Math.max(swung, Math.hypot(k.yarn.x - TIP[0], k.yarn.z - TIP[2]));
+  });
+  const types = ev.map((e) => e.type);
+  assert.ok(types.includes('dangle') && types.includes('leap'));
+  assert.equal(types.filter((t) => t === 'swat').length, 3);
+  assert.ok(swung > 0.8, `a swat makes it swing (${swung.toFixed(2)} m)`);
+  assert.ok(types.includes('dangle-end'));
+  assert.equal(b.yarn.dangle, false, 'her game over, the rod comes up again');
+  assert.equal(b.yarn.hang, true);
+  // from far away the same button casts it
+  const c = wandBrain();
+  c.play();
+  assert.equal(c.yarn.air, true);
+  assert.ok(!c.yarn.dangle);
+});
+
 test('walk away and the fish is dragged along behind you on its line; she follows it', () => {
   const b = wandBrain();
   b.cast(0, -1);
@@ -213,7 +240,7 @@ test('the model file has the rod, its tip, the fish and her loop, where the game
   const buf = readFileSync(join(GAME, 'models', 'wand.glb'));
   const gltf = JSON.parse(buf.subarray(20, 20 + buf.readUInt32LE(12)).toString('utf8'));
   const node = (n) => gltf.nodes.find((x) => x.name === n);
-  for (const n of ['WandRod', 'WandTip', 'WandFish', 'FishLoop']) assert.ok(node(n), n);
+  for (const n of ['WandRod', 'WandTip', 'WandFish', 'FishLoop', 'FishTail', 'FishDorsal', 'FishFinP', 'FishFinN']) assert.ok(node(n), n);
   const tip = node('WandTip').translation;                  // glTF is Y up: the rod stands along +Y, its tip leans to +Z
   assert.ok(Math.abs(tip[1] * HOLD.scale - HOLD.len) < 0.02 && Math.abs(tip[2] * HOLD.scale - HOLD.droop) < 0.02, `tip at ${tip}`);
   assert.ok(Math.abs(tip[0]) < 1e-4);
@@ -225,11 +252,11 @@ test('the model file has the rod, its tip, the fish and her loop, where the game
 
 test('the Day 4 demos exist, give you the stick and have a camera', () => {
   const home = { az: 0.32, pol: 1.05, dist: 32, target: [0, 0, 0], shift: 0, fov: 60, horizon: 0.42 };
-  for (const d of ['kittyfish', 'fishwalk']) {
+  for (const d of ['kittyfish', 'fishwalk', 'fishdangle']) {
     assert.ok(DEMOS.includes(d) && KITTY_DEMOS[d], d);
     assert.ok(KITTY_DEMOS[d].player, 'you are in the shot (the stick is in your hand)');
     assert.ok(KITTY_DEMOS[d].script.some((s) => s.type === 'wear' && s.id === 'toywand'));
-    assert.ok(KITTY_DEMOS[d].script.some((s) => s.type === 'cast' || s.type === 'castnear'));
+    assert.ok(KITTY_DEMOS[d].script.some((s) => ['cast', 'castnear', 'dangle'].includes(s.type)));
     const pose = demoPose(d, 2, home, { x: 0, z: 0, heading: 0, head: [0, 5, 0], bowl: null, yarn: { x: 3, z: 3 }, player: { x: -3, z: 4 } });
     assert.ok(pose && pose.position.every(Number.isFinite) && pose.look.every(Number.isFinite));
   }
