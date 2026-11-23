@@ -374,7 +374,15 @@ html.no-ui .nametag:not(.is-filmed), html.capture-short .nametag:not(.is-filmed)
   font-size: 20px; font-variant-numeric: tabular-nums;
 }
 .tokens img { width: 34px; height: 34px; flex: none; will-change: transform; }
-.tokens-count { min-width: 1ch; text-align: center; }
+.tokens-count { min-width: 1ch; text-align: center; transition: color 0.2s; }
+.tokens.is-losing .tokens-count { color: #c8372d; }
+.tokens-loss {                                          /* tokens she took back: a red "−2" under the counter */
+  position: absolute; top: calc(100% + 4px); right: 10px; padding: 5px 11px; border-radius: 999px;
+  border: 2.5px solid var(--ink); background: #e5483d; color: #fff; box-shadow: var(--drop);
+  font: 700 18px/1 var(--display); font-variant-numeric: tabular-nums; pointer-events: none;
+  transform-origin: 50% 0; will-change: transform, opacity;
+}
+.tokens.is-filmed .tokens-loss { font-size: 22px; padding: 6px 13px; }
 html.no-ui .tokens:not(.is-filmed), html.capture-short .tokens:not(.is-filmed), html.no-webgl .tokens { display: none !important; }
 /* filmed for a Short: inside the safe area (the platform's own buttons cover the top 73 px and the right 47 px) */
 .tokens.is-filmed { pointer-events: none; top: 76px; right: 52px; min-height: 50px; padding: 0 18px 0 8px; font-size: 24px; }

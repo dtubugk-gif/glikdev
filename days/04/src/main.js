@@ -15,7 +15,7 @@
 // ?v= through its import map; data and model URLs below get the same stamp (deploy.mjs writes it).
 import { renderDayLog, renderHeadline, latestDay } from './daylog.js';
 import { DEMOS, demoPose, KITTY_DEMOS } from './demo.js';
-import { createWallet, rewardFor, ITEMS, NEW_ITEM, itemById } from './tokens.js';
+import { createWallet, rewardFor, penaltyFor, ITEMS, NEW_ITEM, itemById } from './tokens.js';
 import { createMind, sayWhy, describeMind } from './kittymind.js';
 import { emoteSVG } from './emotes.js';
 
@@ -403,6 +403,7 @@ async function start() {
   // (Day 4's fish on a stick is bought in the shop like any toy; recordings get it from their script)
   const freshWallet = () => createWallet(live ? loadWallet() : { ...(kd?.wallet ?? {}), ...(filmHave ? { tokens: filmHave } : {}) });
   let wallet = freshWallet(), wardrobe = null, tokenFX = null, rewardState = {}, filmWear = { ...paramWear };
+  let pendingLoss = 0;                                     // tokens just lost, not yet shown under the counter
   let flashHint = () => {};
   const tokenHead = new THREE.Vector3();
   const tokensEl = $('tokens'), tokensCount = $('tokens-count'), tokensIcon = $('tokens-icon');
@@ -447,6 +448,19 @@ async function start() {
         if (slot) { filmWear[slot] = it ? it.id : null; wardrobe?.dress({ ...wallet.wearing, ...filmWear }, e.t); applyToy(); }
         return;
       }
+      // she is cross, angry, furious or sad with you: that costs tokens
+      const lost = wallet.lose(penaltyFor(e, rewardState));
+      if (lost > 0) {
+        pendingLoss += lost;
+        audio?.event({ type: 'lose' });
+        repaintShop();
+        if (live) {
+          saveWallet(wallet);
+          const how = { grumpy: 'is a bit cross with you', angry: 'is angry with you', furious: 'is furious with you', sad: 'is sad' }[e.id];
+          flashHint(`${care.name} ${how}: you lost ${lost} token${lost === 1 ? '' : 's'}. ${e.id === 'sad' ? 'Pet her or play with her' : 'Feed her, or give her time'}`, 7000);
+        }
+        return;
+      }
       const n = rewardFor(e, rewardState);
       if (n <= 0) return;
       const first = wallet.earned === 0, could = wallet.canBuy(NEW_ITEM);
@@ -478,7 +492,8 @@ async function start() {
     if (filmTokens && (!showUI || short)) tokensEl.classList.add('is-filmed');
   }
   // the counter: shows what has landed (tokens still in the air are not counted yet) and bumps as each one lands
-  let shownTokens = null, bumpAt = -10;
+  let shownTokens = null, bumpAt = -10, lossAt = -10;
+  const lossEl = $('tokens-loss');
   const hudPoint = { x: 0, y: 0 };
   function paintTokens(t) {
     let hud = null;
@@ -497,6 +512,16 @@ async function start() {
     }
     const a = (t - bumpAt) / 0.32;
     tokensIcon.style.transform = a >= 0 && a < 1 ? `scale(${(1 + 0.34 * Math.sin(a * Math.PI)).toFixed(3)})` : '';
+    // tokens lost: a red "−2" drops out from under the counter and fades (worked out from the clock, so recordings match)
+    if (pendingLoss) { lossEl.textContent = `\u2212${pendingLoss}`; pendingLoss = 0; lossAt = t; }
+    const l = (t - lossAt) / 1.6;
+    const losing = l >= 0 && l < 1;
+    if (losing !== !lossEl.hidden) { lossEl.hidden = !losing; tokensEl.classList.toggle('is-losing', losing); }
+    if (losing) {
+      const pop = Math.min(1, l / 0.12);
+      lossEl.style.opacity = (l < 0.7 ? 1 : 1 - (l - 0.7) / 0.3).toFixed(3);
+      lossEl.style.transform = `translateY(${(l * 16).toFixed(1)}px) scale(${(0.6 + 0.4 * pop + 0.18 * Math.sin(pop * Math.PI)).toFixed(3)})`;
+    }
   }
 
   const kittyState = () => {
@@ -977,7 +1002,14 @@ async function start() {
     const edge = Math.min(84, innerWidth / 2);                                                    // the tag stays whole when she is at the side of the picture
     const rawX = (tagPos.x + 1) / 2 * innerWidth;
     const x = live && mind ? Math.max(edge, Math.min(innerWidth - edge, rawX)) : rawX;                    // (recordings keep the tag exactly where it was)
-    const y = Math.max(tagMinY + room, (1 - tagPos.y) / 2 * innerHeight);                         // never up over the title card
+    const faceUp = live && !emoteEl.hidden && nowMs() < emoteUntil;                               // the big face is showing over her tag
+    let floor = tagMinY + room + (faceUp && tagMinY ? 26 : 0);                                    // never up over the title card
+    if (live && !hintEl.hidden && !hintEl.classList.contains('is-gone')) {                        // nor over a message that is showing (phones held upright: it sits under the title)
+      const hr = hintEl.getBoundingClientRect();
+      const stack = faceUp ? (room ? 148 : 104) : room ? 82 : 36;                                 // her tag, her thought and the big face, as high as they reach
+      if (hr.height && hr.top < innerHeight / 2) floor = Math.max(floor, hr.bottom + 6 + stack);
+    }
+    const y = Math.max(floor, (1 - tagPos.y) / 2 * innerHeight);
     tag.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -100%) scale(${s.toFixed(3)})`;
     if (!emoteEl.hidden) {                                  // the big face: over the bubble, or over the tag
       const on = vis && nowMs() < emoteUntil;

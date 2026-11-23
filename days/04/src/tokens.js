@@ -6,6 +6,11 @@
 //   she finishes a bowl of food                 +3
 //   she bats the yarn (three times a game)      +1 each
 //   she comes when you call her                 +1 (at most once every 20 s)
+// Upsetting her loses them again (the owner's rule, Day 4: "if the cat is angry at me, I lose coins"):
+//   she gets a bit cross with you               -1
+//   she gets angry                              -2 (in all)
+//   she gets furious (woken from her nap)       -4 (in all)
+//   she gets sad (she asked, you ignored her)   -1
 // Tokens buy things for her to wear, and toys. One thing per slot (hat, face, neck, back, and the toy she
 // plays with); what she owns and what is out stay on this device.
 
@@ -59,6 +64,26 @@ export function rewardFor(e, state = {}) {
   }
 }
 
+/** What her bad feelings cost, in all (a kitty who goes from a bit cross to angry costs one more, not two more). */
+export const LOSS = { grumpy: 1, angry: 2, furious: 4, sad: 1 };
+const CROSS = { grumpy: 1, angry: 2, furious: 3 };       // how cross she is
+
+/**
+ * How many tokens one of her 'feel' events costs you. Getting crosser costs the difference; calming down costs
+ * nothing; sadness costs when it starts (not when it is only her anger wearing off). Falling asleep changes
+ * nothing. `state` remembers how she felt last (`state.felt`) and is updated here.
+ * @param {{type:string, id?:string}} e
+ * @param {{felt?:string}} state
+ */
+export function penaltyFor(e, state = {}) {
+  if (e.type !== 'feel' || e.id === 'asleep') return 0;
+  const was = state.felt || 'content';
+  state.felt = e.id;
+  if (CROSS[e.id]) return CROSS[e.id] > (CROSS[was] || 0) ? LOSS[e.id] - (CROSS[was] ? LOSS[was] : 0) : 0;
+  if (e.id === 'sad') return CROSS[was] || was === 'sad' ? 0 : LOSS.sad;
+  return 0;
+}
+
 const int = (n) => (Number.isFinite(Number(n)) ? Math.max(0, Math.min(MAX_TOKENS, Math.floor(Number(n)))) : 0);
 
 /**
@@ -92,6 +117,12 @@ export function createWallet(saved = null) {
       const k = int(n);
       tokens = Math.min(MAX_TOKENS, tokens + k);
       earned = Math.min(MAX_TOKENS * 100, earned + k);
+      return k;
+    },
+    /** takes tokens away (never below none); returns how many really went. What was earned in all stays. */
+    lose(n) {
+      const k = Math.min(tokens, int(n));
+      tokens -= k;
       return k;
     },
     /** buys it and puts it on; false when it is unknown, already hers or too dear */
