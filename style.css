@@ -359,6 +359,13 @@ html.no-ui .nametag:not(.is-filmed), html.capture-short .nametag:not(.is-filmed)
 }
 @keyframes spin { to { transform: rotate(1turn); } }
 .cats[aria-busy="true"] .cat-card:not(.is-loading) { opacity: 0.6; cursor: default; }
+/* Day 5: a fur skin's price in atom tokens (gone once it is hers); too dear = a little faded */
+.cat-price { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px 2px 4px; border-radius: 999px;
+  border: 2px solid var(--ink); background: #e4f1f4; font: 700 15px/1 var(--display); font-variant-numeric: tabular-nums; }
+.cat-price img { width: 22px; height: 22px; aspect-ratio: 1; background: none; border-radius: 0; }
+.cat-card[data-state="owned"] .cat-price { display: none; }
+.cat-card[data-state="dear"] > img { filter: saturate(0.55); opacity: 0.72; }
+.cat-card[data-state="buy"] .cat-price { background: #c9ecd2; }
 .cat-status { min-height: 1.3em; margin: 10px 0 0; font-size: 15px; color: var(--accent); }
 .cat-status:empty { min-height: 0; margin: 0; }
 .cat-credits { margin: 12px 0 0; font-size: 13px; line-height: 1.45; color: var(--ink-3); }
@@ -384,6 +391,14 @@ html.no-ui .nametag:not(.is-filmed), html.capture-short .nametag:not(.is-filmed)
 }
 .tokens.is-filmed .tokens-loss { font-size: 22px; padding: 6px 13px; }
 html.no-ui .tokens:not(.is-filmed), html.capture-short .tokens:not(.is-filmed), html.no-webgl .tokens { display: none !important; }
+/* Day 5: the atom tokens' counter sits beside the friendship tokens, on their left (main.js keeps it clear of
+   them as the numbers grow); filmed for a Short, it sits under them */
+.tokens.atoms { right: calc(var(--gutter) + var(--safe-r) + 96px); }
+.tokens.atoms.is-filmed { top: 136px; right: 52px; }
+@media (max-width: 759px) and (orientation: portrait) {
+  .tokens { padding: 0 12px 0 6px; gap: 5px; font-size: 18px; }
+  .tokens img { width: 30px; height: 30px; }
+}
 /* filmed for a Short: inside the safe area (the platform's own buttons cover the top 73 px and the right 47 px) */
 .tokens.is-filmed { pointer-events: none; top: 76px; right: 52px; min-height: 50px; padding: 0 18px 0 8px; font-size: 24px; }
 .tokens.is-filmed img { width: 38px; height: 38px; }
@@ -445,6 +460,8 @@ html.no-ui .tokens:not(.is-filmed), html.capture-short .tokens:not(.is-filmed), 
 @media (max-width: 359px) { .shop-grid { grid-template-columns: repeat(3, 1fr); } .shop-purse-label { display: none; } }
 /* phones held upright: the tagline wraps to two lines so the token counter fits beside it */
 @media (max-width: 759px) and (orientation: portrait) { .eyebrow span { max-width: 9.6em; } }
+/* Day 5: two counters now; on the narrowest phones the tagline makes way for them (the logo stays) */
+@media (max-width: 359px) and (orientation: portrait) { .eyebrow span { display: none; } }
 @media (max-width: 339px) { .eyebrow span { font-size: 12px; } .tokens { padding: 0 12px 0 6px; font-size: 18px; } .tokens img { width: 30px; height: 30px; } }
 @media (max-height: 500px) and (orientation: landscape) { .tokens { min-height: 40px; top: calc(var(--gutter) + var(--safe-t) - 6px); } .tokens img { width: 28px; height: 28px; } }
 

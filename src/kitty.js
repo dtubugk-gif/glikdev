@@ -181,7 +181,10 @@ function disposeTree(obj) {
 export async function createKitty(o) {
   const loader = new GLTFLoader();
   const loadFur = (url) => (url ? new THREE.TextureLoader().loadAsync(url).catch(() => null) : Promise.resolve(null));
-  const [gltf, toys, furMap] = await Promise.all([loader.loadAsync(o.url), loader.loadAsync(o.toysUrl), loadFur(o.furUrl)]);
+  // Day 5: a fur skin = her own coat in another colour (o.skin = {url, lid}: the coat's picture, and the colour of
+  // her eyelids to go with it). A skin that does not load leaves her in her own coat.
+  const loadSkin = (skin) => (skin?.url ? new THREE.TextureLoader().loadAsync(skin.url).then((map) => ({ map, lid: skin.lid })).catch(() => null) : Promise.resolve(null));
+  const [gltf, toys, furMap, skin0] = await Promise.all([loader.loadAsync(o.url), loader.loadAsync(o.toysUrl), loadFur(o.furUrl), loadSkin(o.skin)]);
   const S = KITTY.scale;
   const aniso = Math.min(8, o.renderer?.capabilities.getMaxAnisotropy() ?? 1);
   const shadowy = (obj) => obj.traverse((m) => {
@@ -195,7 +198,7 @@ export async function createKitty(o) {
   // the cat herself: the Day 2 ginger kitty, or one of the other cats (same skeleton and clips)
   let model, clips, B, headScale = 1;                     // headScale: a bigger head on the same body (kitten proportions)
   const bone = (n) => model.getObjectByName(n);
-  function mount(g, fur, furLayers) {
+  function mount(g, fur, furLayers, skin = null) {
     clips = checkCat(g, 'the cat');
     model = g.scene;
     model.name = 'Cat';
@@ -210,6 +213,17 @@ export async function createKitty(o) {
       if (/whisker/i.test(m.name) || /whisker/i.test(m.material?.name ?? '')) m.castShadow = false;
       if (m.isSkinnedMesh && m.material?.name === 'M_Kitty') body = m;
     });
+    if (body && skin) {
+      const old = body.material.map;
+      skin.map.flipY = false;                    // same UV convention as the glTF's own textures
+      skin.map.colorSpace = THREE.SRGBColorSpace;
+      skin.map.anisotropy = aniso;
+      if (old) { skin.map.wrapS = old.wrapS; skin.map.wrapT = old.wrapT; }
+      body.material.map = skin.map;
+      body.material.needsUpdate = true;
+      old?.dispose();
+      if (skin.lid) model.traverse((m) => { if (m.isMesh && m.material?.name === 'M_Lid') m.material.color.set(skin.lid); });
+    }
     if (body && fur && (furLayers ?? 10) > 0) {
       fur.flipY = false;                         // same UV convention as the glTF's own textures
       fur.colorSpace = THREE.NoColorSpace;
@@ -230,7 +244,7 @@ export async function createKitty(o) {
   }
   checkCat(gltf, o.url);
   headScale = o.headScale ?? 1;
-  mount(gltf, furMap, o.furLayers);
+  mount(gltf, furMap, o.furLayers, skin0);
   o.scene.add(root);
 
   // her things
@@ -330,15 +344,15 @@ export async function createKitty(o) {
   }
 
   /** Change cats in place: she keeps her name, needs, spot and whatever she is doing. */
-  async function setCat({ url, furUrl, furLayers, key, headScale: headScaleNew }) {
-    const [g, fur] = await Promise.all([loader.loadAsync(url), loadFur(furUrl)]);
+  async function setCat({ url, furUrl, furLayers, key, headScale: headScaleNew, skin }) {
+    const [g, fur, skinNew] = await Promise.all([loader.loadAsync(url), loadFur(furUrl), loadSkin(skin)]);
     checkCat(g, url);                            // a broken file leaves the current cat as she is
     const was = cur ? { name: cur.getClip().name, time: cur.time } : null;
     const old = model;
     emitOut({ t: brain.t, type: 'cat-out' });    // what she wears comes off the old skeleton first
     root.remove(old);
     headScale = headScaleNew ?? 1;
-    mount(g, fur, furLayers);
+    mount(g, fur, furLayers, skinNew);
     newMixer();
     play(brain.anim(), true);
     if (was && cur.getClip().name === was.name) cur.time = Math.min(was.time, cur.getClip().duration);

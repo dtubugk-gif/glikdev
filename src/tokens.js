@@ -40,6 +40,19 @@ export const NEW_ITEM = 'toywand';
 export const SLOTS = ['hat', 'face', 'neck', 'back', 'toy'];
 export const itemById = (id) => ITEMS.find((i) => i.id === id) || null;
 
+// Day 5 (idea by @elenaabrosimova1968: "Add URANIUM and PLUTONIUM... in a box that you can tap (gives you some
+// special tokens you will need to upgrade things or for skins)"). The atom box stands on the plate; tapping it
+// when its gauge is full pops a chunk of uranium or plutonium out and gives one atom token, then it charges
+// again. Atom tokens are a second purse: they buy fur skins for the ginger kitty (her coat in another colour).
+export const ATOM_BOX = { recharge: 20, gives: 1 };
+/** Fur skins: the ginger kitty's own coat, recoloured (models/skins/<id>.webp, made by art/day05/make_skins.py). */
+export const SKINS = [
+  { id: 'silver', name: 'Silver', price: 3 },
+  { id: 'tuxedo', name: 'Tuxedo', price: 5 },
+  { id: 'atomic', name: 'Atomic', price: 8 },
+];
+export const skinById = (id) => SKINS.find((k) => k.id === id) || null;
+
 export const CALL_COOLDOWN = 20;
 export const MAX_TOKENS = 9999;
 
@@ -96,6 +109,8 @@ export function createWallet(saved = null) {
   const s = saved && typeof saved === 'object' ? saved : {};
   let tokens = int(s.tokens);
   let earned = Math.max(tokens, int(s.earned));
+  let atoms = int(s.atoms);
+  const skins = new Set((Array.isArray(s.skins) ? s.skins : []).filter((id) => skinById(id)));
   const given = new Set(Array.isArray(s.gifts) ? s.gifts : []);
   const owned = new Set((Array.isArray(s.owned) ? s.owned : []).filter((id) => itemById(id) && !given.has(id)));
   const wearing = {};
@@ -125,6 +140,19 @@ export function createWallet(saved = null) {
       tokens -= k;
       return k;
     },
+    /** atom tokens (Day 5): from the atom box, spent on fur skins */
+    get atoms() { return atoms; },
+    earnAtoms(n) { const k = int(n); atoms = Math.min(MAX_TOKENS, atoms + k); return k; },
+    ownsSkin: (id) => skins.has(id),
+    canBuySkin: (id) => { const k = skinById(id); return !!k && !skins.has(id) && atoms >= k.price; },
+    /** buys a fur skin with atom tokens; false when it is unknown, already hers or too dear */
+    buySkin(id) {
+      const k = skinById(id);
+      if (!k || skins.has(id) || atoms < k.price) return false;
+      atoms -= k.price;
+      skins.add(id);
+      return true;
+    },
     /** buys it and puts it on; false when it is unknown, already hers or too dear */
     buy(id) {
       const it = itemById(id);
@@ -146,6 +174,6 @@ export function createWallet(saved = null) {
       wearing[slot] = null;
       return true;
     },
-    toJSON: () => ({ tokens, earned, owned: [...owned], wearing: { ...wearing } }),
+    toJSON: () => ({ tokens, earned, owned: [...owned], wearing: { ...wearing }, atoms, skins: [...skins] }),
   };
 }

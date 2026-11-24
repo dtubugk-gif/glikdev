@@ -15,7 +15,7 @@
 // ?v= through its import map; data and model URLs below get the same stamp (deploy.mjs writes it).
 import { renderDayLog, renderHeadline, latestDay } from './daylog.js';
 import { DEMOS, demoPose, KITTY_DEMOS } from './demo.js';
-import { createWallet, rewardFor, penaltyFor, ITEMS, NEW_ITEM, itemById } from './tokens.js';
+import { createWallet, rewardFor, penaltyFor, ITEMS, NEW_ITEM, itemById, SKINS, skinById } from './tokens.js';
 import { createMind, sayWhy, describeMind } from './kittymind.js';
 import { emoteSVG } from './emotes.js';
 
@@ -124,6 +124,15 @@ const CATS = {
   tabby: { label: 'Tabby', url: 'models/cat_toti.glb' },
 };
 const THUMB = { ginger: 'models/thumb_ginger.webp', realistic: 'models/thumb_realistic.webp', tabby: 'models/thumb_toti.webp' };
+// Day 5: fur skins, bought with atom tokens (tokens.js SKINS). Each is the ginger kitty in another coat
+// (models/skins/<id>.webp, art/day05/make_skins.py, which also prints the eyelid colour that goes with it).
+const SKIN_LID = { silver: '#9ea4ad', tuxedo: '#1f1f25', atomic: '#83b255' };
+for (const k of SKINS) {
+  CATS[k.id] = { ...CATS.ginger, label: k.name, base: 'ginger', skin: k.id, lid: SKIN_LID[k.id] };
+  THUMB[k.id] = `models/skins/thumb_${k.id}.webp`;
+}
+/** the cat whose fit and sizes this one uses (a skin is the ginger kitty) */
+const baseCat = (k) => CATS[k]?.base || k;
 const catOf = (k) => (Object.hasOwn(CATS, k) ? k : null);
 const filmTag = cleanName(params.get('tag'));
 const filmTagAt = Number(params.get('tagAt')) || 0;
@@ -269,10 +278,12 @@ async function start() {
   const care = {
     name: cleanName(saved?.name) || 'Kitty',
     muted: !!saved?.muted,
-    cat: catOf(params.get('cat')) || catOf(saved?.cat) || 'ginger',
+    // (a fur skin that was never bought on this device is not hers: back to her own coat)
+    cat: catOf(params.get('cat')) || (catOf(saved?.cat) && (!CATS[saved.cat].skin || createWallet(loadWallet()).ownsSkin(CATS[saved.cat].skin)) ? saved.cat : null) || 'ginger',
     mindHint: !!saved?.mindHint,                           // has been told once that she has a mind of her own
   };
-  const catOpts = (k) => ({ key: k, headScale: CATS[k].head ?? 1, url: stamped(CATS[k].url), furUrl: CATS[k].fur ? stamped(CATS[k].fur) : null, furLayers: params.has('fur') ? Math.max(0, Math.min(16, Number(params.get('fur')) || 0)) : (CATS[k].shells ?? (coarse ? 6 : 10)) });
+  const catOpts = (k) => ({ key: baseCat(k), skin: CATS[k].skin ? { url: stamped(`models/skins/${CATS[k].skin}.webp`), lid: CATS[k].lid } : null,
+    headScale: CATS[k].head ?? 1, url: stamped(CATS[k].url), furUrl: CATS[k].fur ? stamped(CATS[k].fur) : null, furLayers: params.has('fur') ? Math.max(0, Math.min(16, Number(params.get('fur')) || 0)) : (CATS[k].shells ?? (coarse ? 6 : 10)) });
   let needs;
   if (saved && Number.isFinite(saved.hunger) && Number.isFinite(saved.happy)) {
     const away = Math.max(0, Math.min(3600, (Date.now() - (Number(saved.at) || Date.now())) / 1000));
@@ -313,6 +324,7 @@ async function start() {
       try {                                              // you and the rod join a few frames after her
         if (player) list.push([player.x, 0.9, player.z]);
         if (wand?.fish?.visible) list.push(wand.fish.getWorldPosition(fishAt).toArray());
+        if (atomBox && demo && demo.startsWith('atom')) list.push([atomMod.ATOMBOX.x, 2.2, atomMod.ATOMBOX.z]);
       } catch { /* not made yet */ }
       return list;
     });
@@ -339,6 +351,18 @@ async function start() {
   // her bed (Day 3): once it stands there she is told where it is (she sleeps on it, and steps up onto its cushion)
   const bedding = town && kitty ? town.createBed({ scene: world.scene, url: stamped('models/bed.glb'), renderer })
     .then((b) => { bedThing = b; kitty.setBed(town.BED_SPOT); }).catch((err) => { console.warn('Glikdev: her bed did not load', err); }) : null;
+  // Day 5 (idea by @elenaabrosimova1968): the atom box. Tap it when its gauge is full for an atom token.
+  let atomMod = null, atomBox = null, atomFX = null, wantBox = false, atomDue = null;
+  const boxing = kitty ? (async () => {
+    try {
+      atomMod = await import('./atombox.js');
+      const [box, { createTokenFX }] = await Promise.all([
+        atomMod.createAtomBox({ scene: world.scene, url: stamped('models/atombox.glb'), renderer, recharge: live ? undefined : 0.4 }), import('./outfits.js')]);
+      atomFX = createTokenFX({ scene: world.scene, camera, token: box.token });
+      atomBox = box;
+    } catch (err) { console.warn('Glikdev: the atom box did not load', err); atomBox = null; }
+  })() : null;
+  if (!live) await boxing;
   if (!live) await building;                               // recordings: it is there from the first frame
   if (!live) await bedding;
   if (kitty && (live || pd)) {
@@ -348,7 +372,8 @@ async function start() {
       player = await createPlayer({ scene: world.scene, url: stamped('models/player.glb'),
         start: pd ? pd.start : (params.get('view') === 'first' ? { x: 6, z: 17.5, heading: Math.atan2(-6, -17.5) } : { x: 7.5, z: 7, heading: home.az }),
         boxes: town ? [town.SHOP_BOX] : [],
-        circles: [() => ({ x: kitty.brain.x, z: kitty.brain.z, r: 2.8 }), ...(town ? [() => town.BED_CIRCLE] : [])],
+        circles: [() => ({ x: kitty.brain.x, z: kitty.brain.z, r: 2.8 }), ...(town ? [() => town.BED_CIRCLE] : []),
+          () => (atomBox ? atomMod.ATOMBOX_CIRCLE : { x: 0, z: 0, r: 0 })],
         script: pd ? pd.script || [] : null,
         onStep: (running) => audio?.event({ type: 'footstep', strong: running }) });
       rig.moveKeys = false;
@@ -389,7 +414,7 @@ async function start() {
   let wantShop = false, shopArmed = true, openShop = () => {}, repaintShop = () => {};
   /** you walk there; she comes along (unless she is busy), to a spot beside where you are going */
   function walkTo(x, z) {
-    wantShop = false;
+    wantShop = false; wantBox = false;
     player.goTo(x, z);
     const b = kitty.brain;
     if (kittyBusy() || Math.hypot(x - b.x, z - b.z) < 13) return;
@@ -398,12 +423,38 @@ async function start() {
     const p = town ? town.outOfShop(spot.x, spot.z) : spot;
     kitty.call(p.x, p.z, { quiet: true });               // she may come along, or not: it is up to her
   }
+  /** the atom box opens (at t on the kitty's clock), or says how long it still charges */
+  function openBox(t = kitty.t) {
+    if (!atomBox) return;
+    if (!atomBox.open(t)) {
+      audio?.event({ type: 'nope' });
+      const s = Math.ceil(atomBox.wait(t));
+      flashHint(`The atom box is charging: ${s} more second${s === 1 ? '' : 's'}`, 2600);
+      return;
+    }
+    atomDue = t + atomMod.TIMING.tokenAt;
+    audio?.unlock();
+    audio?.event({ type: 'click' });
+    audio?.event({ type: 'refill' });
+  }
+  /** you tapped the atom box: walk up to it first (she comes along and watches), then it opens */
+  function tapBox() {
+    if (!atomBox) return;
+    const B = atomMod.ATOMBOX;
+    if (!player) { openBox(); return; }
+    if (atomMod.nearAtomBox(player.x, player.z)) { wantBox = false; player.faceTo(B.x, B.z); openBox(); return; }
+    wantShop = false;
+    player.goTo(atomMod.ATOMBOX_STAND.x, atomMod.ATOMBOX_STAND.z);
+    wantBox = true;
+    if (!kittyBusy()) kitty.call(atomMod.ATOMBOX_WAIT.x, atomMod.ATOMBOX_WAIT.z, { quiet: true });
+    flashHint('Off to the atom box!', 2600);
+  }
   /** off to the shop: its doormat; the wardrobe opens when you get there */
   function goShop() {
     if (!player || !town) { openShop(); return; }
     if (town.atShop(player.x, player.z)) { player.faceTo(town.SHOP.x, town.SHOP.z); openShop(); return; }
     player.goTo(town.SHOP_DOOR.x, town.SHOP_DOOR.z);
-    wantShop = true;
+    wantShop = true; wantBox = false;
     if (!kittyBusy()) kitty.call(town.SHOP_WAIT.x, town.SHOP_WAIT.z, { quiet: true });
     flashHint('Off to the shop!', 2600);
   }
@@ -441,6 +492,7 @@ async function start() {
       if (e.type === 'reset') {                            // a recording starting over
         wallet = freshWallet(); rewardState = {}; filmWear = { ...paramWear };
         tokenFX?.reset();
+        atomBox?.reset(); atomFX?.reset(); atomDue = null;
         wand?.event(e, null);
         wardrobe?.dress({ ...wallet.wearing, ...filmWear });
         applyToy();
@@ -452,6 +504,7 @@ async function start() {
       if (e.type === 'reeled') audio?.event({ type: 'click' });
       wand?.event(e, kitty.brain.yarn);                    // stars, rings, squash: the fish's own little effects
       if (e.type === 'swat' && toyOut()?.id === 'toymouse') audio?.event({ type: 'squeak' });
+      if (e.type === 'script' && e.what.type === 'atom') { openBox(e.t); return; }   // filming: the atom box is tapped
       if (e.type === 'script' && e.what.type === 'wear') { // filming: straight onto her, no shopping
         const it = itemById(e.what.id);
         const slot = it ? it.slot : e.what.slot;
@@ -488,7 +541,7 @@ async function start() {
     const dressing = (async () => {
       try {
         const { createWardrobe, createTokenFX } = await import('./outfits.js');
-        wardrobe = await createWardrobe({ kitty, glbUrl: stamped('models/outfits.glb'), fitUrl: stamped('models/outfits_fit.json'), cat: care.cat, renderer });
+        wardrobe = await createWardrobe({ kitty, glbUrl: stamped('models/outfits.glb'), fitUrl: stamped('models/outfits_fit.json'), cat: baseCat(care.cat), renderer });
         tokenFX = createTokenFX({ scene: world.scene, camera, token: wardrobe.token });
         wardrobe.dress({ ...wallet.wearing, ...filmWear });
         applyToy();
@@ -501,6 +554,57 @@ async function start() {
     tokensEl.hidden = false;
     if (filmTokens && (!showUI || short)) tokensEl.classList.add('is-filmed');
   }
+  // Day 5: the atom tokens' own counter (under the friendship tokens); tap it for the fur skins
+  const atomsEl = $('atoms'), atomsCount = $('atoms-count'), atomsIcon = $('atoms-icon');
+  const filmAtoms = params.get('atoms') === '1';
+  const showAtoms = !!kitty && (filmAtoms || (showUI && !demo && !short));
+  if (showAtoms) {
+    atomsEl.hidden = false;
+    if (filmAtoms && (!showUI || short)) atomsEl.classList.add('is-filmed');
+  }
+  let shownAtoms = null, atomBumpAt = -10, atomRight = -1;
+  const atomHud = { x: 0, y: 0 }, atomFrom = new THREE.Vector3();
+  function paintAtoms(t) {
+    // the token leaves the chunk a moment after the lid opens
+    if (atomBox && atomDue != null && t >= atomDue) {
+      const first = wallet.atoms === 0 && !SKINS.some((k) => wallet.ownsSkin(k.id));
+      wallet.earnAtoms(1);
+      atomBox.update(atomDue);
+      atomFX?.spawn(atomDue, atomBox.tokenFrom(atomDue, atomFrom), 1);
+      atomDue = null;
+      audio?.event({ type: 'token', n: 1 });
+      repaintCats();
+      if (live) {
+        saveWallet(wallet);
+        const cheapest = SKINS.find((k) => !wallet.ownsSkin(k.id));
+        if (first) flashHint(coarse ? 'An atom token! They buy new fur for your kitty: tap the atom counter' : 'An atom token! They buy new fur for your kitty: click the atom counter', 8000);
+        else if (cheapest && wallet.atoms === cheapest.price) flashHint(`You can buy the ${cheapest.name.toLowerCase()} fur now! ${coarse ? 'Tap' : 'Click'} the atom counter`, 8000);
+      }
+    }
+    atomBox?.update(t);
+    let hud = null;
+    if (showAtoms) {
+      const r = atomsIcon.getBoundingClientRect();
+      if (r.width) { atomHud.x = ((r.left + r.width / 2) / innerWidth) * 2 - 1; atomHud.y = 1 - ((r.top + r.height / 2) / innerHeight) * 2; hud = atomHud; }
+    }
+    const flying = atomFX ? atomFX.update(t, hud) : 0;
+    if (!showAtoms) return;
+    const n = Math.max(0, wallet.atoms - flying);
+    if (n !== shownAtoms) {
+      if (shownAtoms !== null && n > shownAtoms) atomBumpAt = t;
+      shownAtoms = n;
+      atomsCount.textContent = String(n);
+      atomsEl.setAttribute('aria-label', `Atom tokens: ${n}. See the fur skins`);
+    }
+    // beside the friendship tokens, on their left, however wide their number is
+    if (showTokens && !atomsEl.classList.contains('is-filmed')) {
+      const r = Math.round(innerWidth - tokensEl.getBoundingClientRect().left + 8);
+      if (r !== atomRight && r > 0) { atomRight = r; atomsEl.style.right = `${r}px`; }
+    }
+    const a = (t - atomBumpAt) / 0.32;
+    atomsIcon.style.transform = a >= 0 && a < 1 ? `scale(${(1 + 0.34 * Math.sin(a * Math.PI)).toFixed(3)})` : '';
+  }
+  let repaintCats = () => {};
   // the counter: shows what has landed (tokens still in the air are not counted yet) and bumps as each one lands
   let shownTokens = null, bumpAt = -10, lossAt = -10;
   const lossEl = $('tokens-loss');
@@ -626,6 +730,7 @@ async function start() {
       const what = kitty.pick(r);
       if (what === 'kitty') { kitty.pet(); dismissHint(); return; }
       if (what === 'yarn') { kitty.play(); dismissHint(); return; }
+      if (atomBox?.pick(r)) { tapBox(); dismissHint(); return; }
       if (store && store.pick(r)) { goShop(); dismissHint(); return; }
       if (r.intersectPlane(groundPlane, hit) && Math.abs(hit.x) < PLATE.half - 4 && Math.abs(hit.z) < PLATE.half - 4) {
         if (player) { backToHer(); walkTo(hit.x, hit.z); }
@@ -640,7 +745,7 @@ async function start() {
         if (e.buttons || carry) return;
         const r = rayAt(e.clientX, e.clientY);
         const what = kitty.pick(r);
-        canvas.style.cursor = what === 'yarn' ? 'grab' : what || (store && store.pick(r)) ? 'pointer' : '';
+        canvas.style.cursor = what === 'yarn' ? 'grab' : what || atomBox?.pick(r) || (store && store.pick(r)) ? 'pointer' : '';
       });
     }
   }
@@ -672,7 +777,7 @@ async function start() {
       if (e.target?.closest?.('dialog, input, textarea, [contenteditable]')) return;
       e.preventDefault();
       held.add(e.code);
-      wantShop = false;
+      wantShop = false; wantBox = false;
       backToHer();
       dismissHint();
     });
@@ -769,11 +874,31 @@ async function start() {
       const name = document.createElement('span');
       name.textContent = c.label;
       b.append(img, name);
+      if (c.skin) {                                        // a fur skin: its price in atom tokens, until it is hers
+        const price = document.createElement('span');
+        price.className = 'cat-price';
+        const coin = document.createElement('img');
+        coin.src = stamped('models/shop/atomtoken.webp'); coin.alt = ''; coin.width = 22; coin.height = 22;
+        const n = document.createElement('b');
+        n.textContent = String(skinById(c.skin).price);
+        price.append(coin, n);
+        b.append(price);
+      }
       catsEl.append(b);
       return b;
     });
-    const paintCats = () => cards.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.cat === care.cat)));
+    const hasCat = (k) => !CATS[k].skin || wallet.ownsSkin(CATS[k].skin);
+    const paintCats = () => cards.forEach((b) => {
+      const k = b.dataset.cat, c = CATS[k];
+      b.setAttribute('aria-pressed', String(k === care.cat));
+      if (!c.skin) return;
+      const price = skinById(c.skin).price, mine = hasCat(k);
+      b.dataset.state = mine ? 'owned' : wallet.canBuySkin(c.skin) ? 'buy' : 'dear';
+      b.setAttribute('aria-label', mine ? `${c.label} fur: hers` : `${c.label} fur: ${price} atom tokens${wallet.canBuySkin(c.skin) ? '. Buy it' : ', not enough yet'}`);
+    });
     paintCats();
+    repaintCats = paintCats;
+    atomsEl.addEventListener('click', () => { audio?.unlock(); catBtn.click(); });
     let switching = false;
     catBtn.addEventListener('click', () => {
       catStatus.textContent = '';
@@ -785,6 +910,19 @@ async function start() {
       if (!card || switching) return;
       const k = card.dataset.cat;
       if (k === care.cat) { picker.close(); return; }
+      if (!hasCat(k)) {                                    // a fur skin she does not have yet: buy it with atom tokens
+        const sk = skinById(CATS[k].skin);
+        if (!wallet.buySkin(sk.id)) {
+          audio?.event({ type: 'nope' });
+          const need = sk.price - wallet.atoms;
+          catStatus.textContent = `${need} more atom token${need === 1 ? '' : 's'} for the ${sk.name.toLowerCase()} fur. Tap the atom box on the plate to get them.`;
+          return;
+        }
+        saveWallet(wallet);
+        audio?.unlock();
+        audio?.event({ type: 'buy' });
+        paintCats();
+      }
       switching = true;
       card.classList.add('is-loading');
       catsEl.setAttribute('aria-busy', 'true');
@@ -1053,9 +1191,12 @@ async function start() {
   // hint, until the first tap that does something
   if (showUI && !demo && !short) {
     hintEl.textContent = kitty && player
-      ? (!wallet.owns(NEW_ITEM)                            // the day's new thing waits in the shop
-        ? (coarse ? 'Tap the ground to walk there · Tap your kitty to pet her · New in the shop: a fish on a stick'
-          : 'Click the ground or use WASD to walk · Click your kitty to pet her · New in the shop: a fish on a stick')
+      ? (wallet.atoms === 0 && !SKINS.some((k) => wallet.ownsSkin(k.id))    // the day's new thing: the atom box
+        ? (coarse ? 'Tap the ground to walk there · Tap your kitty to pet her · New: tap the atom box'
+          : 'Click the ground or use WASD to walk · Click your kitty to pet her · New: click the atom box')
+        : !wallet.owns(NEW_ITEM)
+        ? (coarse ? 'Tap the ground to walk there · Tap your kitty to pet her · In the shop: a fish on a stick'
+          : 'Click the ground or use WASD to walk · Click your kitty to pet her · In the shop: a fish on a stick')
         : coarse ? 'Tap the ground to walk there · Tap your kitty to pet her · Walk to the shop to spend tokens'
           : 'Click the ground or use WASD to walk · Drag to look around · Click your kitty to pet her')
       : kitty ? (coarse ? 'Tap the ground to call the kitty · Tap her to pet her · Two fingers to move'
@@ -1124,6 +1265,13 @@ async function start() {
           player.faceTo(town.SHOP.x, town.SHOP.z);
           openShop();
         } else if (town && !shopArmed && town.leftShop(player.x, player.z)) shopArmed = true;
+        // you walked up to the atom box you tapped: it opens
+        if (wantBox && atomBox && atomMod.nearAtomBox(player.x, player.z, 7.6)) {
+          wantBox = false;
+          player.stop();
+          player.faceTo(atomMod.ATOMBOX.x, atomMod.ATOMBOX.z);
+          openBox();
+        }
       }
       if (wandOn) aimRod();
     }
@@ -1176,6 +1324,7 @@ async function start() {
       wardrobe?.update(kitty.t);
       camera.updateMatrixWorld();
       paintTokens(kitty.t);
+      paintAtoms(kitty.t);
     }
     world.update(t);
     world.render();
@@ -1187,7 +1336,7 @@ async function start() {
     const dt = Math.min(0.05, Math.max(0, (ts - last) / 1000));
     if (dialog.open) { last = ts; return; }                // nothing to see behind the Day log
     // when nobody is touching the camera, 30 fps is plenty
-    if (!demo && rig.idle() && !player?.busy() && !(kitty && (kitty.busy() || tokenFX?.busy() || wardrobe?.busy(kitty.t) || (wandOn && wand.busy())))) { skip = !skip; if (skip) return; }
+    if (!demo && rig.idle() && !player?.busy() && !(kitty && (kitty.busy() || tokenFX?.busy() || atomFX?.busy() || atomBox?.busy(kitty.t) || wardrobe?.busy(kitty.t) || (wandOn && wand.busy())))) { skip = !skip; if (skip) return; }
     last = ts;
     step((ts - t0) / 1000, dt);
   }
@@ -1204,6 +1353,7 @@ async function start() {
     get audio() { return audio; },
     get wallet() { return wallet; }, get wardrobe() { return wardrobe; }, get player() { return player; }, get store() { return store; },
     get wand() { return wand; }, get wandOn() { return wandOn; },
+    get atomBox() { return atomBox; }, get atomMod() { return atomMod; },
     /** Screen height fraction (from the top) of the visible horizon: the plate's far edge. */
     horizonFrac() {
       camera.updateMatrixWorld();

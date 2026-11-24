@@ -4,7 +4,8 @@
 // requestAnimationFrame / performance.now gets identical frames on every run.
 
 export const DEMOS = ['orbit', 'reveal', 'kitty', 'kittycall', 'kittypet', 'kittywalk', 'kittyname', 'kittyfeed', 'kittyplay', 'kittynap',
-  'kittytoken', 'kittydress', 'shopwalk', 'kittytoy', 'kittywake', 'kittyfish', 'fishwalk', 'fishshow', 'fishdangle'];
+  'kittytoken', 'kittydress', 'shopwalk', 'kittytoy', 'kittywake', 'kittyfish', 'fishwalk', 'fishshow', 'fishdangle',
+  'atombox', 'atomshow'];
 
 // Day 3: where the shop's doormat is, and where the kitty waits beside it (town.js works these out from SHOP)
 const SHOP_DOOR = [19.97, -21.57], SHOP_WAIT = [12.84, -23.42];
@@ -14,6 +15,9 @@ const BESIDE = { start: { x: -3.81, z: -0.78, heading: 0.75 } };
 const BED = [-19, -13], BED_OUT = Math.atan2(19, 13);
 const BY_BED = { start: { x: BED[0] - 7.4, z: BED[1] + 4.4, heading: BED_OUT + 0.55 } };
 
+// Day 5: the atom box (atombox.js ATOMBOX): where it stands, the way its front faces (F) and its right-hand side (S)
+const ABOX = [12.1, 6.3], ABOX_F = [-0.2614, 0.9652], ABOX_S = [0.9652, 0.2614];
+const byBox = (f, s) => [ABOX[0] + ABOX_F[0] * f + ABOX_S[0] * s, ABOX[1] + ABOX_F[1] * f + ABOX_S[1] * s];
 const lerp = (a, b, k) => a + (b - a) * k;
 const DEG = Math.PI / 180;
 const clamp01 = (x) => Math.min(1, Math.max(0, x));
@@ -140,6 +144,21 @@ export const KITTY_DEMOS = {
     viewer: () => [-18, 20],
     player: { start: { x: -19, z: 3, heading: -Math.PI / 2 }, script: [{ t: 1.5, type: 'go', x: 34, z: 3 }] },
   },
+  // Day 5: you stand by the atom box and tap it: the lid swings open, the uranium hops up, an atom token flies
+  // off (?atoms=1 shows the counter); then again, and it is the plutonium. She sits beside it and watches.
+  atombox: {
+    start: () => { const [x, z] = byBox(-4.6, 3.9); return { x, z, heading: Math.atan2(ABOX[0] + 9 - x, ABOX[1] - z), mode: 'sit', timer: 60 }; },
+    script: [{ t: 0.7, type: 'atom' }, { t: 4.1, type: 'atom' }],
+    viewer: () => byBox(14, 1),
+    player: { start: (() => { const [x, z] = byBox(4.2, -2.3); return { x, z, heading: Math.atan2(ABOX[0] - x, ABOX[1] - z) }; })(),
+      script: [{ t: 0.45, type: 'wave' }, { t: 3.85, type: 'wave' }] },
+  },
+  // Day 5: a close look at the box as it opens, twice (the uranium, then the plutonium)
+  atomshow: {
+    start: () => { const [x, z] = byBox(-9, 10); return { x, z, heading: Math.atan2(ABOX[0] - x, ABOX[1] - z), mode: 'sit', timer: 60 }; },
+    script: [{ t: 0.6, type: 'atom' }, { t: 3.9, type: 'atom' }],
+    viewer: () => byBox(9, 0),
+  },
   // she strolls across the plate; the camera tracks alongside
   kittywalk: {
     start: () => ({ x: -16, z: 2, heading: Math.PI / 2, mode: 'idle' }),
@@ -179,6 +198,18 @@ export function demoPose(name, t, home, kitty = null) {
     const endDip = home.edgeDip(3.5, -30, home.az);
     const endShift = home.horizonAt(4 * DEG - endDip, home.fov) - home.horizon;
     return { position: pos, look, shift: lerp(0, endShift, k) };
+  }
+  if (name === 'atombox') {
+    // in front of the box, a little above it: the box in the middle, you on the left of it, her behind it on the right
+    const k = easeInOut(t / 6);
+    const [px, pz] = byBox(lerp(12.4, 11.2, k), lerp(0.5, 1.1, k));
+    return { position: [px, lerp(6.4, 5.9, k), pz], look: [ABOX[0], lerp(3.9, 4.2, k), ABOX[1]], shift: 0 };
+  }
+  if (name === 'atomshow') {
+    // close on the box, drifting slowly round its front
+    const a = -0.42 + 0.085 * t, d = lerp(9.2, 8.2, easeInOut(t / 6));
+    const [px, pz] = byBox(Math.cos(a) * d, Math.sin(a) * d);
+    return { position: [px, 4.6, pz], look: [ABOX[0], 3.9, ABOX[1]], shift: 0 };
   }
   if (!kitty) return null;
   const [kx, kz] = [kitty.x, kitty.z];
