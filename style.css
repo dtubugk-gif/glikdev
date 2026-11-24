@@ -401,7 +401,7 @@ html.capture-short #boom-word { display: none; }      /* filmed for a Short: the
 /* Day 5: the atom tokens' counter sits beside the friendship tokens, on their left (main.js keeps it clear of
    them as the numbers grow); filmed for a Short, it sits under them */
 .tokens.atoms { right: calc(var(--gutter) + var(--safe-r) + 96px); }
-.tokens.atoms.is-filmed { top: 136px; right: 52px; }
+.tokens.atoms.is-filmed { top: 236px; right: 52px; }     /* under the Short's caption, not behind it */
 @media (max-width: 759px) and (orientation: portrait) {
   .tokens { padding: 0 12px 0 6px; gap: 5px; font-size: 18px; }
   .tokens img { width: 30px; height: 30px; }
