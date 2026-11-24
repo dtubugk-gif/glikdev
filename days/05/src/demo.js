@@ -213,7 +213,9 @@ export function demoPose(name, t, home, kitty = null) {
     // the right. The camera looks up at first (the bomb comes down into the frame) and settles on the box.
     const k = easeInOut(t / 6), down = easeInOut((t - 1.3) / 1.6);
     const [px, pz] = byBox(lerp(16.5, 15.0, k), lerp(0.2, 0.6, k));
-    return { position: [px, lerp(6.6, 6.2, k), pz], look: [ABOX[0], lerp(8.5, 3.6, down), ABOX[1]], shift: 0 };
+    // (hit: it then looks up a little, at your ghost)
+    const up = name === 'atomhit' ? easeInOut((t - 3.0) / 1.2) * 2.4 : 0;
+    return { position: [px, lerp(6.6, 6.2, k), pz], look: [ABOX[0], lerp(8.5, 3.6, down) + up, ABOX[1]], shift: 0 };
   }
   if (name === 'atomshow') {
     // close on the spot, drifting slowly round its front: looking up as the bomb comes down, then at the box

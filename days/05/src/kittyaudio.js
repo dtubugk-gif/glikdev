@@ -18,6 +18,7 @@ const FILES = {
   coin: ['sounds/coin.mp3'], coinflip: ['sounds/coinflip.mp3'], buy: ['sounds/buy.mp3'], cloth: ['sounds/cloth.mp3'],
   pop: ['sounds/pop.mp3'], click: ['sounds/click.mp3'], shopOpen: ['sounds/shopopen.mp3'], shopClose: ['sounds/shopclose.mp3'],
   nope: ['sounds/nope.mp3'], pat: ['sounds/pat1.mp3', 'sounds/pat2.mp3'], whoosh: ['sounds/whoosh.mp3'],
+  boom: ['sounds/boom.mp3'],                               // Day 5: an atom bomb landed on you
   crunch: ['sounds/crunch1.mp3', 'sounds/crunch2.mp3'], squeak: ['sounds/squeak.mp3'],
   // her voice: real cats (the owner's meow recording; a public-domain purr)
   meow: ['sounds/meow1.mp3', 'sounds/meow2.mp3', 'sounds/meow3.mp3'], trill: ['sounds/trill.mp3'], chirp: ['sounds/chirp.mp3'],
@@ -72,6 +73,7 @@ export function createKittyAudio(o = {}) {
       coin: () => many(S.coin, 3), coinflip: () => many(S.coin, 1), buy: one(S.buy), cloth: one(S.wear), pop: () => many(S.click, 1),
       click: () => many(S.click, 3), shopOpen: one(S.shopOpen), shopClose: one(S.shopClose), nope: one(S.nope),
       pat: () => many(S.step, 4), whoosh: one(S.swat), crunch: () => many(S.bite, 3), squeak: () => many(S.squeak, 3),
+      boom: () => many(S.step, 1),
     };
     bufs = {};
     const order = ['bell', 'trill', 'purr', 'meow', 'chirp', 'mew', 'yawn', 'sigh'];
@@ -203,6 +205,7 @@ export function createKittyAudio(o = {}) {
         case 'footstep': play('pat', e.strong ? 0.36 : 0.26, { rate: (e.strong ? 0.8 : 0.72) * vary() }); break;
         case 'squeak': play('squeak', 0.5 * v, at({ rate: 1.1 * vary() })); break;
         case 'nope': play('nope', 0.5); break;
+        case 'boom': play('boom', 0.85); play('pat', 0.8, { rate: 0.5 }); play('whoosh', 0.5, { rate: 0.6, delay: 0.12 }); break;   // the world goes up
         case 'lose': play('coinflip', 0.5, { rate: 0.8 }); play('nope', 0.42, { delay: 0.14, rate: 0.9 }); break;   // tokens gone: a coin drops, a low "no"
         case 'grumble': play('meow', 0.7 * v, at({ rate: 0.72, delay: e.delay || 0 })); break;      // a low, cross meow
         case 'refuse': if (e.why !== 'asleep') play('trill', 0.5 * v, at({ rate: 0.8 })); break;   // a low, short "no"
