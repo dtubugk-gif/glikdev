@@ -397,7 +397,7 @@ html.no-ui .tokens:not(.is-filmed), html.capture-short .tokens:not(.is-filmed), 
 #boom-word { font: 700 clamp(64px, 22vw, 190px)/1 var(--display); letter-spacing: 0.01em; color: var(--accent);
   -webkit-text-stroke: 0.09em var(--ink); paint-order: stroke fill; text-shadow: 0.07em 0.08em 0 var(--ink);
   transform-origin: 50% 55%; will-change: transform, opacity; }
-html.capture-short #boom-word { font-size: 96px; }
+html.capture-short #boom-word { display: none; }      /* filmed for a Short: the Short's own captions say it */
 /* Day 5: the atom tokens' counter sits beside the friendship tokens, on their left (main.js keeps it clear of
    them as the numbers grow); filmed for a Short, it sits under them */
 .tokens.atoms { right: calc(var(--gutter) + var(--safe-r) + 96px); }
