@@ -168,7 +168,7 @@ async function start() {
   const coarse = matchMedia('(pointer: coarse)').matches;
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const maxDpr = coarse ? 1.5 : 2;
-  const dpr = () => Math.min(window.devicePixelRatio || 1, short ? 3 : maxDpr);
+  const dpr = () => Math.min(window.devicePixelRatio || 1, short ? 4.5 : maxDpr);   // Shorts are filmed at 3, punched-in shots at up to 4.5
 
   let renderer;
   try { renderer = createRenderer(canvas, { lowPower: coarse }); } catch { showFallback(); return; }
