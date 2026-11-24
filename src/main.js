@@ -325,6 +325,7 @@ async function start() {
         if (player) list.push([player.x, 0.9, player.z]);
         if (wand?.fish?.visible) list.push(wand.fish.getWorldPosition(fishAt).toArray());
         if (atomBox && demo && demo.startsWith('atom')) list.push(...atomBox.subjects());
+        if (blast?.dead(kitty.t)) return [blast.ghostAt(kitty.t)];     // you are a ghost: the lens is on it
       } catch { /* not made yet */ }
       return list;
     });
@@ -354,6 +355,8 @@ async function start() {
   // Day 5 (idea by @elenaabrosimova1968; the owner's rule for getting them): atom bombs fall at you; dodge one and
   // it leaves an atom box where it landed; tap the box for an atom token. `atomBox` is the whole field of them.
   let atomMod = null, atomBox = null, atomFX = null, wantBox = -1, atomDue = [], nextDrop = null, dropped = 0, bonkAt = null;
+  // ...and the one that lands on you: you are gone, the whole world blows up, and then it is back (blast.js)
+  let blast = null;
   const boxing = kitty ? (async () => {
     try {
       atomMod = await import('./atombox.js');
@@ -361,6 +364,8 @@ async function start() {
         atomMod.createAtomField({ scene: world.scene, url: stamped('models/atombox.glb'), bombUrl: stamped('models/atombomb.glb'), renderer }), import('./outfits.js')]);
       atomFX = createTokenFX({ scene: world.scene, camera, token: box.token });
       atomBox = box;
+      const { createBlast } = await import('./blast.js');
+      blast = createBlast({ scene: world.scene, renderer, ghostUrl: stamped('models/player_ghost.glb'), cover: $('boom'), word: $('boom-word') });
     } catch (err) { console.warn('Glikdev: the atom bombs and boxes did not load', err); atomBox = null; }
   })() : null;
   if (!live) await boxing;
@@ -502,6 +507,7 @@ async function start() {
         wallet = freshWallet(); rewardState = {}; filmWear = { ...paramWear };
         tokenFX?.reset();
         atomBox?.reset(); atomFX?.reset(); atomDue = []; nextDrop = null; dropped = 0; bonkAt = null;
+        blast?.reset();
         wand?.event(e, null);
         wardrobe?.dress({ ...wallet.wearing, ...filmWear });
         applyToy();
@@ -588,17 +594,36 @@ async function start() {
       audio?.event({ type: 'thud' });
       if (ev.hit) {
         bonkAt = ev.t;
-        audio?.event({ type: 'nope' });
-        if (live) flashHint('Bonk! It got you, so no box this time. Step out of the dark ring before it lands', 6000);
+        // it got you: the whole world goes up (the kitty, the shop, her bed, the boxes, the plate itself)
+        if (blast && player) {
+          blast.start(ev.t, ev.x, ev.z, player.x, player.z, [
+            { obj: world.model, plate: true }, { obj: kitty.root, live: true }, { obj: atomBox.group },
+            store ? { obj: store.group } : null, bedThing ? { obj: bedThing.group } : null]);
+          player.stop();
+          wantBox = -1; wantShop = false;
+          audio?.event({ type: 'boom' });
+          dismissHint();
+        } else {
+          audio?.event({ type: 'nope' });
+          if (live) flashHint('Bonk! It got you, so no box this time. Step out of the dark ring before it lands', 6000);
+        }
       } else if (live && ev.box >= 0 && wallet.atoms === 0 && !SKINS.some((k) => wallet.ownsSkin(k.id))) {
         flashHint(coarse ? 'You dodged it! Tap the box it left behind' : 'You dodged it! Click the box it left behind', 7000);
       }
     }
-    // hit: you are squashed flat for a moment and spring back
+    // hit: you are squashed flat for a moment (then you are gone, and your ghost is up, until the world is back)
     if (player) {
       const a = bonkAt == null ? 9 : t - bonkAt;
       const sq = a >= 0 && a < 1.2 ? 1 - 0.5 * Math.exp(-a * 4.5) * Math.cos(a * 15) : 1;
       player.root.scale.set(1 + (1 - sq) * 0.45, sq, 1 + (1 - sq) * 0.45);
+    }
+    if (blast) {
+      const b = blast.update(t, camera);
+      if (player && !firstPerson) player.setBodyVisible(!(b.dead && t - (bonkAt ?? t) > 0.1));
+      if (b.reload) {
+        nextDrop = t + ATOM_BOX.every;
+        if (live) flashHint('Boom! The whole world blew up… and here it is again. Step out of the dark ring next time', 7000);
+      }
     }
     // the token leaves the chunk a moment after the lid opens
     while (atomBox && atomDue.length && t >= atomDue[0].t) {
@@ -757,6 +782,7 @@ async function start() {
     const end = (e) => {
       const d = taps.get(e.pointerId);
       taps.delete(e.pointerId);
+      if (blast?.dead(kitty.t)) return;                    // you are a ghost just now
       if (e.type !== 'pointerup' || !d || d.multi || taps.size) return;
       if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 10 || performance.now() - d.t > 450) return;
       const r = rayAt(e.clientX, e.clientY);
@@ -1290,7 +1316,7 @@ async function start() {
     if (player) {
       if (demo) player.simulateTo(t);
       else {
-        steerPlayer();
+        if (!blast?.dead(kitty.t)) steerPlayer();
         player.advance(dt);
         // close to the shop: it opens (once per visit; walk away and come back to open it again)
         if (town && shopArmed && town.atShop(player.x, player.z)) {
@@ -1383,7 +1409,7 @@ async function start() {
     const dt = Math.min(0.05, Math.max(0, (ts - last) / 1000));
     if (dialog.open) { last = ts; return; }                // nothing to see behind the Day log
     // when nobody is touching the camera, 30 fps is plenty
-    if (!demo && rig.idle() && !player?.busy() && !(kitty && (kitty.busy() || tokenFX?.busy() || atomFX?.busy() || atomBox?.busy(kitty.t) || wardrobe?.busy(kitty.t) || (wandOn && wand.busy())))) { skip = !skip; if (skip) return; }
+    if (!demo && rig.idle() && !player?.busy() && !(kitty && (kitty.busy() || tokenFX?.busy() || atomFX?.busy() || atomBox?.busy(kitty.t) || blast?.active(kitty.t) || wardrobe?.busy(kitty.t) || (wandOn && wand.busy())))) { skip = !skip; if (skip) return; }
     last = ts;
     step((ts - t0) / 1000, dt);
   }
@@ -1400,7 +1426,7 @@ async function start() {
     get audio() { return audio; },
     get wallet() { return wallet; }, get wardrobe() { return wardrobe; }, get player() { return player; }, get store() { return store; },
     get wand() { return wand; }, get wandOn() { return wandOn; },
-    get atomBox() { return atomBox; }, get atomMod() { return atomMod; },
+    get atomBox() { return atomBox; }, get atomMod() { return atomMod; }, get blast() { return blast; },
     /** Screen height fraction (from the top) of the visible horizon: the plate's far edge. */
     horizonFrac() {
       camera.updateMatrixWorld();

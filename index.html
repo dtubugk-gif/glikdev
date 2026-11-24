@@ -41,6 +41,7 @@
       "./src/outfits.js": "./src/outfits.js?v=7d49c3125967",
       "./src/wand.js": "./src/wand.js?v=7d49c3125967",
       "./src/atombox.js": "./src/atombox.js?v=7d49c3125967",
+      "./src/blast.js": "./src/blast.js?v=7d49c3125967",
       "./vendor/three/three.module.js": "./vendor/three/three.module.js?v=7d49c3125967",
       "./vendor/three/addons/loaders/GLTFLoader.js": "./vendor/three/addons/loaders/GLTFLoader.js?v=7d49c3125967",
       "./vendor/three/addons/utils/BufferGeometryUtils.js": "./vendor/three/addons/utils/BufferGeometryUtils.js?v=7d49c3125967"
@@ -122,6 +123,8 @@
     <span class="tokens-count" id="tokens-count">0</span>
     <span class="tokens-loss" id="tokens-loss" aria-hidden="true" hidden></span>
   </button>
+  <!-- Day 5: an atom bomb landed on you: the picture goes white for a moment (blast.js) -->
+  <div class="boom" id="boom" aria-hidden="true" hidden><span id="boom-word">BOOM!</span></div>
   <!-- Day 5: atom tokens from the atom box; tap to see the fur skins they buy -->
   <button class="chip tokens atoms" id="atoms" type="button" aria-haspopup="dialog" aria-controls="catpick" aria-label="Atom tokens: 0. See the fur skins" hidden>
     <img id="atoms-icon" src="models/shop/atomtoken.webp?v=7d49c3125967" alt="" width="34" height="34">
