@@ -3,7 +3,7 @@
 //   - Her voice is real cats: three meows cut from a recording the owner supplied (also used, shortened or
 //     pitched, for her hello, her chirp at a toy, her hungry mew and her yawn) and a public-domain purr.
 //     Only her sleepy sigh and her collar bell are still synthesised by kittysound.js.
-//   - Everything else is a real recording too (sounds/*.mp3, cut from the Sonniss GDC bundle by
+//   - Everything else is a real recording too (sounds/*.mp3, cut by
 //     art/day03/sounds/build_sounds.py): the token's ting, coins and a happy sting when you buy, cloth and a pop
 //     when she puts something on, the shop opening and closing, soft pats for paws, your steps and the toy
 //     landing, a whoosh for her swats, kibble crunches, button clicks and the felt mouse's squeak.
@@ -19,7 +19,7 @@ const FILES = {
   pop: ['sounds/pop.mp3'], click: ['sounds/click.mp3'], shopOpen: ['sounds/shopopen.mp3'], shopClose: ['sounds/shopclose.mp3'],
   nope: ['sounds/nope.mp3'], pat: ['sounds/pat1.mp3', 'sounds/pat2.mp3'], whoosh: ['sounds/whoosh.mp3'],
   crunch: ['sounds/crunch1.mp3', 'sounds/crunch2.mp3'], squeak: ['sounds/squeak.mp3'],
-  // her voice: real cats (the owner's meow recording; a public-domain purr from Wikimedia Commons)
+  // her voice: real cats (the owner's meow recording; a public-domain purr)
   meow: ['sounds/meow1.mp3', 'sounds/meow2.mp3', 'sounds/meow3.mp3'], trill: ['sounds/trill.mp3'], chirp: ['sounds/chirp.mp3'],
   purr: ['sounds/purr.mp3'],
   music: ['sounds/music.mp3'],

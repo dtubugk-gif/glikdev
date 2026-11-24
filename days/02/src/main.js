@@ -99,7 +99,7 @@ function loadCare() {
   } catch { return null; }
 }
 function saveCare(d) { try { localStorage.setItem(CARE_KEY, JSON.stringify(d)); } catch { /* private mode: fine */ } }
-// the cats you can choose (the ginger kitty is Day 2's own; the other two are the owner's Sketchfab picks)
+// the cats you can choose (the ginger kitty is Day 2's own; the other two are the owner's picks)
 const CATS = {
   ginger: { label: 'Ginger', url: 'models/kitty.glb', fur: 'models/kitty_fur.png' },
   realistic: { label: 'Realistic', url: 'models/cat_realistic.glb' },

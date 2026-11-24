@@ -114,7 +114,7 @@ const filmTokens = params.get('tokens') === '1';
 // ?wear=crown,bowtie  (filming, posters) she has these on from the start; the purse is not touched
 const paramWear = {};
 for (const id of (params.get('wear') || '').split(',')) { const it = itemById(id.trim()); if (it) paramWear[it.slot] = it.id; }
-// the cats you can choose (the ginger kitty is Day 2's own; the other two are the owner's Sketchfab picks)
+// the cats you can choose (the ginger kitty is Day 2's own; the other two are the owner's picks)
 const CATS = {
   // (her fur shells are off since the Day 3 rework: a clean storybook coat reads better than speckled strands;
   //  ?fur=10 turns them back on for a look)
