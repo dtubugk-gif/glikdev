@@ -101,6 +101,124 @@ function makeSky(sunDir) {
   return dome;
 }
 
+// ---------------------------------------------------------------------------------------------------------
+// The film camera (Shorts only, ?cine=1): a lens with depth of field. The scene is drawn into a buffer with
+// its depth, then one pass blurs every pixel by how far it is from the plane the subjects stand in. The
+// subjects (the kitty, you) stay sharp; the plate behind them and anything close to the lens go soft.
+// Stateless: the focus is a pure function of where the subjects are on this frame.
+const cineVertex = /* glsl */`
+  varying vec2 vUv;
+  void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
+const cineFragment = /* glsl */`
+  precision highp float;
+  #include <packing>
+  uniform sampler2D tColor, tDepth;
+  uniform float uNear, uFar, uFocusNear, uFocusFar, uAperture;
+  uniform vec2 uUnit;                      // one blur unit in uv (the widest blur is MAXR units)
+  varying vec2 vUv;
+  const int N = 128;
+  const float MAXR = 16.0;
+  float dist(vec2 uv) { return -perspectiveDepthToViewZ(texture2D(tDepth, uv).x, uNear, uFar); }
+  // blur size (units) of a point z metres away: none between the two focus planes, growing outside them
+  float blurOf(float z) {
+    float c = z < uFocusNear ? (uFocusNear - z) / max(z, 0.05) * 0.8 : z > uFocusFar ? (z - uFocusFar) / z : 0.0;
+    return clamp(c * uAperture, 0.0, 1.0) * MAXR;
+  }
+  void main() {
+    float zc = dist(vUv), sc = blurOf(zc);
+    vec3 col = texture2D(tColor, vUv).rgb; float tot = 1.0;
+    // each pixel turns the sample spiral by its own angle, so the blur shows no dot pattern (the fill pass smooths the rest)
+    float turn = 6.2831853 * fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+    for (int i = 0; i < N; i++) {
+      float fi = float(i) + 0.5, r = sqrt(fi / float(N)) * MAXR, a = fi * 2.39996323 + turn;
+      vec2 uv = vUv + vec2(cos(a), sin(a)) * r * uUnit;
+      float zs = dist(uv), ss = blurOf(zs);
+      if (zs > zc) ss = min(ss, sc * 2.0);                 // what is behind never bleeds over what is sharp in front
+      float m = smoothstep(r - 0.5, r + 0.5, ss);
+      col += mix(col / tot, texture2D(tColor, uv).rgb, m); tot += 1.0;
+    }
+    gl_FragColor = vec4(col / tot, sc / MAXR);              // alpha: how blurred this pixel is (0-1), for the fill pass
+  }`;
+// the fill pass: a small soft blur over the blurred areas only (it closes the gaps between the lens samples),
+// then tone mapping and the screen's colour space
+const fillFragment = /* glsl */`
+  precision highp float;
+  uniform sampler2D tColor;
+  uniform vec2 uUnit;
+  varying vec2 vUv;
+  void main() {
+    vec4 c = texture2D(tColor, vUv);
+    float k = smoothstep(0.02, 0.2, c.a);
+    vec3 col = c.rgb * 4.0; float tot = 4.0;
+    for (int i = 0; i < 12; i++) {
+      float a = float(i) * 0.5235988, r = (mod(float(i), 2.0) < 0.5 ? 1.5 : 2.9) * k;
+      vec4 s = texture2D(tColor, vUv + vec2(cos(a), sin(a)) * r * uUnit);
+      float w = step(0.02, s.a);                           // never pull sharp pixels into the blur
+      col += s.rgb * w; tot += w;
+    }
+    gl_FragColor = vec4(col / tot, 1.0);
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
+  }`;
+
+function makeCine(renderer, camera) {
+  const target = new THREE.WebGLRenderTarget(4, 4, { samples: 4, type: THREE.HalfFloatType, depthBuffer: true });
+  target.depthTexture = new THREE.DepthTexture(4, 4);
+  target.depthTexture.type = THREE.UnsignedIntType;
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {
+      tColor: { value: target.texture }, tDepth: { value: target.depthTexture },
+      uNear: { value: camera.near }, uFar: { value: camera.far },
+      uFocusNear: { value: 4 }, uFocusFar: { value: 6 }, uAperture: { value: 1.5 }, uUnit: { value: new THREE.Vector2() },
+    },
+    vertexShader: cineVertex, fragmentShader: cineFragment, depthTest: false, depthWrite: false,
+  });
+  const blurred = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, depthBuffer: false });
+  const fill = new THREE.ShaderMaterial({
+    uniforms: { tColor: { value: blurred.texture }, uUnit: mat.uniforms.uUnit },
+    vertexShader: cineVertex, fragmentShader: fillFragment, depthTest: false, depthWrite: false,
+  });
+  const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat);
+  quad.frustumCulled = false;
+  const quadScene = new THREE.Scene(); quadScene.add(quad);
+  const quadCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  const size = new THREE.Vector2(), p = new THREE.Vector3();
+  let subjects = null;                       // () => [[x, y, z] | null, ...] in world space
+  return {
+    setSubjects(fn) { subjects = fn; },
+    /** the nearest and farthest subject on screen (metres from the lens), eased in as one enters the frame */
+    focus() {
+      const list = (subjects ? subjects() : []).filter(Boolean).map(([x, y, z]) => {
+        p.set(x, y, z).applyMatrix4(camera.matrixWorldInverse);
+        const d = -p.z; if (d < 0.4) return null;
+        p.applyMatrix4(camera.projectionMatrix);
+        const off = Math.max(Math.abs(p.x), Math.abs(p.y) * 0.8);        // 0 centre, 1 the frame's edge
+        return { d, off, on: 1 - Math.min(1, Math.max(0, (off - 0.95) / 0.3)) };
+      }).filter(Boolean);
+      if (!list.length) return [5, 7];
+      const main = list.reduce((a, b) => (b.off < a.off ? b : a));
+      let near = main.d, far = main.d;
+      for (const s of list) { const d = main.d + (s.d - main.d) * s.on; near = Math.min(near, d); far = Math.max(far, d); }
+      return [near - 0.55, far + 0.75];                                // her body and yours are about a metre deep
+    },
+    render(scene) {
+      renderer.getDrawingBufferSize(size);
+      if (target.width !== size.x || target.height !== size.y) { target.setSize(size.x, size.y); blurred.setSize(size.x, size.y); }
+      camera.updateMatrixWorld();
+      const [n, f] = this.focus();
+      const u = mat.uniforms;
+      u.uFocusNear.value = Math.max(0.5, n); u.uFocusFar.value = f;
+      u.uNear.value = camera.near; u.uFar.value = camera.far;
+      // the widest blur is 1.15% of the frame's height (22 px in a 1080x1920 frame), whatever the capture scale
+      const unit = 0.0115 / 16;
+      u.uUnit.value.set(unit * size.y / size.x, unit);
+      renderer.setRenderTarget(target); renderer.render(scene, camera);
+      quad.material = mat; renderer.setRenderTarget(blurred); renderer.render(quadScene, quadCam);
+      quad.material = fill; renderer.setRenderTarget(null); renderer.render(quadScene, quadCam);
+    },
+  };
+}
+
 /** Throws if WebGL cannot be created. */
 export function createRenderer(canvas, { lowPower = false } = {}) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: lowPower ? 'low-power' : 'high-performance' });
@@ -112,7 +230,7 @@ export function createRenderer(canvas, { lowPower = false } = {}) {
   return renderer;
 }
 
-export async function createWorld({ renderer, modelUrl, phone = false }) {
+export async function createWorld({ renderer, modelUrl, phone = false, cine = false }) {
   const scene = new THREE.Scene();
   // haze softens the far grid; the plate's far edge still shows, like a real baseplate
   scene.fog = new THREE.Fog(PALETTE.haze, 60, 360);
@@ -168,6 +286,7 @@ export async function createWorld({ renderer, modelUrl, phone = false }) {
   });
   scene.add(model);
   const plate = model.getObjectByName('Baseplate');
+  const lens = cine ? makeCine(renderer, camera) : null;      // Shorts only: the film camera
 
   let animate = true;
   let shadowFocus = null;                  // () => Vector3: what the shadow box should centre on
@@ -191,7 +310,9 @@ export async function createWorld({ renderer, modelUrl, phone = false }) {
       sc.left = -half; sc.right = half; sc.top = half; sc.bottom = -half;
       sc.updateProjectionMatrix();
     },
-    render() { renderer.render(scene, camera); },
+    /** Shorts only: fn() returns the subjects' places ([[x, y, z] | null, ...]); the lens keeps them sharp. */
+    setCineSubjects(fn) { lens?.setSubjects(fn); },
+    render() { if (lens) lens.render(scene); else renderer.render(scene, camera); },
     resize(w, h, pixelRatio) {
       if (pixelRatio && renderer.getPixelRatio() !== pixelRatio) renderer.setPixelRatio(pixelRatio);
       renderer.setSize(w, h, false);

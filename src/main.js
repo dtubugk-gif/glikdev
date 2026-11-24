@@ -26,6 +26,7 @@ const params = new URLSearchParams(location.search);
 const demo = DEMOS.includes(params.get('demo')) ? params.get('demo') : null;
 const showUI = params.get('ui') !== '0';
 const short = params.get('capture') === 'short';
+const cine = short && params.get('cine') === '1';   // Shorts: film through a lens with depth of field (world.js)
 const root = document.documentElement;
 if (!showUI) root.classList.add('no-ui');
 if (demo) root.classList.add('demo');
@@ -175,7 +176,7 @@ async function start() {
 
   let world;
   try {
-    world = await createWorld({ renderer, modelUrl: stamped('models/day1.glb'), phone: coarse || innerWidth < 760 });
+    world = await createWorld({ renderer, modelUrl: stamped('models/day1.glb'), phone: coarse || innerWidth < 760, cine });
   } catch (err) { showLoadError(err); return; }
   const { camera } = world;
   world.setAnimate(demo ? true : !reducedMotion);
@@ -306,6 +307,15 @@ async function start() {
     const focus = new THREE.Vector3();
     // the sun's shadows follow her, or the middle between her and you
     world.setShadowFocus(() => (player ? focus.set((player.x + kitty.brain.x) / 2, 0, (player.z + kitty.brain.z) / 2) : kitty.focus(focus)), 22);
+    const fishAt = new THREE.Vector3();
+    world.setCineSubjects(() => {
+      const list = [[kitty.brain.x, 0.32, kitty.brain.z]];
+      try {                                              // you and the rod join a few frames after her
+        if (player) list.push([player.x, 0.9, player.z]);
+        if (wand?.fish?.visible) list.push(wand.fish.getWorldPosition(fishAt).toArray());
+      } catch { /* not made yet */ }
+      return list;
+    });
     if (live) {
       audio = createKittyAudio({ url: stamped });
       audio.setMuted(care.muted);
