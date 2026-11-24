@@ -41,10 +41,14 @@ export const SLOTS = ['hat', 'face', 'neck', 'back', 'toy'];
 export const itemById = (id) => ITEMS.find((i) => i.id === id) || null;
 
 // Day 5 (idea by @elenaabrosimova1968: "Add URANIUM and PLUTONIUM... in a box that you can tap (gives you some
-// special tokens you will need to upgrade things or for skins)"). The atom box stands on the plate; tapping it
-// when its gauge is full pops a chunk of uranium or plutonium out and gives one atom token, then it charges
-// again. Atom tokens are a second purse: they buy fur skins for the ginger kitty (her coat in another colour).
-export const ATOM_BOX = { recharge: 20, gives: 1 };
+// special tokens you will need to upgrade things or for skins)"), and the owner's rule for getting them: atom
+// bombs fall from the sky at you; step out of the way and, where one landed, an atom box appears. Tap the box:
+// a chunk of uranium or plutonium pops out, it gives one atom token, and the box is gone. Get hit: no box.
+// Atom tokens are a second purse: they buy fur skins for the ginger kitty (her coat in another colour).
+//   gives: tokens a box holds; first: seconds before the first bomb; every: seconds from one bomb to the next;
+//   fall: seconds a bomb is in the air; blast: how far from where it lands it gets you (m); max: boxes that may
+//   wait on the plate at once (no more bombs fall until one is opened)
+export const ATOM_BOX = { gives: 1, first: 6, every: 13, fall: 2.8, blast: 3.9, max: 3 };
 /** Fur skins: the ginger kitty's own coat, recoloured (models/skins/<id>.webp, made by art/day05/make_skins.py). */
 export const SKINS = [
   { id: 'silver', name: 'Silver', price: 3 },

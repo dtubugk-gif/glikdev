@@ -15,7 +15,7 @@
 // ?v= through its import map; data and model URLs below get the same stamp (deploy.mjs writes it).
 import { renderDayLog, renderHeadline, latestDay } from './daylog.js';
 import { DEMOS, demoPose, KITTY_DEMOS } from './demo.js';
-import { createWallet, rewardFor, penaltyFor, ITEMS, NEW_ITEM, itemById, SKINS, skinById } from './tokens.js';
+import { createWallet, rewardFor, penaltyFor, ITEMS, NEW_ITEM, itemById, SKINS, skinById, ATOM_BOX } from './tokens.js';
 import { createMind, sayWhy, describeMind } from './kittymind.js';
 import { emoteSVG } from './emotes.js';
 
@@ -324,7 +324,7 @@ async function start() {
       try {                                              // you and the rod join a few frames after her
         if (player) list.push([player.x, 0.9, player.z]);
         if (wand?.fish?.visible) list.push(wand.fish.getWorldPosition(fishAt).toArray());
-        if (atomBox && demo && demo.startsWith('atom')) list.push([atomMod.ATOMBOX.x, 2.2, atomMod.ATOMBOX.z]);
+        if (atomBox && demo && demo.startsWith('atom')) list.push(...atomBox.subjects());
       } catch { /* not made yet */ }
       return list;
     });
@@ -351,16 +351,17 @@ async function start() {
   // her bed (Day 3): once it stands there she is told where it is (she sleeps on it, and steps up onto its cushion)
   const bedding = town && kitty ? town.createBed({ scene: world.scene, url: stamped('models/bed.glb'), renderer })
     .then((b) => { bedThing = b; kitty.setBed(town.BED_SPOT); }).catch((err) => { console.warn('Glikdev: her bed did not load', err); }) : null;
-  // Day 5 (idea by @elenaabrosimova1968): the atom box. Tap it when its gauge is full for an atom token.
-  let atomMod = null, atomBox = null, atomFX = null, wantBox = false, atomDue = null;
+  // Day 5 (idea by @elenaabrosimova1968; the owner's rule for getting them): atom bombs fall at you; dodge one and
+  // it leaves an atom box where it landed; tap the box for an atom token. `atomBox` is the whole field of them.
+  let atomMod = null, atomBox = null, atomFX = null, wantBox = -1, atomDue = [], nextDrop = null, dropped = 0, bonkAt = null;
   const boxing = kitty ? (async () => {
     try {
       atomMod = await import('./atombox.js');
       const [box, { createTokenFX }] = await Promise.all([
-        atomMod.createAtomBox({ scene: world.scene, url: stamped('models/atombox.glb'), renderer, recharge: live ? undefined : 0.4 }), import('./outfits.js')]);
+        atomMod.createAtomField({ scene: world.scene, url: stamped('models/atombox.glb'), bombUrl: stamped('models/atombomb.glb'), renderer }), import('./outfits.js')]);
       atomFX = createTokenFX({ scene: world.scene, camera, token: box.token });
       atomBox = box;
-    } catch (err) { console.warn('Glikdev: the atom box did not load', err); atomBox = null; }
+    } catch (err) { console.warn('Glikdev: the atom bombs and boxes did not load', err); atomBox = null; }
   })() : null;
   if (!live) await boxing;
   if (!live) await building;                               // recordings: it is there from the first frame
@@ -373,7 +374,7 @@ async function start() {
         start: pd ? pd.start : (params.get('view') === 'first' ? { x: 6, z: 17.5, heading: Math.atan2(-6, -17.5) } : { x: 7.5, z: 7, heading: home.az }),
         boxes: town ? [town.SHOP_BOX] : [],
         circles: [() => ({ x: kitty.brain.x, z: kitty.brain.z, r: 2.8 }), ...(town ? [() => town.BED_CIRCLE] : []),
-          () => (atomBox ? atomMod.ATOMBOX_CIRCLE : { x: 0, z: 0, r: 0 })],
+          ...[0, 1, 2].map((i) => () => (atomBox ? atomBox.circle(i) : { x: 0, z: 0, r: 0 }))],
         script: pd ? pd.script || [] : null,
         onStep: (running) => audio?.event({ type: 'footstep', strong: running }) });
       rig.moveKeys = false;
@@ -414,7 +415,7 @@ async function start() {
   let wantShop = false, shopArmed = true, openShop = () => {}, repaintShop = () => {};
   /** you walk there; she comes along (unless she is busy), to a spot beside where you are going */
   function walkTo(x, z) {
-    wantShop = false; wantBox = false;
+    wantShop = false; wantBox = -1;
     player.goTo(x, z);
     const b = kitty.brain;
     if (kittyBusy() || Math.hypot(x - b.x, z - b.z) < 13) return;
@@ -423,38 +424,46 @@ async function start() {
     const p = town ? town.outOfShop(spot.x, spot.z) : spot;
     kitty.call(p.x, p.z, { quiet: true });               // she may come along, or not: it is up to her
   }
-  /** the atom box opens (at t on the kitty's clock), or says how long it still charges */
-  function openBox(t = kitty.t) {
-    if (!atomBox) return;
-    if (!atomBox.open(t)) {
-      audio?.event({ type: 'nope' });
-      const s = Math.ceil(atomBox.wait(t));
-      flashHint(`The atom box is charging: ${s} more second${s === 1 ? '' : 's'}`, 2600);
-      return;
-    }
-    atomDue = t + atomMod.TIMING.tokenAt;
+  /** atom box number i opens (at t on the kitty's clock): its token leaves it a moment later */
+  function openBox(i, t = kitty.t) {
+    if (!atomBox || !atomBox.open(i, t)) return;
+    atomDue.push({ t: t + atomMod.TIMING.tokenAt, i });
     audio?.unlock();
     audio?.event({ type: 'click' });
     audio?.event({ type: 'refill' });
   }
-  /** you tapped the atom box: walk up to it first (she comes along and watches), then it opens */
-  function tapBox() {
-    if (!atomBox) return;
-    const B = atomMod.ATOMBOX;
-    if (!player) { openBox(); return; }
-    if (atomMod.nearAtomBox(player.x, player.z)) { wantBox = false; player.faceTo(B.x, B.z); openBox(); return; }
+  /** you tapped atom box i: walk up to it first, then it opens */
+  function tapBox(i) {
+    const B = atomBox?.box(i);
+    if (!B) return;
+    if (!player) { openBox(i); return; }
+    const dx = player.x - B.x, dz = player.z - B.z, d = Math.hypot(dx, dz) || 1;
+    if (d < atomMod.NEAR) { wantBox = -1; player.faceTo(B.x, B.z); openBox(i); return; }
     wantShop = false;
-    player.goTo(atomMod.ATOMBOX_STAND.x, atomMod.ATOMBOX_STAND.z);
-    wantBox = true;
-    if (!kittyBusy()) kitty.call(atomMod.ATOMBOX_WAIT.x, atomMod.ATOMBOX_WAIT.z, { quiet: true });
+    player.goTo(B.x + (dx / d) * atomMod.STAND, B.z + (dz / d) * atomMod.STAND);      // the near side of it
+    wantBox = i;
     flashHint('Off to the atom box!', 2600);
+  }
+  /** an atom bomb is let go, aimed at where you stand (never onto the shop, her bed, her, or a box that waits) */
+  function dropBomb(t = kitty.t) {
+    if (!atomBox || !player || !atomBox.canDrop()) return false;
+    const keep = [{ x: kitty.brain.x, z: kitty.brain.z, r: 6 }];
+    if (town) keep.push({ x: town.SHOP_BOX.x, z: town.SHOP_BOX.z, r: 15 }, { x: town.BED_CIRCLE.x, z: town.BED_CIRCLE.z, r: town.BED_CIRCLE.r + 4 });
+    for (const i of [0, 1, 2]) { const c = atomBox.circle(i); if (c.r) keep.push({ x: c.x, z: c.z, r: 7.5 }); }
+    const p = atomMod.landSpot(player.x, player.z, keep);
+    if (!atomBox.drop(t, p.x, p.z)) return false;
+    dropped++;
+    audio?.event({ type: 'toss', speed: 40 });           // it whistles down
+    if (live) flashHint(dropped <= 2 ? (coarse ? 'Look out above! An atom bomb: tap the ground to step out of the dark ring' : 'Look out above! An atom bomb: walk out of the dark ring')
+      : 'Look out above!', dropped <= 2 ? 5000 : 2200);
+    return true;
   }
   /** off to the shop: its doormat; the wardrobe opens when you get there */
   function goShop() {
     if (!player || !town) { openShop(); return; }
     if (town.atShop(player.x, player.z)) { player.faceTo(town.SHOP.x, town.SHOP.z); openShop(); return; }
     player.goTo(town.SHOP_DOOR.x, town.SHOP_DOOR.z);
-    wantShop = true; wantBox = false;
+    wantShop = true; wantBox = -1;
     if (!kittyBusy()) kitty.call(town.SHOP_WAIT.x, town.SHOP_WAIT.z, { quiet: true });
     flashHint('Off to the shop!', 2600);
   }
@@ -492,7 +501,7 @@ async function start() {
       if (e.type === 'reset') {                            // a recording starting over
         wallet = freshWallet(); rewardState = {}; filmWear = { ...paramWear };
         tokenFX?.reset();
-        atomBox?.reset(); atomFX?.reset(); atomDue = null;
+        atomBox?.reset(); atomFX?.reset(); atomDue = []; nextDrop = null; dropped = 0; bonkAt = null;
         wand?.event(e, null);
         wardrobe?.dress({ ...wallet.wearing, ...filmWear });
         applyToy();
@@ -504,7 +513,15 @@ async function start() {
       if (e.type === 'reeled') audio?.event({ type: 'click' });
       wand?.event(e, kitty.brain.yarn);                    // stars, rings, squash: the fish's own little effects
       if (e.type === 'swat' && toyOut()?.id === 'toymouse') audio?.event({ type: 'squeak' });
-      if (e.type === 'script' && e.what.type === 'atom') { openBox(e.t); return; }   // filming: the atom box is tapped
+      // filming: an atom bomb falls on a given spot; the box it left is tapped
+      if (e.type === 'script' && e.what.type === 'bomb') { atomBox?.drop(e.t, e.what.x, e.what.z, e.what.rot ?? null); audio?.event({ type: 'toss', speed: 40 }); return; }
+      if (e.type === 'script' && e.what.type === 'atom') {
+        // (a recording may jump straight to a later frame: the bomb before it has to have landed first)
+        atomBox?.update(e.t, player ? { x: player.x, z: player.z } : null);
+        const i = atomBox ? atomBox.firstReady() : -1;
+        if (i >= 0) openBox(i, e.t);
+        return;
+      }
       if (e.type === 'script' && e.what.type === 'wear') { // filming: straight onto her, no shopping
         const it = itemById(e.what.id);
         const slot = it ? it.slot : e.what.slot;
@@ -565,13 +582,30 @@ async function start() {
   let shownAtoms = null, atomBumpAt = -10, atomRight = -1;
   const atomHud = { x: 0, y: 0 }, atomFrom = new THREE.Vector3();
   function paintAtoms(t) {
+    // bombs land (on you, or beside you: then a box is there), boxes come and go
+    for (const ev of atomBox ? atomBox.update(t, player ? { x: player.x, z: player.z } : null) : []) {
+      audio?.event({ type: 'land' });
+      audio?.event({ type: 'thud' });
+      if (ev.hit) {
+        bonkAt = ev.t;
+        audio?.event({ type: 'nope' });
+        if (live) flashHint('Bonk! It got you, so no box this time. Step out of the dark ring before it lands', 6000);
+      } else if (live && ev.box >= 0 && wallet.atoms === 0 && !SKINS.some((k) => wallet.ownsSkin(k.id))) {
+        flashHint(coarse ? 'You dodged it! Tap the box it left behind' : 'You dodged it! Click the box it left behind', 7000);
+      }
+    }
+    // hit: you are squashed flat for a moment and spring back
+    if (player) {
+      const a = bonkAt == null ? 9 : t - bonkAt;
+      const sq = a >= 0 && a < 1.2 ? 1 - 0.5 * Math.exp(-a * 4.5) * Math.cos(a * 15) : 1;
+      player.root.scale.set(1 + (1 - sq) * 0.45, sq, 1 + (1 - sq) * 0.45);
+    }
     // the token leaves the chunk a moment after the lid opens
-    if (atomBox && atomDue != null && t >= atomDue) {
+    while (atomBox && atomDue.length && t >= atomDue[0].t) {
+      const due = atomDue.shift();
       const first = wallet.atoms === 0 && !SKINS.some((k) => wallet.ownsSkin(k.id));
-      wallet.earnAtoms(1);
-      atomBox.update(atomDue);
-      atomFX?.spawn(atomDue, atomBox.tokenFrom(atomDue, atomFrom), 1);
-      atomDue = null;
+      wallet.earnAtoms(ATOM_BOX.gives);
+      atomFX?.spawn(due.t, atomBox.tokenFrom(due.i, due.t, atomFrom), 1);
       audio?.event({ type: 'token', n: 1 });
       repaintCats();
       if (live) {
@@ -581,7 +615,6 @@ async function start() {
         else if (cheapest && wallet.atoms === cheapest.price) flashHint(`You can buy the ${cheapest.name.toLowerCase()} fur now! ${coarse ? 'Tap' : 'Click'} the atom counter`, 8000);
       }
     }
-    atomBox?.update(t);
     let hud = null;
     if (showAtoms) {
       const r = atomsIcon.getBoundingClientRect();
@@ -730,7 +763,8 @@ async function start() {
       const what = kitty.pick(r);
       if (what === 'kitty') { kitty.pet(); dismissHint(); return; }
       if (what === 'yarn') { kitty.play(); dismissHint(); return; }
-      if (atomBox?.pick(r)) { tapBox(); dismissHint(); return; }
+      const bi = atomBox ? atomBox.pick(r) : -1;
+      if (bi >= 0) { tapBox(bi); dismissHint(); return; }
       if (store && store.pick(r)) { goShop(); dismissHint(); return; }
       if (r.intersectPlane(groundPlane, hit) && Math.abs(hit.x) < PLATE.half - 4 && Math.abs(hit.z) < PLATE.half - 4) {
         if (player) { backToHer(); walkTo(hit.x, hit.z); }
@@ -745,7 +779,7 @@ async function start() {
         if (e.buttons || carry) return;
         const r = rayAt(e.clientX, e.clientY);
         const what = kitty.pick(r);
-        canvas.style.cursor = what === 'yarn' ? 'grab' : what || atomBox?.pick(r) || (store && store.pick(r)) ? 'pointer' : '';
+        canvas.style.cursor = what === 'yarn' ? 'grab' : what || (atomBox && atomBox.pick(r) >= 0) || (store && store.pick(r)) ? 'pointer' : '';
       });
     }
   }
@@ -777,7 +811,7 @@ async function start() {
       if (e.target?.closest?.('dialog, input, textarea, [contenteditable]')) return;
       e.preventDefault();
       held.add(e.code);
-      wantShop = false; wantBox = false;
+      wantShop = false; wantBox = -1;
       backToHer();
       dismissHint();
     });
@@ -915,7 +949,7 @@ async function start() {
         if (!wallet.buySkin(sk.id)) {
           audio?.event({ type: 'nope' });
           const need = sk.price - wallet.atoms;
-          catStatus.textContent = `${need} more atom token${need === 1 ? '' : 's'} for the ${sk.name.toLowerCase()} fur. Tap the atom box on the plate to get them.`;
+          catStatus.textContent = `${need} more atom token${need === 1 ? '' : 's'} for the ${sk.name.toLowerCase()} fur. Dodge an atom bomb, then tap the box it leaves.`;
           return;
         }
         saveWallet(wallet);
@@ -1191,9 +1225,9 @@ async function start() {
   // hint, until the first tap that does something
   if (showUI && !demo && !short) {
     hintEl.textContent = kitty && player
-      ? (wallet.atoms === 0 && !SKINS.some((k) => wallet.ownsSkin(k.id))    // the day's new thing: the atom box
-        ? (coarse ? 'Tap the ground to walk there · Tap your kitty to pet her · New: tap the atom box'
-          : 'Click the ground or use WASD to walk · Click your kitty to pet her · New: click the atom box')
+      ? (wallet.atoms === 0 && !SKINS.some((k) => wallet.ownsSkin(k.id))    // the day's new thing: atom bombs and boxes
+        ? (coarse ? 'Tap the ground to walk there · Tap your kitty to pet her · New: dodge the atom bombs'
+          : 'Click the ground or use WASD to walk · Click your kitty to pet her · New: dodge the atom bombs')
         : !wallet.owns(NEW_ITEM)
         ? (coarse ? 'Tap the ground to walk there · Tap your kitty to pet her · In the shop: a fish on a stick'
           : 'Click the ground or use WASD to walk · Click your kitty to pet her · In the shop: a fish on a stick')
@@ -1266,11 +1300,24 @@ async function start() {
           openShop();
         } else if (town && !shopArmed && town.leftShop(player.x, player.z)) shopArmed = true;
         // you walked up to the atom box you tapped: it opens
-        if (wantBox && atomBox && atomMod.nearAtomBox(player.x, player.z, 7.6)) {
-          wantBox = false;
-          player.stop();
-          player.faceTo(atomMod.ATOMBOX.x, atomMod.ATOMBOX.z);
-          openBox();
+        if (wantBox >= 0 && atomBox) {
+          const B = atomBox.box(wantBox);
+          if (!B || B.opened) wantBox = -1;
+          else if (Math.hypot(player.x - B.x, player.z - B.z) < atomMod.NEAR - 1.2) {
+            const i = wantBox;
+            wantBox = -1;
+            player.stop();
+            player.faceTo(B.x, B.z);
+            openBox(i);
+          }
+        }
+        // the next atom bomb: a while after the last one, not while a window is open or you are at the shop
+        if (atomBox && live) {
+          if (nextDrop == null) nextDrop = kitty.t + ATOM_BOX.first;
+          if (kitty.t >= nextDrop) {
+            const calm = !document.querySelector('dialog[open]') && !(town && town.atShop(player.x, player.z));
+            nextDrop = kitty.t + (calm && dropBomb() ? ATOM_BOX.every + (dropped % 3) * 2 : 2);
+          }
         }
       }
       if (wandOn) aimRod();

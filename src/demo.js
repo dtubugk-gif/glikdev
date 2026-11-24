@@ -5,7 +5,7 @@
 
 export const DEMOS = ['orbit', 'reveal', 'kitty', 'kittycall', 'kittypet', 'kittywalk', 'kittyname', 'kittyfeed', 'kittyplay', 'kittynap',
   'kittytoken', 'kittydress', 'shopwalk', 'kittytoy', 'kittywake', 'kittyfish', 'fishwalk', 'fishshow', 'fishdangle',
-  'atombox', 'atomshow'];
+  'atombox', 'atomhit', 'atomshow'];
 
 // Day 3: where the shop's doormat is, and where the kitty waits beside it (town.js works these out from SHOP)
 const SHOP_DOOR = [19.97, -21.57], SHOP_WAIT = [12.84, -23.42];
@@ -15,8 +15,9 @@ const BESIDE = { start: { x: -3.81, z: -0.78, heading: 0.75 } };
 const BED = [-19, -13], BED_OUT = Math.atan2(19, 13);
 const BY_BED = { start: { x: BED[0] - 7.4, z: BED[1] + 4.4, heading: BED_OUT + 0.55 } };
 
-// Day 5: the atom box (atombox.js ATOMBOX): where it stands, the way its front faces (F) and its right-hand side (S)
-const ABOX = [12.1, 6.3], ABOX_F = [-0.2614, 0.9652], ABOX_S = [0.9652, 0.2614];
+// Day 5: where the filmed atom bomb lands and leaves its box, the way the box's front faces (F: toward the camera
+// and the sun) and its right-hand side (S)
+const ABOX = [12.1, 6.3], ABOX_F = [-0.2614, 0.9652], ABOX_S = [0.9652, 0.2614], ABOX_ROT = Math.atan2(-0.2614, 0.9652);
 const byBox = (f, s) => [ABOX[0] + ABOX_F[0] * f + ABOX_S[0] * s, ABOX[1] + ABOX_F[1] * f + ABOX_S[1] * s];
 const lerp = (a, b, k) => a + (b - a) * k;
 const DEG = Math.PI / 180;
@@ -144,19 +145,27 @@ export const KITTY_DEMOS = {
     viewer: () => [-18, 20],
     player: { start: { x: -19, z: 3, heading: -Math.PI / 2 }, script: [{ t: 1.5, type: 'go', x: 34, z: 3 }] },
   },
-  // Day 5: you stand by the atom box and tap it: the lid swings open, the uranium hops up, an atom token flies
-  // off (?atoms=1 shows the counter); then again, and it is the plutonium. She sits beside it and watches.
+  // Day 5: an atom bomb falls at the spot where you stand (a dark ring shows where); you step out of the way; it
+  // lands in a cloud of dust and leaves an atom box; you tap the box: the uranium hops up and an atom token flies
+  // off (?atoms=1 shows the counter). She sits by and watches.
   atombox: {
-    start: () => { const [x, z] = byBox(-4.6, 3.9); return { x, z, heading: Math.atan2(ABOX[0] + 9 - x, ABOX[1] - z), mode: 'sit', timer: 60 }; },
-    script: [{ t: 0.7, type: 'atom' }, { t: 4.1, type: 'atom' }],
+    start: () => { const [x, z] = byBox(-4.8, 4.6); return { x, z, heading: Math.atan2(ABOX[0] + 9 - x, ABOX[1] - z), mode: 'sit', timer: 60 }; },
+    script: [{ t: 0.15, type: 'bomb', x: ABOX[0], z: ABOX[1], rot: ABOX_ROT }, { t: 4.1, type: 'atom' }],
     viewer: () => byBox(14, 1),
-    player: { start: (() => { const [x, z] = byBox(4.2, -2.3); return { x, z, heading: Math.atan2(ABOX[0] - x, ABOX[1] - z) }; })(),
-      script: [{ t: 0.45, type: 'wave' }, { t: 3.85, type: 'wave' }] },
+    player: { start: (() => { const [x, z] = byBox(0.9, -0.5); return { x, z, heading: ABOX_ROT }; })(),
+      script: [{ t: 0.85, type: 'go', x: byBox(3.6, -3.3)[0], z: byBox(3.6, -3.3)[1] }, { t: 3.15, type: 'face', x: ABOX[0], z: ABOX[1] }, { t: 3.85, type: 'wave' }] },
   },
-  // Day 5: a close look at the box as it opens, twice (the uranium, then the plutonium)
+  // Day 5: the same bomb, but you stay where you are: bonk, a cloud of dust, and no box
+  atomhit: {
+    start: () => { const [x, z] = byBox(-4.8, 4.6); return { x, z, heading: Math.atan2(ABOX[0] + 9 - x, ABOX[1] - z), mode: 'sit', timer: 60 }; },
+    script: [{ t: 0.15, type: 'bomb', x: ABOX[0], z: ABOX[1], rot: ABOX_ROT }],
+    viewer: () => byBox(14, 1),
+    player: { start: (() => { const [x, z] = byBox(0.9, -0.5); return { x, z, heading: ABOX_ROT }; })(), script: [{ t: 1.2, type: 'wave' }] },
+  },
+  // Day 5: a close look: the bomb comes down, the box pops out of the dust and opens (the uranium)
   atomshow: {
     start: () => { const [x, z] = byBox(-9, 10); return { x, z, heading: Math.atan2(ABOX[0] - x, ABOX[1] - z), mode: 'sit', timer: 60 }; },
-    script: [{ t: 0.6, type: 'atom' }, { t: 3.9, type: 'atom' }],
+    script: [{ t: 0.1, type: 'bomb', x: ABOX[0], z: ABOX[1], rot: ABOX_ROT }, { t: 3.7, type: 'atom' }],
     viewer: () => byBox(9, 0),
   },
   // she strolls across the plate; the camera tracks alongside
@@ -199,17 +208,18 @@ export function demoPose(name, t, home, kitty = null) {
     const endShift = home.horizonAt(4 * DEG - endDip, home.fov) - home.horizon;
     return { position: pos, look, shift: lerp(0, endShift, k) };
   }
-  if (name === 'atombox') {
-    // in front of the box, a little above it: the box in the middle, you on the left of it, her behind it on the right
-    const k = easeInOut(t / 6);
-    const [px, pz] = byBox(lerp(12.4, 11.2, k), lerp(0.5, 1.1, k));
-    return { position: [px, lerp(6.4, 5.9, k), pz], look: [ABOX[0], lerp(3.9, 4.2, k), ABOX[1]], shift: 0 };
+  if (name === 'atombox' || name === 'atomhit') {
+    // in front of the spot, a little above it: it lands in the middle, you step off to the left, she is behind it on
+    // the right. The camera looks up at first (the bomb comes down into the frame) and settles on the box.
+    const k = easeInOut(t / 6), down = easeInOut((t - 1.3) / 1.6);
+    const [px, pz] = byBox(lerp(16.5, 15.0, k), lerp(0.2, 0.6, k));
+    return { position: [px, lerp(6.6, 6.2, k), pz], look: [ABOX[0], lerp(8.5, 3.6, down), ABOX[1]], shift: 0 };
   }
   if (name === 'atomshow') {
-    // close on the box, drifting slowly round its front
-    const a = -0.42 + 0.085 * t, d = lerp(9.2, 8.2, easeInOut(t / 6));
+    // close on the spot, drifting slowly round its front: looking up as the bomb comes down, then at the box
+    const a = -0.42 + 0.085 * t, d = lerp(9.6, 8.2, easeInOut(t / 6)), down = easeInOut((t - 1.5) / 1.4);
     const [px, pz] = byBox(Math.cos(a) * d, Math.sin(a) * d);
-    return { position: [px, 4.6, pz], look: [ABOX[0], 3.9, ABOX[1]], shift: 0 };
+    return { position: [px, 4.6, pz], look: [ABOX[0], lerp(9, 3.9, down), ABOX[1]], shift: 0 };
   }
   if (!kitty) return null;
   const [kx, kz] = [kitty.x, kitty.z];
