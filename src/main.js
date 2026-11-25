@@ -126,7 +126,7 @@ const CATS = {
 const THUMB = { ginger: 'models/thumb_ginger.webp', realistic: 'models/thumb_realistic.webp', tabby: 'models/thumb_toti.webp' };
 // Day 5: fur skins, bought with atom tokens (tokens.js SKINS). Each is the ginger kitty in another coat
 // (models/skins/<id>.webp, art/day05/make_skins.py, which also prints the eyelid colour that goes with it).
-const SKIN_LID = { silver: '#9ea4ad', tuxedo: '#1f1f25', atomic: '#83b255' };
+const SKIN_LID = { silver: '#bdc3cb', tuxedo: '#191b22', atomic: '#98d2b2' };   // (Day 6: the coats repainted by art/day06/build_skins.py)
 for (const k of SKINS) {
   CATS[k.id] = { ...CATS.ginger, label: k.name, base: 'ginger', skin: k.id, lid: SKIN_LID[k.id] };
   THUMB[k.id] = `models/skins/thumb_${k.id}.webp`;
