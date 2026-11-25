@@ -1,7 +1,13 @@
-// Day 2: the kitty's voice, synthesised (no sample files). Pure functions that return mono
-// Float32Array samples, so the game plays them through Web Audio and the Short's tools can write
-// the very same sounds to WAV in node.
+// Synthesised sounds: pure functions that return mono Float32Array samples.
 //
+// In the game (kittyaudio.js) these are only STAND-INS for effects whose recording (game/sounds/*.mp3) has not
+// loaded yet or could not load: bell, bite, step, thud, swat, coin, buy, wear, shopOpen, shopClose, footstep, click,
+// squeak, nope, pop, tick. The game NEVER plays a synthesised cat: the owner wants the cats to be real cats only,
+// so if a meow, trill, chirp, purr or sigh recording is missing the game stays silent for it.
+// meow, purr, trill, chirp, mew, yawn, sigh (and wind) below are kept only for the Day 2/3 Short tools
+// (tools/sounds.mjs) and their tests; nothing in the game calls them.
+//
+// Day 2 notes:
 // meow(sr, v): additive synthesis. A harmonic source whose pitch rises then falls ("mi-AU"), shaped by
 //   moving formant peaks (the mouth opening from an "m" through "ee-ah" to a rounded "ow"), plus breath.
 // purr(sr, seconds): the 25-ish Hz rumble of a purr: bursts of low, filtered noise at the purr rate,
@@ -525,4 +531,30 @@ export function wind(sr = 48000, seconds = 9) {
   let x1 = 0, y1 = 0;
   for (let p = 0; p < 2; p++) for (let i = 0; i < n; i++) { const x = out[i]; y1 = A * (y1 + x - x1); x1 = x; if (p === 1) out[i] = y1; }
   return normalise(out, 0.3);
+}
+
+/** A bubble pop: a sine that rises fast as it fades. v = 0, 1, 2 climb. */
+export function pop(sr = 48000, v = 0) {
+  const n = Math.floor(sr * 0.16);
+  const out = new Float32Array(n);
+  const f0 = 520 * semis(2 * (v % 3));
+  let ph = 0;
+  for (let i = 0; i < n; i++) {
+    const t = i / sr;
+    ph += (f0 * 2.3 + (f0 - f0 * 2.3) * Math.exp(-t / 0.02)) / sr;
+    out[i] = Math.sin(TAU * ph) * Math.exp(-t / 0.045) * (1 - Math.exp(-t * 1500));
+  }
+  return finish(out, sr, { peak: 0.4, wet: 0.08, t60: 0.2, hp: 250 });
+}
+
+/** A tiny dry tick (tabs, counters). */
+export function tick(sr = 48000, v = 0) {
+  const r = prng(271 + v);
+  const n = Math.floor(sr * 0.035);
+  const out = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const t = i / sr;
+    out[i] = (Math.sin(TAU * (2300 + 200 * (v % 3)) * t) * 0.5 + r() * 0.4) * Math.exp(-t * 260) * (1 - Math.exp(-t * 8000));
+  }
+  return finish(out, sr, { peak: 0.22, wet: 0, hp: 600, fade: 0.004 });
 }

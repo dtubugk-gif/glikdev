@@ -477,12 +477,15 @@ export async function createKitty(o) {
     if (chasing) return tgt.set(y.x, y.y, y.z);
     if (bw && bw.eatenAt == null && (brain.goal === 'eat' || brain.face?.then === 'eat')) return tgt.set(bw.x, 0.6, bw.z);
     if (['walk', 'trot', 'run'].includes(brain.mode)) return null;   // on the move: eyes ahead
+    const pal = brain.palLook;                                       // Day 6: her friend is right there
+    if (pal && pal.until > brain.t) return tgt.set(pal.x, pal.y, pal.z);
     return viewer;
   }
   function lookAt(viewer, dt) {
     const target = lookTarget(viewer);
     const snub = brain.snub > brain.t && !['walk', 'trot', 'run', 'pounce', 'bat', 'eat', 'sleep', 'liedown'].includes(brain.mode);
-    const wantW = snub ? 1 : target ? (LOOK[brain.mode] ?? 0) : 0;      // she said no: her nose goes up and away
+    const palOn = !!(brain.palLook && brain.palLook.until > brain.t && !['walk', 'trot', 'run'].includes(brain.mode));
+    const wantW = snub ? 1 : target ? Math.max(LOOK[brain.mode] ?? 0, palOn ? 0.75 : 0) : 0;      // she said no: her nose goes up and away
     look.w += (wantW - look.w) * (1 - Math.exp(-dt * 3));
     if (look.w < 0.01) return;
     const t = target || viewer;

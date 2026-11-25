@@ -5,7 +5,7 @@
 
 export const DEMOS = ['orbit', 'reveal', 'kitty', 'kittycall', 'kittypet', 'kittywalk', 'kittyname', 'kittyfeed', 'kittyplay', 'kittynap',
   'kittytoken', 'kittydress', 'shopwalk', 'kittytoy', 'kittywake', 'kittyfish', 'fishwalk', 'fishshow', 'fishdangle',
-  'atombox', 'atomhit', 'atomshow'];
+  'atombox', 'atomhit', 'atomshow', 'friendmeet', 'friendcuddle', 'friendplay', 'friendfeed', 'friendnap', 'friendtricks'];
 
 // Day 3: where the shop's doormat is, and where the kitty waits beside it (town.js works these out from SHOP)
 const SHOP_DOOR = [19.97, -21.57], SHOP_WAIT = [12.84, -23.42];
@@ -168,6 +168,51 @@ export const KITTY_DEMOS = {
     script: [{ t: 0.1, type: 'bomb', x: ABOX[0], z: ABOX[1], rot: ABOX_ROT }, { t: 3.7, type: 'atom' }],
     viewer: () => byBox(9, 0),
   },
+  // Day 6 (idea by @2warp-e8u: "Add another cat so the cat has an friend"): her friend, a cream kitten.
+  // It comes galloping in from far away, pulls up in front of her and touches noses; she purrs
+  friendmeet: {
+    start: () => ({ x: 0, z: 0, heading: 0.55, mode: 'sit', timer: 60 }),
+    script: [],
+    viewer: () => [Math.sin(0.55) * 20, Math.cos(0.55) * 20],
+    friend: { start: { x: -44, z: 30, heading: Math.atan2(44, -30), mode: 'idle', timer: 0.3 }, hello: true, script: [{ t: 6.4, type: 'nuzzle' }] },
+  },
+  // the two of them, close: it rubs its cheek along hers, then a nose boop
+  friendcuddle: {
+    start: () => ({ x: 0, z: 0, heading: 0.35, mode: 'sit', timer: 60 }),
+    script: [],
+    viewer: () => [Math.sin(0.35) * 20, Math.cos(0.35) * 20],
+    friend: { start: { x: 6.6, z: 2.4, heading: -1.9, mode: 'sit', timer: 60 }, script: [{ t: 0.4, type: 'nuzzle' }, { t: 4.4, type: 'boop' }] },
+  },
+  // it shows off in front of her: a play bow, a happy hop, a flop onto its back
+  friendtricks: {
+    start: () => ({ x: 0, z: 0, heading: 0.4, mode: 'sit', timer: 60 }),
+    script: [],
+    viewer: () => [Math.sin(0.4) * 20, Math.cos(0.4) * 20],
+    friend: { start: { x: 6.5, z: 6.5, heading: 0.45, mode: 'idle', timer: 60 },
+      script: [{ t: 0.3, type: 'playbow', face: false }, { t: 2.0, type: 'hop', face: false }, { t: 3.1, type: 'tumble', face: false }] },
+  },
+  // she chases the yarn; it hops and bows at every swat, from out of her way
+  friendplay: {
+    start: () => ({ x: 0, z: 0, heading: 0.35, mode: 'sit' }),
+    script: [{ t: 0.3, type: 'play' }],
+    viewer: () => [Math.sin(0.35) * 30, Math.cos(0.35) * 30],
+    friend: { start: { x: 9, z: 6, heading: -0.6, mode: 'sit', timer: 60 }, script: [] },
+  },
+  // dinner for two: one bowl, a kitty on each side
+  friendfeed: {
+    start: () => ({ x: 0, z: 0, heading: 0.35, mode: 'sit' }),
+    script: [{ t: 0.3, type: 'feed' }],
+    viewer: () => [Math.sin(0.35) * 30, Math.cos(0.35) * 30],
+    needs: { hunger: 0.9, happy: 0.5 },
+    friend: { start: { x: 8, z: 7, heading: -0.9, mode: 'sit', timer: 60 }, script: [] },
+  },
+  // she curls up for a nap, and it curls up right beside her
+  friendnap: {
+    start: () => ({ x: 0, z: 0, heading: 0.25, mode: 'sit', timer: 60 }),
+    script: [{ t: 0.2, type: 'nap' }],
+    viewer: () => [Math.sin(0.25) * 20, Math.cos(0.25) * 20],
+    friend: { start: { x: 8.5, z: 4.5, heading: -1.2, mode: 'sit', timer: 60 }, script: [] },
+  },
   // she strolls across the plate; the camera tracks alongside
   kittywalk: {
     start: () => ({ x: -16, z: 2, heading: Math.PI / 2, mode: 'idle' }),
@@ -326,6 +371,27 @@ export function demoPose(name, t, home, kitty = null) {
     const a = 0.35 + 0.3, dist = lerp(22, 12.5, k);
     const pos = [fx + Math.sin(a) * dist, lerp(4.6, 3.4, k), fz + Math.cos(a) * dist];
     return { position: pos, look: [fx, lerp(6.6, 4.4, k), fz], shift: 0 };
+  }
+  if (name.startsWith('friend') && kitty.friend) {
+    // the two cats together: the camera frames the pair, a little lower than her eyes, drifting slowly round them
+    const fr = kitty.friend;
+    const near = clamp01((30 - Math.hypot(fr.x - kx, fr.z - kz)) / 18);              // the friend still far off: frame her
+    const mx = lerp(kx, (kx + fr.x) / 2, near), mz = lerp(kz, (kz + fr.z) / 2, near);
+    const span = lerp(0, Math.hypot(fr.x - kx, fr.z - kz), near);
+    const base = { friendmeet: 1.75, friendcuddle: -0.2, friendtricks: 0.42, friendplay: 0.65, friendfeed: 0.65, friendnap: 0.55 }[name];
+    const a = base + 0.03 * t;
+    const d = { friendmeet: lerp(22, 15.5, easeInOut((t - 2) / 4)), friendplay: 21, friendfeed: lerp(21, 16.5, easeInOut((t - 1) / 2)) }[name] ?? 13.5 + span * 0.55;
+    const h = name === 'friendnap' ? 3.4 : 3.9;
+    const pos = [mx + Math.sin(a) * d, h, mz + Math.cos(a) * d];
+    const look = [mx, name === 'friendnap' ? 3.6 : 4.6, mz];
+    // the meeting: it starts on the friend galloping in, far off to the side, then settles on the two of them
+    if (name === 'friendmeet') {
+      const k = easeInOut((t - 0.4) / 3.2);
+      const sx = lerp(fr.x, kx, 0.42), sz = lerp(fr.z, kz, 0.42);        // both of them in the picture from the start
+      look[0] = lerp(sx, mx, k); look[2] = lerp(sz, mz, k);
+      look[1] = lerp(3.2, 4.6, k);
+    }
+    return { position: pos, look, shift: 0 };
   }
   if (name === 'kittywalk') {
     // tracking alongside, a little ahead of her

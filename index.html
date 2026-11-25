@@ -3,18 +3,18 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Glikdev – Day 5: dodge the atom bombs</title>
-  <meta name="description" content="A game built one YouTube comment at a time. Day 5: atom bombs fall from the sky. Dodge one and it leaves a box of uranium and plutonium: tap it for an atom token, and spend them on new fur for your kitty. Comment what Day 6 should add.">
+  <title>Glikdev – Day 6: a friend for the kitty</title>
+  <meta name="description" content="A game built one YouTube comment at a time. Day 6: the kitty has a friend, a cream kitten that follows her about, rubs cheeks with her, eats from her bowl and naps beside her. Pet it, name it. Comment what Day 7 should add.">
   <meta name="theme-color" content="#a9cfee">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Glikdev">
-  <meta property="og:title" content="Glikdev – Day 5: dodge the atom bombs">
-  <meta property="og:description" content="A game built one YouTube comment at a time. Day 5: dodge the atom bombs, tap the boxes of uranium and plutonium they leave, and buy your kitty new fur. What should Day 6 add?">
+  <meta property="og:title" content="Glikdev – Day 6: a friend for the kitty">
+  <meta property="og:description" content="A game built one YouTube comment at a time. Day 6: the kitty has a friend, a cream kitten that cuddles, plays and naps with her. What should Day 7 add?">
   <meta property="og:url" content="https://dtubugk-gif.github.io/glikdev/">
   <meta property="og:image" content="https://dtubugk-gif.github.io/glikdev/poster.jpg">
   <meta property="og:image:width" content="1440">
   <meta property="og:image:height" content="900">
-  <meta property="og:image:alt" content="A cartoon atom bomb falls toward a dark ring on the ground; a small person steps out of the ring while a silver tabby kitty watches">
+  <meta property="og:image:alt" content="A small cream kitten rubs its cheek against a big ginger tabby kitty, who purrs with her eyes shut">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" href="logo.svg?v=54d58de1a180" type="image/svg+xml">
   <link rel="preload" href="fonts/fredoka-700.woff2" as="font" type="font/woff2" crossorigin>
@@ -42,6 +42,9 @@
       "./src/wand.js": "./src/wand.js?v=54d58de1a180",
       "./src/atombox.js": "./src/atombox.js?v=54d58de1a180",
       "./src/blast.js": "./src/blast.js?v=54d58de1a180",
+      "./src/friend.js": "./src/friend.js?v=54d58de1a180",
+      "./src/friendbrain.js": "./src/friendbrain.js?v=54d58de1a180",
+      "./src/fx.js": "./src/fx.js?v=54d58de1a180",
       "./vendor/three/three.module.js": "./vendor/three/three.module.js?v=54d58de1a180",
       "./vendor/three/addons/loaders/GLTFLoader.js": "./vendor/three/addons/loaders/GLTFLoader.js?v=54d58de1a180",
       "./vendor/three/addons/utils/BufferGeometryUtils.js": "./vendor/three/addons/utils/BufferGeometryUtils.js?v=54d58de1a180"
@@ -67,9 +70,9 @@
         <img class="logo" src="logo.svg?v=54d58de1a180" alt="Glikdev" width="36" height="36">
         <span>A game built by YouTube comments</span>
       </p>
-      <h1><span class="title-day">Day 5.</span> <span class="title-line">Dodge the atom bombs.</span></h1>
+      <h1><span class="title-day">Day 6.</span> <span class="title-line">She has a friend now.</span></h1>
       <!-- static fallback; main.js rewrites the day, the headline and the bubble from the newest days.json entry -->
-      <p class="bubble">What should Day 5 add? Comment it.</p>
+      <p class="bubble">What should Day 7 add? Comment it.</p>
     </header>
 
     <p class="status" id="status" role="status" aria-live="polite">Loading the world…</p>
@@ -139,6 +142,13 @@
     <span class="nametag-sr" id="nametag-sr"></span>
   </button>
 
+  <!-- Day 6: her friend's name, over its head; tap it to rename it -->
+  <button class="nametag nametag-friend" id="ftag" type="button" aria-haspopup="dialog" aria-controls="namer" hidden>
+    <span class="nametag-face" id="ftag-face" aria-hidden="true"></span>
+    <span class="nametag-name" id="ftag-name">Mochi</span>
+    <span class="nametag-sr">, her friend. Rename</span>
+  </button>
+
   <div class="emote" id="emote" aria-hidden="true" hidden></div>
   <p class="thought" id="thought" role="status" aria-live="polite" hidden><span class="thought-sr" id="thought-who"></span><span id="thought-text"></span></p>
 
@@ -147,7 +157,7 @@
       <h2 id="namer-title">Name your kitty</h2>
       <p class="namer-sub">Only you see it. It stays on this device.</p>
       <label class="namer-field">
-        <span class="namer-label">Her name</span>
+        <span class="namer-label" id="namer-label">Her name</span>
         <input id="namer-input" name="name" type="text" maxlength="18" autocomplete="off" spellcheck="false" enterkeyhint="done" required>
       </label>
       <section class="mind" id="mind" aria-labelledby="mind-title" hidden>

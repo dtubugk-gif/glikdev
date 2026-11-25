@@ -538,6 +538,18 @@ export function createBrain(o = {}) {
 
   b.walkTo = (x, z) => go({ x, z }, null, false);
   b.nap = () => { if (sitting()) { enter('liedown', 1.4); emit('sigh'); } };
+  // Day 6: her friend (friendbrain.js). It rubs its cheek on hers or touches noses: she looks at it, and if she is
+  // sitting quietly she purrs for as long as it lasts (pal: true, so it earns you nothing: it was not you).
+  b.palLook = null;
+  b.cuddled = (x, y, z, seconds = 2.6, purr = true) => {
+    b.palLook = { x, y, z, until: b.t + seconds };
+    if (!purr || b.mode !== 'sit' || b.yarn?.held) return false;
+    enter('purr');
+    b.purrUntil = b.t + seconds + 0.4;
+    cheer(0.03);
+    emit('purr', { pal: true });
+    return true;
+  };
 
   // ---------------------------------------------------------------- inner workings
   function startPurr() {

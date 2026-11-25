@@ -225,8 +225,18 @@ test('the page knows about Day 5', () => {
   assert.ok(/"\.\/src\/atombox\.js": "\.\/src\/atombox\.js\?v=/.test(html), 'atombox.js is in the import map');
   assert.ok(/id="atoms"/.test(html) && /id="atoms-count"/.test(html) && /id="atoms-icon"/.test(html));
   const days = JSON.parse(readFileSync(join(GAME, 'days.json'), 'utf8'));
+  const day5 = days.find((d) => d.day === 5);
+  assert.equal(day5.by, 'elenaabrosimova1968');
+  // (the newest day is Day 6 now: see friend.test.mjs)
+});
+
+test('the page knows about Day 6: her friend', () => {
+  const html = readFileSync(join(GAME, 'index.html'), 'utf8');
+  for (const m of ['friend', 'friendbrain', 'fx']) assert.ok(new RegExp(`"\\./src/${m}\\.js": "\\./src/${m}\\.js\\?v=`).test(html), `${m}.js is in the import map`);
+  assert.ok(/id="ftag"/.test(html));
+  const days = JSON.parse(readFileSync(join(GAME, 'days.json'), 'utf8'));
   const last = days[days.length - 1];
-  assert.equal(last.day, 5);
-  assert.equal(last.by, 'elenaabrosimova1968');
-  assert.ok(html.includes('Day 5'));
+  assert.equal(last.day, 6);
+  assert.equal(last.by, '2warp-e8u');
+  assert.ok(html.includes('Day 6'));
 });

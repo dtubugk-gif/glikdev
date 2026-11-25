@@ -173,6 +173,7 @@ async function start() {
   } catch (err) { showLoadError(err); return; }
   const [{ createRenderer, createWorld, PLATE }, { OrbitRig, placeCamera }, THREE] = mods;
   const kittyMods = Promise.all([import('./kitty.js'), import('./kittyaudio.js')]);
+  const fxMod = import('./fx.js').catch(() => null);
 
   const canvas = $('world');
   const coarse = matchMedia('(pointer: coarse)').matches;
@@ -188,6 +189,9 @@ async function start() {
     world = await createWorld({ renderer, modelUrl: stamped('models/day1.glb'), phone: coarse || innerWidth < 760, cine });
   } catch (err) { showLoadError(err); return; }
   const { camera } = world;
+  let fx = null;                                           // Day 6: dust and sparkles (fx.js)
+  try { fx = (await fxMod)?.createFX({ scene: world.scene }) ?? null; } catch { fx = null; }
+  const fxHead = new THREE.Vector3();
   world.setAnimate(demo ? true : !reducedMotion);
 
   let hinted = false, looked = false;
@@ -323,6 +327,7 @@ async function start() {
       const list = [[kitty.brain.x, 0.32, kitty.brain.z]];
       try {                                              // you and the rod join a few frames after her
         if (player) list.push([player.x, 0.9, player.z]);
+        if (friend && fd) list.push([friend.brain.x, 0.3, friend.brain.z]);
         if (wand?.fish?.visible) list.push(wand.fish.getWorldPosition(fishAt).toArray());
         if (atomBox && demo && demo.startsWith('atom')) list.push(...atomBox.subjects());
         if (blast?.dead(kitty.t)) return [blast.ghostAt(kitty.t)];     // you are a ghost: the lens is on it
@@ -340,11 +345,17 @@ async function start() {
       });
       // every button, chip and card gives a small tick
       addEventListener('click', (ev) => { if (ev.target?.closest?.('button, a.chip, .daylog-play')) audio.event({ type: 'click' }); }, true);
+      // Day 6: the windows (the Day log, naming her, choosing the cat) open and close with a soft sound of their own
+      for (const id of ['daylog', 'namer', 'catpick']) {
+        const d = $(id);
+        new MutationObserver(() => audio.event({ type: d.open ? 'ui-open' : 'ui-close' })).observe(d, { attributes: true, attributeFilter: ['open'] });
+      }
     }
   } catch (err) { console.warn('Glikdev: the kitty did not load', err); kitty = null; }
 
   // ------------------------------------------------------------ the shop and you (Day 3: the owner's ideas)
   let player = null, store = null, town = null, bedThing = null, PLAYER_EYE = 4;
+  let friend = null;                                       // Day 6: her friend (friend.js); made once the player is in
   const pd = kd ? kd.player : null;                        // a recording shows the player only when its demo says so
   try { town = await import('./town.js'); } catch (err) { console.warn('Glikdev: the shop did not load', err); }
   const building = town ? town.createShop({ scene: world.scene, url: stamped('models/shop.glb'), renderer })
@@ -379,9 +390,10 @@ async function start() {
         start: pd ? pd.start : (params.get('view') === 'first' ? { x: 6, z: 17.5, heading: Math.atan2(-6, -17.5) } : { x: 7.5, z: 7, heading: home.az }),
         boxes: town ? [town.SHOP_BOX] : [],
         circles: [() => ({ x: kitty.brain.x, z: kitty.brain.z, r: 2.8 }), ...(town ? [() => town.BED_CIRCLE] : []),
+          () => (friend ? friend.circle() : { x: 0, z: 0, r: 0 }),
           ...[0, 1, 2].map((i) => () => (atomBox ? atomBox.circle(i) : { x: 0, z: 0, r: 0 }))],
         script: pd ? pd.script || [] : null,
-        onStep: (running) => audio?.event({ type: 'footstep', strong: running }) });
+        onStep: (running) => { audio?.event({ type: 'footstep', strong: running }); if (running && kitty) fx?.dust(kitty.t, player.x, player.z, 0.42, 3, player.heading + Math.PI); } });
       rig.moveKeys = false;
       rig.canPan = false;                                  // the camera is yours: it cannot wander off
       if (live && params.get('view') === 'first') {
@@ -412,6 +424,73 @@ async function start() {
       player.giveRod(wand.rod);
     } catch (err) { console.warn('Glikdev: the fish on a stick did not load', err); wand = null; }
   })() : null;
+  // ------------------------------------------------------------ her friend (Day 6, idea by @2warp-e8u)
+  // A cream kitten that stays by her side (friendbrain.js decides, friend.js draws). The first time it is seen on
+  // this device it comes running in from far away to meet her.
+  const FRIEND_FAR = { x: -46, z: -58 };
+  const friendMet = !!saved?.friendMet;
+  care.friendName = cleanName(saved?.friendName) || 'Mochi';
+  const fd = kd ? kd.friend : null;                        // a recording shows the friend when its demo says so
+  const friendWorld = () => {
+    const b = kitty.brain, h = kitty.headPosition(), y = b.yarn;
+    return {
+      kitty: { x: b.x, z: b.z, heading: b.heading, head: [h.x, h.y, h.z], mode: b.mode, asleep: b.isAsleep(),
+        moving: ['walk', 'trot', 'run'].includes(b.mode) && b.goal !== 'ask',
+        playing: !!y && !y.hang && (b.goal === 'yarn' || ['pounce', 'bat'].includes(b.mode) || y.flying > 0 || !!y.air),
+        eating: b.mode === 'eat' || b.goal === 'eat', yarn: y ? { x: y.x, z: y.z } : null,
+        bowl: b.bowl ? { x: b.bowl.x, z: b.bowl.z, eatenAt: b.bowl.eatenAt } : null },
+      player: player ? { x: player.x, z: player.z } : null,
+      bed: town && bedThing ? town.BED_SPOT : null,
+      keepOut: town ? (x, z) => { const p = town.outOfShop(x, z, 10); return [p.x, p.z]; } : null,
+    };
+  };
+  const friending = kitty && (live || fd) ? (async () => {
+    try {
+      const { createFriend } = await import('./friend.js');
+      const b = kitty.brain;
+      const start = fd?.start ? fd.start : !live || friendMet
+        ? { x: b.x + Math.cos(b.heading) * 7.5, z: b.z - Math.sin(b.heading) * 7.5, heading: b.heading, mode: 'sit' }
+        : { ...FRIEND_FAR, heading: Math.atan2(b.x - FRIEND_FAR.x, b.z - FRIEND_FAR.z), mode: 'idle', timer: 1 };
+      friend = await createFriend({ scene: world.scene, url: stamped('models/friend.glb'), infoUrl: stamped('models/friend.json'), renderer,
+        start, seed: fd?.seed ?? 11, hello: fd ? !!fd.hello : live && !friendMet, helloDelay: fd ? 0 : 2.5, script: fd?.script || null });
+      friend.on(onFriend);
+    } catch (err) { console.warn('Glikdev: her friend did not load', err); friend = null; }
+  })() : null;
+  if (!live) await friending;
+  kitty?.on((e) => { if (e.type !== 'reset') friend?.onKitty(e); });
+  /** what her friend just did: its sounds, her answer, hearts and tokens */
+  let friendPaidAt = -1e9;
+  const friendHead = new THREE.Vector3();
+  function onFriend(e) {
+    if (audio) {
+      friend.headPosition(friendHead);
+      const d = camera.position.distanceTo(friendHead);
+      friendHead.project(camera);
+      audio.event(e, Math.max(0, Math.min(1, (70 - d) / 50)), friendHead.z < 1 ? Math.max(-1, Math.min(1, friendHead.x)) * 0.7 : 0);
+    }
+    if (e.type === 'nuzzle' || e.type === 'boop' || e.type === 'friend-hello') {
+      friend.headPosition(friendHead);
+      const long = e.type === 'nuzzle';
+      kitty.brain.cuddled(friendHead.x, friendHead.y, friendHead.z, long ? 2.8 : 1.6, long);
+      if (!long) audio?.event({ type: 'trill', who: 'kitty' }, 0.8);
+    }
+    if (['pet', 'nuzzle', 'friend-hello'].includes(e.type)) for (let k = 0; k < (e.type === 'nuzzle' ? 2 : 3); k++) audio?.event({ type: 'heart', k, delay: (e.type === 'nuzzle' ? 0.9 : 0.1) + k * 0.24 }, 0.8);
+    if (e.type === 'friend-hello') { friend.headPosition(friendHead); fx?.sparkle(kitty.t, friendHead.x, friendHead.y + 1, friendHead.z, 8, 3); }
+    if (e.type === 'friend-hello' && live) {
+      care.friendMet = true; persist();
+      player?.cheer();
+      flashHint(`${care.name} has a friend! Meet ${care.friendName} · ${coarse ? 'Tap' : 'Click'} it to pet it`, 8000);
+    }
+    // petting it: it purrs, and that is worth a friendship token now and then
+    if (e.type === 'purr' && e.t - friendPaidAt > 12) {
+      friendPaidAt = e.t;
+      wallet.earn(1);
+      tokenFX?.spawn(kitty.t, friend.headPosition(friendHead), 1);
+      audio?.event({ type: 'token', n: 1 });
+      repaintShop();
+      if (live) saveWallet(wallet);
+    }
+  }
   /** tell your arm where the fish is (the rod points at it once it is out) */
   const aimRod = () => { const y = kitty.brain.yarn; player.setAim(y?.wand ? [y.x, y.y, y.z] : null, !!y?.wand && !y.hang, !!y?.wand && !!y.dangle); };
   /** recordings: you and the kitty are stepped together, so the line always runs from where your hand really is */
@@ -429,13 +508,15 @@ async function start() {
     const p = town ? town.outOfShop(spot.x, spot.z) : spot;
     kitty.call(p.x, p.z, { quiet: true });               // she may come along, or not: it is up to her
   }
+  /** Day 6: you tapped a cat that is close by: you crouch and stroke it */
+  function petNear(x, z) { if (player && Math.hypot(player.x - x, player.z - z) < 12) player.petAt(x, z); }
   /** atom box number i opens (at t on the kitty's clock): its token leaves it a moment later */
   function openBox(i, t = kitty.t) {
     if (!atomBox || !atomBox.open(i, t)) return;
     atomDue.push({ t: t + atomMod.TIMING.tokenAt, i });
+    const B = atomBox.box(i); if (B) fx?.sparkle(t + 0.2, B.x, 3.2, B.z, 7, 2.6);
     audio?.unlock();
-    audio?.event({ type: 'click' });
-    audio?.event({ type: 'refill' });
+    audio?.event({ type: 'box-open' });
   }
   /** you tapped atom box i: walk up to it first, then it opens */
   function tapBox(i) {
@@ -458,7 +539,7 @@ async function start() {
     const p = atomMod.landSpot(player.x, player.z, keep);
     if (!atomBox.drop(t, p.x, p.z)) return false;
     dropped++;
-    audio?.event({ type: 'toss', speed: 40 });           // it whistles down
+    audio?.event({ type: 'bomb-fall', delay: Math.max(0, ATOM_BOX.fall - 1.6) });   // it whistles down (the whistle is 1.6 s long)
     if (live) flashHint(dropped <= 2 ? (coarse ? 'Look out above! An atom bomb: tap the ground to step out of the dark ring' : 'Look out above! An atom bomb: walk out of the dark ring')
       : 'Look out above!', dropped <= 2 ? 5000 : 2200);
     return true;
@@ -507,6 +588,7 @@ async function start() {
         wallet = freshWallet(); rewardState = {}; filmWear = { ...paramWear };
         tokenFX?.reset();
         atomBox?.reset(); atomFX?.reset(); atomDue = []; nextDrop = null; dropped = 0; bonkAt = null;
+        fx?.reset();
         blast?.reset();
         wand?.event(e, null);
         wardrobe?.dress({ ...wallet.wearing, ...filmWear });
@@ -514,13 +596,15 @@ async function start() {
         return;
       }
       if ((e.type === 'thud' || e.type === 'swat') && toyOut()?.jingle) audio?.event({ type: 'jingle' });
+      if (e.type === 'pet' || e.type === 'eaten') for (let k = 0; k < 3; k++) audio?.event({ type: 'heart', k, delay: 0.1 + k * 0.22 });   // her hearts float up
+      if (e.type === 'land') { const b = kitty.brain; fx?.dust(e.t, b.x + Math.sin(b.heading) * 2.2, b.z + Math.cos(b.heading) * 2.2, 1.1, 7); audio?.event({ type: 'dust' }); }
       if (e.type === 'cast') { player?.cast(e.x, e.z); audio?.event({ type: 'toss', speed: e.speed }); }   // your arm flicks the rod
       if (e.type === 'dangle') audio?.event({ type: 'jingle' });
       if (e.type === 'reeled') audio?.event({ type: 'click' });
       wand?.event(e, kitty.brain.yarn);                    // stars, rings, squash: the fish's own little effects
       if (e.type === 'swat' && toyOut()?.id === 'toymouse') audio?.event({ type: 'squeak' });
       // filming: an atom bomb falls on a given spot; the box it left is tapped
-      if (e.type === 'script' && e.what.type === 'bomb') { atomBox?.drop(e.t, e.what.x, e.what.z, e.what.rot ?? null); audio?.event({ type: 'toss', speed: 40 }); return; }
+      if (e.type === 'script' && e.what.type === 'bomb') { atomBox?.drop(e.t, e.what.x, e.what.z, e.what.rot ?? null); audio?.event({ type: 'bomb-fall', delay: Math.max(0, ATOM_BOX.fall - 1.6) }); return; }
       if (e.type === 'script' && e.what.type === 'atom') {
         // (a recording may jump straight to a later frame: the bomb before it has to have landed first)
         atomBox?.update(e.t, player ? { x: player.x, z: player.z } : null);
@@ -547,11 +631,13 @@ async function start() {
         }
         return;
       }
+      if (e.pal) return;                                   // (her friend made her purr, not you: no token)
       const n = rewardFor(e, rewardState);
       if (n <= 0) return;
       const first = wallet.earned === 0, could = wallet.canBuy(NEW_ITEM);
       wallet.earn(n);
       tokenFX?.spawn(e.t, kitty.headPosition(tokenHead), n);
+      fx?.sparkle(e.t, tokenHead.x, tokenHead.y + 0.6, tokenHead.z, 3 + n, 1.6);
       audio?.event({ type: 'token', n });
       repaintShop();                                       // a token landing while the shop is open: its prices keep up
       if (live) {
@@ -590,14 +676,13 @@ async function start() {
   function paintAtoms(t) {
     // bombs land (on you, or beside you: then a box is there), boxes come and go
     for (const ev of atomBox ? atomBox.update(t, player ? { x: player.x, z: player.z } : null) : []) {
-      audio?.event({ type: 'land' });
-      audio?.event({ type: 'thud' });
+      audio?.event({ type: 'bomb-land' });
       if (ev.hit) {
         bonkAt = ev.t;
         // it got you: the whole world goes up (the kitty, the shop, her bed, the boxes, the plate itself)
         if (blast && player) {
           blast.start(ev.t, ev.x, ev.z, player.x, player.z, [
-            { obj: world.model, plate: true }, { obj: kitty.root, live: true }, { obj: atomBox.group },
+            { obj: world.model, plate: true }, { obj: kitty.root, live: true }, { obj: atomBox.group }, friend ? { obj: friend.root, live: true } : null,
             store ? { obj: store.group } : null, bedThing ? { obj: bedThing.group } : null]);
           player.stop();
           wantBox = -1; wantShop = false;
@@ -631,7 +716,7 @@ async function start() {
       const first = wallet.atoms === 0 && !SKINS.some((k) => wallet.ownsSkin(k.id));
       wallet.earnAtoms(ATOM_BOX.gives);
       atomFX?.spawn(due.t, atomBox.tokenFrom(due.i, due.t, atomFrom), 1);
-      audio?.event({ type: 'token', n: 1 });
+      audio?.event({ type: 'atom' });
       repaintCats();
       if (live) {
         saveWallet(wallet);
@@ -700,7 +785,8 @@ async function start() {
     const b = kitty.brain, h = kitty.headPosition();
     return { x: b.x, z: b.z, heading: b.heading, head: [h.x, h.y, h.z],
       bowl: b.bowl ? { x: b.bowl.x, z: b.bowl.z } : null, yarn: b.yarn ? { x: b.yarn.x, y: b.yarn.y, z: b.yarn.z } : null,
-      player: player ? { x: player.x, z: player.z } : null };
+      player: player ? { x: player.x, z: player.z } : null,
+      friend: friend ? (() => { const h = friend.headPosition(); return { x: friend.brain.x, z: friend.brain.z, heading: friend.brain.heading, head: [h.x, h.y, h.z], mode: friend.brain.mode }; })() : null };
   };
 
   // taps: on the kitty = pet her; on the ground = call her there (a drag or a pinch is not a tap)
@@ -787,7 +873,8 @@ async function start() {
       if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 10 || performance.now() - d.t > 450) return;
       const r = rayAt(e.clientX, e.clientY);
       const what = kitty.pick(r);
-      if (what === 'kitty') { kitty.pet(); dismissHint(); return; }
+      if (what === 'kitty') { kitty.pet(); petNear(kitty.brain.x, kitty.brain.z); dismissHint(); return; }
+      if (friend?.pick(r)) { petNear(friend.brain.x, friend.brain.z); friend.pet(player ? { x: player.x, z: player.z } : { x: camera.position.x, z: camera.position.z }); dismissHint(); return; }
       if (what === 'yarn') { kitty.play(); dismissHint(); return; }
       const bi = atomBox ? atomBox.pick(r) : -1;
       if (bi >= 0) { tapBox(bi); dismissHint(); return; }
@@ -805,12 +892,13 @@ async function start() {
         if (e.buttons || carry) return;
         const r = rayAt(e.clientX, e.clientY);
         const what = kitty.pick(r);
-        canvas.style.cursor = what === 'yarn' ? 'grab' : what || (atomBox && atomBox.pick(r) >= 0) || (store && store.pick(r)) ? 'pointer' : '';
+        canvas.style.cursor = what === 'yarn' ? 'grab' : what || friend?.pick(r) || (atomBox && atomBox.pick(r) >= 0) || (store && store.pick(r)) ? 'pointer' : '';
       });
     }
   }
 
   // ------------------------------------------------------------ looking after her: buttons, name tag, rename
+  const ftag = $('ftag'), ftagName = $('ftag-name'), ftagFace = $('ftag-face');
   const tag = $('nametag'), tagName = $('nametag-name'), tagHearts = $('nametag-hearts'), tagSr = $('nametag-sr');
   // the free camera: once you move it yourself, this brings it back to her (and so does C, or Pet / Feed / Play)
   const followBtn = $('follow'), followName = $('follow-name');
@@ -866,6 +954,7 @@ async function start() {
     if (!kitty || !live) return;
     const b = kitty.brain;
     saveCare({ name: care.name, muted: care.muted, cat: care.cat, hunger: +b.hunger.toFixed(3), happy: +b.happy.toFixed(3), at: Date.now(),
+      friendName: care.friendName, ...(care.friendMet || friendMet ? { friendMet: true } : {}),
       ...(care.mindHint ? { mindHint: true } : {}),
       ...(mind && !mindParam ? { mind: mind.toJSON() } : saved?.mind ? { mind: saved.mind } : {}) });
   }
@@ -904,7 +993,22 @@ async function start() {
       paintSound();
       persist();
     });
+    let naming = 'kitty';                                  // whose name the dialog is changing (Day 6: or her friend's)
+    const setNaming = (who) => {
+      naming = who;
+      $('namer-title').textContent = who === 'friend' ? 'Name her friend' : 'Name your kitty';
+      $('namer-label').textContent = who === 'friend' ? 'Its name' : 'Her name';
+    };
+    ftag.addEventListener('click', () => {
+      setNaming('friend');
+      namerInput.value = care.friendName === 'Mochi' ? '' : care.friendName;
+      namerInput.placeholder = 'Mochi';
+      $('mind').hidden = true;
+      if (typeof namer.showModal === 'function') namer.showModal(); else namer.setAttribute('open', '');
+      namerInput.focus();
+    });
     tag.addEventListener('click', () => {
+      setNaming('kitty');
       namerInput.value = care.name === 'Kitty' ? '' : care.name;
       namerInput.placeholder = 'Kitty';
       showMind();
@@ -913,6 +1017,14 @@ async function start() {
     });
     $('namer-cancel').addEventListener('click', () => namer.close());
     $('namer-form').addEventListener('submit', () => {
+      if (naming === 'friend') {
+        care.friendName = cleanName(namerInput.value) || 'Mochi';
+        ftagName.textContent = care.friendName;
+        persist();
+        friend?.pet(player ? { x: player.x, z: player.z } : null);   // it likes its new name
+        audio?.event({ type: 'sparkle' });
+        return;
+      }
       care.name = cleanName(namerInput.value) || 'Kitty';
       showName(care.name);
       persist();
@@ -920,7 +1032,7 @@ async function start() {
       $('thought-who').textContent = `${care.name}: `;
     });
     namer.addEventListener('click', (e) => { if (e.target === namer) namer.close(); });
-    namer.addEventListener('close', () => tag.focus());
+    namer.addEventListener('close', () => (naming === 'friend' ? ftag : tag).focus());
 
     // choosing the cat: the new one loads, then takes her place (same name, needs and spot)
     const picker = $('catpick'), catsEl = $('cats'), catStatus = $('cat-status'), catBtn = $('care-cat');
@@ -1048,6 +1160,8 @@ async function start() {
       applyToy();
       audio?.unlock();
       audio?.event({ type: sound });
+      kitty.headPosition(fxHead); fx?.sparkle(kitty.t, fxHead.x, fxHead.y, fxHead.z, 9, 3.2); audio?.event({ type: 'sparkle' });
+      if (sound === 'buy') setTimeout(() => player?.cheer(), 350);   // you jump for joy
       paintShop();
       shop.close();
       backToHer();
@@ -1194,6 +1308,31 @@ async function start() {
     $('mind-habits').textContent = d.habits.length ? `${d.habits.join('. ')}.` : 'None yet. She is still settling in.';
     card.hidden = false;
   }
+  // Day 6: her friend's name over its head (under hers, when the two would overlap)
+  const fPos = new THREE.Vector3();
+  let ftagOn = false, ftagFeel = '';
+  function placeFriendTag() {
+    if (!friend || !showUI || demo || short) { if (ftagOn) { ftag.hidden = true; ftagOn = false; } return; }
+    if (!ftagOn) { ftag.hidden = false; ftagOn = true; ftagName.textContent = care.friendName; }
+    const fb = friend.brain;
+    const feel = fb.mode === 'sleep' ? 'sleepy' : fb.mode === 'purr' || fb.mode === 'nuzzle' ? 'loving' : ['playbow', 'hop', 'tumble'].includes(fb.mode) ? 'playful' : 'happy';
+    if (feel !== ftagFeel) { ftagFeel = feel; ftagFace.innerHTML = emoteSVG(feel); }
+    friend.headPosition(fPos);
+    fPos.y += 2.1;
+    fPos.project(camera);
+    const vis = fPos.z < 1 && Math.abs(fPos.x) < 1.15 && Math.abs(fPos.y) < 1.15 && !blast?.dead(kitty.t);
+    ftag.style.visibility = vis ? 'visible' : 'hidden';
+    if (!vis) return;
+    const edge = Math.min(70, innerWidth / 2);
+    const x = Math.max(edge, Math.min(innerWidth - edge, (fPos.x + 1) / 2 * innerWidth));
+    let y = Math.max(tagMinY, (1 - fPos.y) / 2 * innerHeight);
+    // her tag (and what floats over it) wins the spot: the friend's tag tucks in under it
+    if (!tag.hidden && tag.style.visibility !== 'hidden') {
+      const a = tag.getBoundingClientRect(), w = ftag.offsetWidth || 120, h = ftag.offsetHeight || 34;
+      if (Math.abs(x - (a.left + a.width / 2)) < (a.width + w) / 2 + 6 && y > a.top - 6 && y - h < a.bottom + 6) y = a.bottom + h + 8;
+    }
+    ftag.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -100%)`;
+  }
   // every frame: the tag floats over her head; hearts and the hungry badge follow her needs
   const tagPos = new THREE.Vector3();
   const HAT_LIFT = { strawhat: 0.5, flowercrown: 0.35, crown: 0.75, wizardhat: 1.6 };
@@ -1251,9 +1390,12 @@ async function start() {
   // hint, until the first tap that does something
   if (showUI && !demo && !short) {
     hintEl.textContent = kitty && player
-      ? (wallet.atoms === 0 && !SKINS.some((k) => wallet.ownsSkin(k.id))    // the day's new thing: atom bombs and boxes
-        ? (coarse ? 'Tap the ground to walk there · Tap your kitty to pet her · New: dodge the atom bombs'
-          : 'Click the ground or use WASD to walk · Click your kitty to pet her · New: dodge the atom bombs')
+      ? (!friendMet                                                        // the day's new thing (Day 6): her friend
+        ? (coarse ? `Tap the ground to walk there · New: ${care.name} has a friend! Tap it to pet it`
+          : `Click the ground or use WASD to walk · New: ${care.name} has a friend! Click it to pet it`)
+        : wallet.atoms === 0 && !SKINS.some((k) => wallet.ownsSkin(k.id))    // Day 5: atom bombs and boxes
+        ? (coarse ? 'Tap the ground to walk there · Tap your kitty to pet her · Dodge the atom bombs'
+          : 'Click the ground or use WASD to walk · Click your kitty to pet her · Dodge the atom bombs')
         : !wallet.owns(NEW_ITEM)
         ? (coarse ? 'Tap the ground to walk there · Tap your kitty to pet her · In the shop: a fish on a stick'
           : 'Click the ground or use WASD to walk · Click your kitty to pet her · In the shop: a fish on a stick')
@@ -1310,7 +1452,9 @@ async function start() {
     let ks = 0;
     if (kitty && mind && player) kitty.setFriend(player.x, player.z);      // so she can come over to you
     if (wandOn && !demo) kitty.setWandTip(player.tip());                   // the line runs from the tip of your stick
-    if (kitty) ks = demo ? kitty.simulateTo(t, player ? syncPlayer : null) : kitty.advance(dt, camera.position);
+    if (kitty) ks = demo ? kitty.simulateTo(t, player || friend ? (bt) => { if (player) syncPlayer(bt); friend?.stepTo(bt, friendWorld); } : null) : kitty.advance(dt, camera.position);
+    let fs = 0;                                            // her friend: in lockstep with her in recordings
+    if (friend) fs = demo ? friend.stepTo(kitty.t, friendWorld) : friend.advance(dt, friendWorld());
     clockMs = t * 1000;
     if (mind) think(nowMs());
     if (player) {
@@ -1393,26 +1537,41 @@ async function start() {
     }
     if (kitty) {
       kitty.finish(camera.position, ks); placeTag(t);
+      friend?.finish(demo ? Math.max(fs, ks) : fs); placeFriendTag();
       if (wand && player) wand.update(dt, kitty.t, kitty.brain.yarn, player.heading);
       wardrobe?.update(kitty.t);
       camera.updateMatrixWorld();
       paintTokens(kitty.t);
       paintAtoms(kitty.t);
     }
+    if (kitty) fx?.update(kitty.t);
     world.update(t);
     world.render();
   }
   function frame(ts) {
     if (external) return;
     requestAnimationFrame(frame);
+    // Day 6: a device that cannot keep up with the finished picture (glow, grade) gets the plain one. Measured on
+    // the browser's own frame clock over 150 frames a few seconds in, once (never in a recording)
+    if (!demo && world.finishing && perf.n >= 0 && !document.hidden) {
+      if (perf.at != null && t0 != null && ts - t0 > 3000) { const d = ts - perf.at; if (d < 250) { perf.sum += d; perf.n++; } }
+      perf.at = ts;
+      if (perf.n >= 150) {
+        if (perf.sum / perf.n > 24) { world.setQuality('plain'); console.info('Glikdev: plain picture for this device'); }
+        perf.n = -1;
+      }
+    }
     if (t0 === null) { t0 = ts; last = ts; }
     const dt = Math.min(0.05, Math.max(0, (ts - last) / 1000));
     if (dialog.open) { last = ts; return; }                // nothing to see behind the Day log
     // when nobody is touching the camera, 30 fps is plenty
-    if (!demo && rig.idle() && !player?.busy() && !(kitty && (kitty.busy() || tokenFX?.busy() || atomFX?.busy() || atomBox?.busy(kitty.t) || blast?.active(kitty.t) || wardrobe?.busy(kitty.t) || (wandOn && wand.busy())))) { skip = !skip; if (skip) return; }
+    if (!demo && rig.idle() && !player?.busy() && !(kitty && (kitty.busy() || friend?.busy() || fx?.busy() || tokenFX?.busy() || atomFX?.busy() || atomBox?.busy(kitty.t) || blast?.active(kitty.t) || wardrobe?.busy(kitty.t) || (wandOn && wand.busy())))) { skip = !skip; if (skip) return; }
     last = ts;
     step((ts - t0) / 1000, dt);
+    // Day 6: a device that cannot keep up with the finished picture (glow, grade) gets the plain one; checked over
+    // two seconds of busy frames, once, a few seconds in (never in a recording)
   }
+  const perf = { sum: 0, n: 0, at: null };
   // Recorders call this instead of the rAF loop: the frame at exactly t seconds.
   window.renderFrame = (t) => {
     external = true;
@@ -1426,6 +1585,7 @@ async function start() {
     get audio() { return audio; },
     get wallet() { return wallet; }, get wardrobe() { return wardrobe; }, get player() { return player; }, get store() { return store; },
     get wand() { return wand; }, get wandOn() { return wandOn; },
+    get friend() { return friend; }, get fx() { return fx; },
     get atomBox() { return atomBox; }, get atomMod() { return atomMod; }, get blast() { return blast; },
     /** Screen height fraction (from the top) of the visible horizon: the plate's far edge. */
     horizonFrac() {

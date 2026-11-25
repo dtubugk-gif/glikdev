@@ -48,7 +48,8 @@ export const itemById = (id) => ITEMS.find((i) => i.id === id) || null;
 //   gives: tokens a box holds; first: seconds before the first bomb; every: seconds from one bomb to the next;
 //   fall: seconds a bomb is in the air; blast: how far from where it lands it gets you (m); max: boxes that may
 //   wait on the plate at once (no more bombs fall until one is opened)
-export const ATOM_BOX = { gives: 1, first: 6, every: 13, fall: 2.8, blast: 3.9, max: 3 };
+export const ATOM_BOX = { gives: 1, first: 16, every: 13,   // (first: 16 s since Day 6, so the friend's hello comes first)
+  fall: 2.8, blast: 3.9, max: 3 };
 /** Fur skins: the ginger kitty's own coat, recoloured (models/skins/<id>.webp, made by art/day05/make_skins.py). */
 export const SKINS = [
   { id: 'silver', name: 'Silver', price: 3 },
