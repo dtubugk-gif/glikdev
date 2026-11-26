@@ -114,6 +114,11 @@
       <button class="care-btn care-sound" id="care-sound" type="button" aria-pressed="true" aria-label="Sound on">
         <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path class="fill" d="M4 9.5h3.6L12 5.6v12.8l-4.4-3.9H4Z"/><path d="M4 9.5h3.6L12 5.6v12.8l-4.4-3.9H4Z"/><path class="wave" d="M15.4 9.2a4 4 0 0 1 0 5.6M18 6.8a7.4 7.4 0 0 1 0 10.4"/><path class="cross" d="m15.5 9.5 5 5m0-5-5 5"/></svg>
       </button>
+      <!-- Day 7: phones: the Day log, the channel and the sound are in this menu (the bottom bar keeps only the game) -->
+      <button class="care-btn care-menu" id="care-menu" type="button" aria-haspopup="dialog" aria-controls="menu" aria-label="Menu">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h14"/></svg>
+        <span class="care-label">Menu</span>
+      </button>
     </div>
   </div>
 
@@ -216,6 +221,30 @@
       <p class="cat-credits">Idea by @Kowffe. Every toy and outfit was made in Blender for Day&nbsp;3. The fish on a stick is Day&nbsp;4’s, an idea by @Darkbacon155.</p>
       <div class="namer-actions">
         <button class="chip" type="button" id="shop-close">Done</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog class="namer menu" id="menu" aria-labelledby="menu-title">
+    <div class="namer-card">
+      <h2 id="menu-title">Glikdev</h2>
+      <p class="namer-sub">A game built one YouTube comment at a time.</p>
+      <div class="menu-list">
+        <button class="menu-item" id="menu-daylog" type="button" aria-haspopup="dialog" aria-controls="daylog">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path class="fill" d="M5 4.5h11.5A2.5 2.5 0 0 1 19 7v8H7.5A2.5 2.5 0 0 0 5 17.5Z"/><path d="M5 4.5h11.5A2.5 2.5 0 0 1 19 7v12.5H7.5A2.5 2.5 0 0 1 5 17V4.5Z"/><path d="M5 17a2.5 2.5 0 0 1 2.5-2.5H19M9 8.5h6"/></svg>
+          <span>Day log</span>
+        </button>
+        <a class="menu-item" id="menu-channel" href="https://www.youtube.com/@glikdev" target="_blank" rel="noopener">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect class="fill" x="3" y="5.5" width="18" height="13" rx="4"/><path d="m10.5 9.5 4 2.5-4 2.5Z"/></svg>
+          <span>Glikdev on YouTube</span>
+        </a>
+        <button class="menu-item menu-sound" id="menu-sound" type="button" aria-pressed="true">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path class="fill" d="M4 9.5h3.6L12 5.6v12.8l-4.4-3.9H4Z"/><path d="M4 9.5h3.6L12 5.6v12.8l-4.4-3.9H4Z"/><path class="wave" d="M15.4 9.2a4 4 0 0 1 0 5.6M18 6.8a7.4 7.4 0 0 1 0 10.4"/><path class="cross" d="m15.5 9.5 5 5m0-5-5 5"/></svg>
+          <span id="menu-sound-label">Sound on</span>
+        </button>
+      </div>
+      <div class="namer-actions">
+        <button class="chip" type="button" id="menu-close">Done</button>
       </div>
     </div>
   </dialog>

@@ -230,7 +230,7 @@ async function start() {
     const portrait = aspect < 0.85;
     const wide = aspect >= 1.3;
     const spec = portrait
-      ? { fov: 62, pitch: 30, height: 16, horizon: short ? 0.44 : 0.42 }
+      ? { fov: 62, pitch: 30, height: 16, horizon: short ? 0.44 : root.classList.contains('ui-compact') ? 0.3 : 0.42 }   // (Day 7: once the title is small, more of the world)
       : wide ? { fov: 46, pitch: 26, height: 15, horizon: h < 500 ? 0.45 : 0.4 }
         : { fov: 54, pitch: 28, height: 16, horizon: 0.41 };
     if (portrait && showUI) {
@@ -348,7 +348,7 @@ async function start() {
       // every button, chip and card gives a small tick
       addEventListener('click', (ev) => { if (ev.target?.closest?.('button, a.chip, .daylog-play')) audio.event({ type: 'click' }); }, true);
       // Day 6: the windows (the Day log, naming her, choosing the cat) open and close with a soft sound of their own
-      for (const id of ['daylog', 'namer', 'catpick']) {
+      for (const id of ['daylog', 'namer', 'catpick', 'menu', 'seedbag']) {
         const d = $(id);
         new MutationObserver(() => audio.event({ type: d.open ? 'ui-open' : 'ui-close' })).observe(d, { attributes: true, attributeFilter: ['open'] });
       }
@@ -1337,10 +1337,21 @@ async function start() {
     $('care-pet').addEventListener('click', act(() => kitty.pet()));
     $('care-feed').addEventListener('click', act(() => kitty.feed()));
     $('care-play').addEventListener('click', act(() => kitty.play()));
+    const menuSound = $('menu-sound');
     const paintSound = () => {
       soundBtn.setAttribute('aria-pressed', String(!care.muted));
       soundBtn.setAttribute('aria-label', care.muted ? 'Sound off' : 'Sound on');
+      menuSound.setAttribute('aria-pressed', String(!care.muted));
+      $('menu-sound-label').textContent = care.muted ? 'Sound off' : 'Sound on';
     };
+    // Day 7: the phone menu (the Day log, the channel, the sound), from the round button at the end of the bar
+    const menu = $('menu');
+    $('care-menu').addEventListener('click', () => { audio?.unlock(); if (typeof menu.showModal === 'function') menu.showModal(); else menu.setAttribute('open', ''); });
+    $('menu-close').addEventListener('click', () => menu.close());
+    menu.addEventListener('click', (e) => { if (e.target === menu) menu.close(); });
+    $('menu-daylog').addEventListener('click', () => { menu.close(); openBtn.click(); });
+    $('menu-channel').addEventListener('click', () => menu.close());
+    menuSound.addEventListener('click', () => soundBtn.click());
     paintSound();
     soundBtn.addEventListener('click', () => {
       care.muted = !care.muted;
@@ -1774,7 +1785,30 @@ async function start() {
     else hintEl.textContent = how;
   };
   if (wandOn) onWand(true);
+  // Day 7: on a phone the big title is for the first look; once you are playing it shrinks to "Day N" and the
+  // comment pill, and the camera glides up to show more of the world (the horizon follows the pill)
+  let compacted = false;
+  function compactTitle() {
+    if (compacted || !(showUI && !demo && !short) || !kitty) return;
+    compacted = true;
+    const s0 = home.shift;
+    root.classList.add('ui-anim', 'ui-compact');
+    setTimeout(() => {                                     // once the title has shrunk (its own transition), frame again
+      layout();
+      const s1 = home.shift, t0 = performance.now();
+      if (Math.abs(s1 - s0) < 1e-4 || firstPerson) return;
+      const glide = (now) => {
+        const k = Math.min(1, (now - t0) / 650), e = k * k * (3 - 2 * k);
+        setShift(s0 + (s1 - s0) * e, 0);
+        if (k < 1 && !external) requestAnimationFrame(glide);
+      };
+      setShift(s0, 0);
+      requestAnimationFrame(glide);
+    }, 420);
+  }
+  if (showUI && !demo && !short && kitty) setTimeout(compactTitle, 7000);
   function dismissHint() {
+    compactTitle();
     if (hinted) return;
     hinted = true;
     if (!hintEl.dataset.yarn) hintEl.classList.add('is-gone');
