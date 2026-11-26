@@ -402,6 +402,30 @@ html.capture-short #boom-word { display: none; }      /* filmed for a Short: the
    them as the numbers grow); filmed for a Short, it sits under them */
 .tokens.atoms { right: calc(var(--gutter) + var(--safe-r) + 96px); }
 .tokens.atoms.is-filmed { top: 236px; right: 52px; }     /* under the Short's caption, not behind it */
+/* Day 7: the seed bag's counter sits on the left of the atom tokens (main.js keeps it clear of them) */
+.tokens.seeds { right: calc(var(--gutter) + var(--safe-r) + 192px); }
+.tokens.seeds.is-filmed { top: 136px; right: 52px; }
+.seed-grid { grid-template-columns: repeat(3, 1fr); }
+/* tablets (760-980 px wide): the bottom bar is crowded, so the channel chip just says YouTube (it ran under the Cat button) */
+@media (max-width: 980px) { .chip-extra { display: none; } }
+/* three counters on a narrow screen: the eyebrow keeps only its logo, so nothing sits under them */
+@media (max-width: 620px) { html.has-seeds .eyebrow > span { display: none; } }
+/* a phone on its side: the headline wraps before it reaches the three counters (and the hint under them) */
+@media (orientation: landscape) and (max-height: 520px) { html.has-seeds .title h1 { max-width: min(56vw, calc(100vw - 420px)); } }
+/* the narrowest phones: three compact counters, and the logo steps aside for them */
+@media (max-width: 359px) {
+  html.has-seeds .tokens:not(.is-filmed) { padding: 0 9px 0 4px; gap: 4px; font-size: 16px; min-height: 40px; }
+  html.has-seeds .tokens:not(.is-filmed) img { width: 26px; height: 26px; }
+  html.has-seeds .eyebrow { visibility: hidden; }
+}
+.seed-card .shop-tag::before { content: none !important; }
+.seed-card .shop-tag { padding: 0 10px !important; }
+.seed-worth { font: 600 12px/1.2 var(--body, inherit); color: var(--ink-2); text-align: center; margin-top: -4px; }
+.mutations { margin-top: 14px; }
+.mutations .namer-sub { margin: 0 0 10px; font-size: 14px; }
+.mutation-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.mutation-list li { display: flex; align-items: center; gap: 10px; padding: 4px 10px 4px 4px; border: 2px solid var(--ink); border-radius: 14px; background: #fff; font-size: 15px; }
+.mutation-list img { width: 44px; height: 44px; flex: none; object-fit: contain; }
 @media (max-width: 759px) and (orientation: portrait) {
   .tokens { padding: 0 12px 0 6px; gap: 5px; font-size: 18px; }
   .tokens img { width: 30px; height: 30px; }

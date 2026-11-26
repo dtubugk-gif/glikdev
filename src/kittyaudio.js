@@ -56,6 +56,14 @@ const FILES = {
   bombFall: ['sounds/bombfall.mp3'], bombLand: ['sounds/bombland1.mp3', 'sounds/bombland2.mp3'],
   boxOpen: ['sounds/boxopen.mp3'], atom: ['sounds/atom.mp3'],
   boom: ['sounds/boom.mp3'],                               // Day 5: an atom bomb landed on you
+  // Day 7: the parrots (a real parrot's voice: art/day07/sounds/voice), their wings, the seeds and the garden
+  squawk: ['sounds/squawk1.mp3', 'sounds/squawk2.mp3', 'sounds/squawk3.mp3', 'sounds/squawk4.mp3'],
+  flap: ['sounds/flap1.mp3', 'sounds/flap2.mp3', 'sounds/flap3.mp3', 'sounds/flap4.mp3'],
+  flapBig: ['sounds/flapbig1.mp3', 'sounds/flapbig2.mp3'],
+  seedDrop: ['sounds/seeddrop.mp3'], seedLand: ['sounds/seedland1.mp3', 'sounds/seedland2.mp3'], seedGet: ['sounds/seedget.mp3'],
+  plant: ['sounds/plant1.mp3', 'sounds/plant2.mp3'], sprout: ['sounds/sprout1.mp3', 'sounds/sprout2.mp3', 'sounds/sprout3.mp3'],
+  ripe: ['sounds/ripe.mp3'], pick: ['sounds/pick.mp3'], fruitPop: ['sounds/fruitpop1.mp3', 'sounds/fruitpop2.mp3', 'sounds/fruitpop3.mp3'],
+  mutIrradiated: ['sounds/mut_irradiated.mp3'], mutCherenkov: ['sounds/mut_cherenkov.mp3'], mutAtomic: ['sounds/mut_atomic.mp3'],
   music: ['sounds/music.mp3'],
 };
 
@@ -64,7 +72,7 @@ const FILES = {
 export const MUSIC = { start: 0.5, seconds: 24 * 4 * 60 / 84, level: 0.5 };
 
 /** The cats' voices: never replaced by a synthesised stand-in. */
-const VOICE = new Set(['meow', 'trill', 'chirp', 'purr', 'sigh', 'hello']);
+const VOICE = new Set(['meow', 'trill', 'chirp', 'purr', 'sigh', 'hello', 'squawk']);
 
 /**
  * How each family plays. The files carry the balance between families (art/day06/sounds/build_sounds.py, the
@@ -92,6 +100,11 @@ const FAM = {
   sparkle: { pitch: 0.3, level: 1, send: 0.18, cap: 2 }, shopOpen: { send: 0.12, cap: 1 }, shopClose: { send: 0.1, cap: 1 },
   lose: { send: 0.1, cap: 1 }, bombFall: { pitch: 0.4, send: 0.06, cap: 3 }, bombLand: { pitch: 0.5, level: 1, send: 0.1, cap: 2 },
   boxOpen: { pitch: 0.3, send: 0.1, cap: 2 }, atom: { send: 0.18, cap: 2 }, boom: { send: 0.08, cap: 1, gain: 0.85 },
+  squawk: { pitch: 0.6, level: 1, send: 0.14, cap: 2 }, flap: { pitch: 1, level: 1.5, send: 0.05, cap: 3 }, flapBig: { pitch: 0.6, level: 1, send: 0.08, cap: 2 },
+  seedDrop: { pitch: 0.5, send: 0.05, cap: 1 }, seedLand: { pitch: 0.8, level: 1, send: 0.05, cap: 2 }, seedGet: { pitch: 0.3, send: 0.16, cap: 2 },
+  plant: { pitch: 0.6, level: 1, send: 0.05, cap: 1 }, sprout: { pitch: 0.8, level: 1, send: 0.1, cap: 3 }, ripe: { send: 0.16, cap: 2 },
+  pick: { pitch: 0.4, send: 0.1, cap: 1 }, fruitPop: { pitch: 0.3, level: 1, send: 0.12, cap: 4 },
+  mutIrradiated: { send: 0.14, cap: 2 }, mutCherenkov: { send: 0.2, cap: 2 }, mutAtomic: { send: 0.18, cap: 2 },
 };
 
 // stand-ins while a recording loads (or if it cannot): never for a voice
@@ -103,6 +116,8 @@ const STAND_IN = {
   refill: [S.bite, 2], jingle: [S.bell, 2], token: [S.coin, 3], buy: [S.buy, 1], wear: [S.wear, 1], sparkle: [S.coin, 3],
   shopOpen: [S.shopOpen, 1], shopClose: [S.shopClose, 1], lose: [S.nope, 1], bombFall: [S.swat, 1], bombLand: [S.thud, 1],
   boxOpen: [S.click, 1], atom: [S.coin, 1], boom: [S.thud, 1],
+  flap: [S.swat, 2], flapBig: [S.swat, 1], seedDrop: [S.swat, 1], seedLand: [S.step, 2], seedGet: [S.coin, 1], plant: [S.step, 2],
+  sprout: [S.pop, 3], ripe: [S.coin, 1], pick: [S.pop, 1], fruitPop: [S.pop, 3], mutIrradiated: [S.coin, 1], mutCherenkov: [S.coin, 1], mutAtomic: [S.coin, 1],
 };
 
 /** The friend kitten's voice: the same cats, about 3.5 semitones up (and so a little shorter). */
@@ -444,6 +459,18 @@ export function createKittyAudio(o = {}) {
         case 'bomb-land': play('bombLand', 1, at()); duck(3, 0.7); break;
         case 'box-open': play('boxOpen', 1, at()); break;
         case 'boom': play('boom', 1); duck(4, 1.8); break;   // the world goes up
+        // ---- Day 7: the parrots and the garden
+        case 'squawk': play('squawk', 1, at()); break;
+        case 'flap': if (e.big) play('flapBig', 1, at()); else play('flap', 1, at()); break;
+        case 'seed-drop': play('seedDrop', 1, at()); break;
+        case 'seed-land': play('seedLand', 1, at()); break;
+        case 'seed-get': play('seedGet', 1, at()); break;
+        case 'plant': play('plant', 1, at()); break;
+        case 'sprout': play('sprout', 1, at()); break;
+        case 'ripe': play('ripe', 1, at()); break;
+        case 'pick': play('pick', 1, at()); break;
+        case 'fruit-pop': play('fruitPop', 1, at({ rate: [1, 1.122, 1.26, 1.335][Math.max(0, Math.min(3, e.k | 0))] })); break;
+        case 'mutate': play({ irradiated: 'mutIrradiated', cherenkov: 'mutCherenkov', atomic: 'mutAtomic' }[e.m] || 'mutIrradiated', 1, at()); duck(2.5, 0.8); break;
         default:
       }
     },

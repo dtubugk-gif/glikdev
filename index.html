@@ -3,18 +3,18 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Glikdev – Day 6: a friend for the kitty</title>
-  <meta name="description" content="A game built one YouTube comment at a time. Day 6: the kitty has a friend, a cream kitten that follows her about, rubs cheeks with her, eats from her bowl and naps beside her. Pet it, name it. Comment what Day 7 should add.">
+  <title>Glikdev – Day 7: parrots, seeds and atomic fruit</title>
+  <meta name="description" content="A game built one YouTube comment at a time. Day 7: parrots fly in with seeds. Plant pineapples, dragon fruit and mangosteens, and let an atom bomb land nearby to mutate them: Irradiated, Cherenkov Glow or Atomic fruit is worth more. Comment what Day 8 should add.">
   <meta name="theme-color" content="#a9cfee">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Glikdev">
-  <meta property="og:title" content="Glikdev – Day 6: a friend for the kitty">
-  <meta property="og:description" content="A game built one YouTube comment at a time. Day 6: the kitty has a friend, a cream kitten that cuddles, plays and naps with her. What should Day 7 add?">
+  <meta property="og:title" content="Glikdev – Day 7: parrots, seeds and atomic fruit">
+  <meta property="og:description" content="A game built one YouTube comment at a time. Day 7: parrots bring seeds, and atom bombs mutate what grows. What should Day 8 add?">
   <meta property="og:url" content="https://dtubugk-gif.github.io/glikdev/">
   <meta property="og:image" content="https://dtubugk-gif.github.io/glikdev/poster.jpg">
   <meta property="og:image:width" content="1440">
   <meta property="og:image:height" content="900">
-  <meta property="og:image:alt" content="A small cream kitten rubs its cheek against a big ginger tabby kitty, who purrs with her eyes shut">
+  <meta property="og:image:alt" content="A raised garden bed of pineapples, dragon fruit and mangosteen trees, some mutated deep blue, acid green and jade, with a red parrot on a wooden perch beside it">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" href="logo.svg?v=772d9102a0be" type="image/svg+xml">
   <link rel="preload" href="fonts/fredoka-700.woff2" as="font" type="font/woff2" crossorigin>
@@ -45,6 +45,9 @@
       "./src/friend.js": "./src/friend.js?v=772d9102a0be",
       "./src/friendbrain.js": "./src/friendbrain.js?v=772d9102a0be",
       "./src/fx.js": "./src/fx.js?v=772d9102a0be",
+      "./src/gardenlogic.js": "./src/gardenlogic.js?v=772d9102a0be",
+      "./src/garden.js": "./src/garden.js?v=772d9102a0be",
+      "./src/parrots.js": "./src/parrots.js?v=772d9102a0be",
       "./vendor/three/three.module.js": "./vendor/three/three.module.js?v=772d9102a0be",
       "./vendor/three/addons/loaders/GLTFLoader.js": "./vendor/three/addons/loaders/GLTFLoader.js?v=772d9102a0be",
       "./vendor/three/addons/utils/BufferGeometryUtils.js": "./vendor/three/addons/utils/BufferGeometryUtils.js?v=772d9102a0be"
@@ -62,7 +65,7 @@
     <img src="poster.jpg?v=772d9102a0be" alt="" width="1440" height="900" fetchpriority="high" decoding="async">
   </picture>
 
-  <canvas id="world" role="img" aria-label="A small person in an orange hoodie holds a fishing-rod cat toy; a blue plush fish with a pink bow hangs from its line, and a big ginger tabby kitty is running to pounce on it, on the grey baseplate"></canvas>
+  <canvas id="world" role="img" aria-label="A red parrot on a wooden perch beside a raised garden bed of pineapples, dragon fruit and mangosteen trees, some of them mutated deep blue, acid green and jade, on the pale tiled plate"></canvas>
 
   <div class="ui" id="ui">
     <header class="title">
@@ -70,9 +73,9 @@
         <img class="logo" src="logo.svg?v=772d9102a0be" alt="Glikdev" width="36" height="36">
         <span>A game built by YouTube comments</span>
       </p>
-      <h1><span class="title-day">Day 6.</span> <span class="title-line">She has a friend now.</span></h1>
+      <h1><span class="title-day">Day 7.</span> <span class="title-line">Parrots bring seeds. Bombs mutate them.</span></h1>
       <!-- static fallback; main.js rewrites the day, the headline and the bubble from the newest days.json entry -->
-      <p class="bubble">What should Day 7 add? Comment it.</p>
+      <p class="bubble">What should Day 8 add? Comment it.</p>
     </header>
 
     <p class="status" id="status" role="status" aria-live="polite">Loading the world…</p>
@@ -132,6 +135,11 @@
   <button class="chip tokens atoms" id="atoms" type="button" aria-haspopup="dialog" aria-controls="catpick" aria-label="Atom tokens: 0. See the fur skins" hidden>
     <img id="atoms-icon" src="models/shop/atomtoken.webp?v=772d9102a0be" alt="" width="34" height="34">
     <span class="tokens-count" id="atoms-count">0</span>
+  </button>
+  <!-- Day 7: the seed bag (the parrots bring the seeds); tap to see what you have -->
+  <button class="chip tokens seeds" id="seeds" type="button" aria-haspopup="dialog" aria-controls="seedbag" aria-label="Seeds: 0. Open the seed bag" hidden>
+    <img id="seeds-icon" src="models/garden/thumb_seed_dragonfruit.webp?v=772d9102a0be" alt="" width="34" height="34">
+    <span class="tokens-count" id="seeds-count">0</span>
   </button>
 
   <!-- her name, floating over her head; tap it to rename her -->
@@ -208,6 +216,28 @@
       <p class="cat-credits">Idea by @Kowffe. Every toy and outfit was made in Blender for Day&nbsp;3. The fish on a stick is Day&nbsp;4’s, an idea by @Darkbacon155.</p>
       <div class="namer-actions">
         <button class="chip" type="button" id="shop-close">Done</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog class="namer shop seedbag" id="seedbag" aria-labelledby="seedbag-title">
+    <div class="namer-card">
+      <h2 id="seedbag-title">Seed bag</h2>
+      <p class="namer-sub" id="seedbag-sub">Parrots bring the seeds: walk over to the perch when one lands.</p>
+      <div class="shop-grid seed-grid" id="seedbag-grid" role="group" aria-labelledby="seedbag-title"></div>
+      <p class="cat-status" id="seedbag-status" role="status" aria-live="polite"></p>
+      <div class="mutations" aria-label="Mutations">
+        <h3 class="shop-sub">Mutations</h3>
+        <p class="namer-sub">An atom bomb that lands near a plant mutates it. Stand by your plants when one comes, then step out of the ring.</p>
+        <ul class="mutation-list">
+          <li><img src="models/garden/thumb_fruit_pineapple_irradiated.webp?v=772d9102a0be" alt="" width="56" height="56"><span><b>Irradiated</b> fruit is worth ×2</span></li>
+          <li><img src="models/garden/thumb_fruit_pineapple_cherenkov.webp?v=772d9102a0be" alt="" width="56" height="56"><span><b>Cherenkov Glow</b> fruit is worth ×3</span></li>
+          <li><img src="models/garden/thumb_fruit_pineapple_atomic.webp?v=772d9102a0be" alt="" width="56" height="56"><span><b>Atomic</b> fruit is worth ×5, plus an atom token</span></li>
+        </ul>
+      </div>
+      <p class="cat-credits">Idea by @elenaabrosimova1968. The parrot, the garden and every plant were made in Blender for Day&nbsp;7.</p>
+      <div class="namer-actions">
+        <button class="chip" type="button" id="seedbag-close">Done</button>
       </div>
     </div>
   </dialog>

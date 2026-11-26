@@ -235,8 +235,7 @@ test('the page knows about Day 6: her friend', () => {
   for (const m of ['friend', 'friendbrain', 'fx']) assert.ok(new RegExp(`"\\./src/${m}\\.js": "\\./src/${m}\\.js\\?v=`).test(html), `${m}.js is in the import map`);
   assert.ok(/id="ftag"/.test(html));
   const days = JSON.parse(readFileSync(join(GAME, 'days.json'), 'utf8'));
-  const last = days[days.length - 1];
-  assert.equal(last.day, 6);
-  assert.equal(last.by, '2warp-e8u');
-  assert.ok(html.includes('Day 6'));
+  const day6 = days.find((d) => d.day === 6);
+  assert.equal(day6.by, '2warp-e8u');
+  // (the newest day is Day 7 now: see garden.test.mjs)
 });

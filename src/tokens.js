@@ -58,6 +58,10 @@ export const SKINS = [
 ];
 export const skinById = (id) => SKINS.find((k) => k.id === id) || null;
 
+// Day 7 (idea by @elenaabrosimova1968): seeds the parrots bring, kept in a seed bag (gardenlogic.js FRUITS)
+export const SEED_IDS = ['pineapple', 'dragonfruit', 'mangosteen'];
+export const MAX_SEEDS = 99;
+
 export const CALL_COOLDOWN = 20;
 export const MAX_TOKENS = 9999;
 
@@ -116,6 +120,8 @@ export function createWallet(saved = null) {
   let earned = Math.max(tokens, int(s.earned));
   let atoms = int(s.atoms);
   const skins = new Set((Array.isArray(s.skins) ? s.skins : []).filter((id) => skinById(id)));
+  const seeds = {};
+  for (const id of SEED_IDS) { const v = s.seeds && typeof s.seeds === 'object' ? Number(s.seeds[id]) : 0; seeds[id] = Number.isFinite(v) ? Math.max(0, Math.min(MAX_SEEDS, Math.floor(v))) : 0; }
   const given = new Set(Array.isArray(s.gifts) ? s.gifts : []);
   const owned = new Set((Array.isArray(s.owned) ? s.owned : []).filter((id) => itemById(id) && !given.has(id)));
   const wearing = {};
@@ -149,6 +155,12 @@ export function createWallet(saved = null) {
     get atoms() { return atoms; },
     earnAtoms(n) { const k = int(n); atoms = Math.min(MAX_TOKENS, atoms + k); return k; },
     ownsSkin: (id) => skins.has(id),
+    /** the seed bag (Day 7): how many of one kind, and of all */
+    seeds: (id) => (SEED_IDS.includes(id) ? seeds[id] : 0),
+    get seedTotal() { return SEED_IDS.reduce((n, id) => n + seeds[id], 0); },
+    addSeed(id, n = 1) { if (!SEED_IDS.includes(id)) return 0; const k = Math.max(0, Math.min(MAX_SEEDS - seeds[id], int(n))); seeds[id] += k; return k; },
+    /** takes one seed out of the bag to plant it; false when there is none */
+    useSeed(id) { if (!SEED_IDS.includes(id) || seeds[id] < 1) return false; seeds[id]--; return true; },
     canBuySkin: (id) => { const k = skinById(id); return !!k && !skins.has(id) && atoms >= k.price; },
     /** buys a fur skin with atom tokens; false when it is unknown, already hers or too dear */
     buySkin(id) {
@@ -179,6 +191,6 @@ export function createWallet(saved = null) {
       wearing[slot] = null;
       return true;
     },
-    toJSON: () => ({ tokens, earned, owned: [...owned], wearing: { ...wearing }, atoms, skins: [...skins] }),
+    toJSON: () => ({ tokens, earned, owned: [...owned], wearing: { ...wearing }, atoms, skins: [...skins], seeds: { ...seeds } }),
   };
 }

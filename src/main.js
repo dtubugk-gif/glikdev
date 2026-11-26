@@ -18,6 +18,7 @@ import { DEMOS, demoPose, KITTY_DEMOS } from './demo.js';
 import { createWallet, rewardFor, penaltyFor, ITEMS, NEW_ITEM, itemById, SKINS, skinById, ATOM_BOX } from './tokens.js';
 import { createMind, sayWhy, describeMind } from './kittymind.js';
 import { emoteSVG } from './emotes.js';
+import { createPlots, FRUITS, fruitById, mutationById, PARROT, GARDEN, seedFor } from './gardenlogic.js';
 
 // Set this to the channel's URL once it exists (for example 'https://www.youtube.com/@glikdev').
 const CHANNEL_URL = 'https://www.youtube.com/@glikdev';
@@ -330,6 +331,7 @@ async function start() {
         if (friend && fd) list.push([friend.brain.x, 0.3, friend.brain.z]);
         if (wand?.fish?.visible) list.push(wand.fish.getWorldPosition(fishAt).toArray());
         if (atomBox && demo && demo.startsWith('atom')) list.push(...atomBox.subjects());
+        if (demo && (demo.startsWith('garden') || demo.startsWith('parrot'))) { if (garden) list.push(...garden.subjects()); if (parrots) list.push(...parrots.subjects()); }
         if (blast?.dead(kitty.t)) return [blast.ghostAt(kitty.t)];     // you are a ghost: the lens is on it
       } catch { /* not made yet */ }
       return list;
@@ -382,14 +384,18 @@ async function start() {
   if (!live) await boxing;
   if (!live) await building;                               // recordings: it is there from the first frame
   if (!live) await bedding;
+  // Day 7 (idea by @elenaabrosimova1968): the garden and the parrots' perch (the garden itself loads further down)
+  let gardenMod = null;
+  if (kitty) try { gardenMod = await import('./garden.js'); } catch (err) { console.warn('Glikdev: the garden did not load', err); }
   if (kitty && (live || pd)) {
     try {
       const { createPlayer, PLAYER } = await import('./player.js');
       PLAYER_EYE = PLAYER.eye;
       player = await createPlayer({ scene: world.scene, url: stamped('models/player.glb'),
         start: pd ? pd.start : (params.get('view') === 'first' ? { x: 6, z: 17.5, heading: Math.atan2(-6, -17.5) } : { x: 7.5, z: 7, heading: home.az }),
-        boxes: town ? [town.SHOP_BOX] : [],
+        boxes: [...(town ? [town.SHOP_BOX] : []), ...(gardenMod ? [gardenMod.BED_BOX] : [])],
         circles: [() => ({ x: kitty.brain.x, z: kitty.brain.z, r: 2.8 }), ...(town ? [() => town.BED_CIRCLE] : []),
+          ...(gardenMod ? [() => gardenMod.PERCH_CIRCLE] : []),
           () => (friend ? friend.circle() : { x: 0, z: 0, r: 0 }),
           ...[0, 1, 2].map((i) => () => (atomBox ? atomBox.circle(i) : { x: 0, z: 0, r: 0 }))],
         script: pd ? pd.script || [] : null,
@@ -441,7 +447,7 @@ async function start() {
         bowl: b.bowl ? { x: b.bowl.x, z: b.bowl.z, eatenAt: b.bowl.eatenAt } : null },
       player: player ? { x: player.x, z: player.z } : null,
       bed: town && bedThing ? town.BED_SPOT : null,
-      keepOut: town ? (x, z) => { const p = town.outOfShop(x, z, 10); return [p.x, p.z]; } : null,
+      keepOut: town || gardenMod ? (x, z) => { let p = town ? town.outOfShop(x, z, 10) : { x, z }; if (gardenMod) p = gardenMod.outOfGarden(p.x, p.z, 4); return [p.x, p.z]; } : null,
     };
   };
   const friending = kitty && (live || fd) ? (async () => {
@@ -499,13 +505,14 @@ async function start() {
   let wantShop = false, shopArmed = true, openShop = () => {}, repaintShop = () => {};
   /** you walk there; she comes along (unless she is busy), to a spot beside where you are going */
   function walkTo(x, z) {
-    wantShop = false; wantBox = -1;
+    wantShop = false; wantBox = -1; wantGarden = null; wantParrot = false; wantPacket = -1;
     player.goTo(x, z);
     const b = kitty.brain;
     if (kittyBusy() || Math.hypot(x - b.x, z - b.z) < 13) return;
     const dx = x - player.x, dz = z - player.z, d = Math.hypot(dx, dz) || 1;
     const spot = { x: x - (dz / d) * 5.5 - (dx / d) * 2, z: z + (dx / d) * 5.5 - (dz / d) * 2 };
-    const p = town ? town.outOfShop(spot.x, spot.z) : spot;
+    const p0 = town ? town.outOfShop(spot.x, spot.z) : spot;
+    const p = gardenMod ? gardenMod.outOfGarden(p0.x, p0.z) : p0;
     kitty.call(p.x, p.z, { quiet: true });               // she may come along, or not: it is up to her
   }
   /** Day 6: you tapped a cat that is close by: you crouch and stroke it */
@@ -536,6 +543,7 @@ async function start() {
     const keep = [{ x: kitty.brain.x, z: kitty.brain.z, r: 6 }];
     if (town) keep.push({ x: town.SHOP_BOX.x, z: town.SHOP_BOX.z, r: 15 }, { x: town.BED_CIRCLE.x, z: town.BED_CIRCLE.z, r: town.BED_CIRCLE.r + 4 });
     for (const i of [0, 1, 2]) { const c = atomBox.circle(i); if (c.r) keep.push({ x: c.x, z: c.z, r: 7.5 }); }
+    if (gardenMod) keep.push(...gardenMod.KEEP_OUT);
     const p = atomMod.landSpot(player.x, player.z, keep);
     if (!atomBox.drop(t, p.x, p.z)) return false;
     dropped++;
@@ -677,13 +685,15 @@ async function start() {
     // bombs land (on you, or beside you: then a box is there), boxes come and go
     for (const ev of atomBox ? atomBox.update(t, player ? { x: player.x, z: player.z } : null) : []) {
       audio?.event({ type: 'bomb-land' });
+      const mutated = onBlast(ev);                         // Day 7: plants close by may mutate (that news wins over the box tip)
       if (ev.hit) {
         bonkAt = ev.t;
         // it got you: the whole world goes up (the kitty, the shop, her bed, the boxes, the plate itself)
         if (blast && player) {
           blast.start(ev.t, ev.x, ev.z, player.x, player.z, [
             { obj: world.model, plate: true }, { obj: kitty.root, live: true }, { obj: atomBox.group }, friend ? { obj: friend.root, live: true } : null,
-            store ? { obj: store.group } : null, bedThing ? { obj: bedThing.group } : null]);
+            store ? { obj: store.group } : null, bedThing ? { obj: bedThing.group } : null,
+            ...(garden ? garden.throwables() : []), parrots ? { obj: parrots.perch } : null]);
           player.stop();
           wantBox = -1; wantShop = false;
           audio?.event({ type: 'boom' });
@@ -692,7 +702,7 @@ async function start() {
           audio?.event({ type: 'nope' });
           if (live) flashHint('Bonk! It got you, so no box this time. Step out of the dark ring before it lands', 6000);
         }
-      } else if (live && ev.box >= 0 && wallet.atoms === 0 && !SKINS.some((k) => wallet.ownsSkin(k.id))) {
+      } else if (live && !mutated && ev.box >= 0 && wallet.atoms === 0 && !SKINS.some((k) => wallet.ownsSkin(k.id))) {
         flashHint(coarse ? 'You dodged it! Tap the box it left behind' : 'You dodged it! Click the box it left behind', 7000);
       }
     }
@@ -781,11 +791,352 @@ async function start() {
     }
   }
 
+  // ------------------------------------------------------------ the garden and the parrots (Day 7, idea by @elenaabrosimova1968)
+  // "Parrots? Yes they give you seeds: pineapple, pitahaya and mangosteen. Also they have special mutations if a nuke
+  // explodes nearby its plant: irradiated, cherenkov glow, atomic." A parrot flies in to the perch by the garden with a
+  // seed; walk over and it drops it for you; plant it; it grows and fruits; pick it for friendship tokens. An atom
+  // bomb that lands near a plant mutates it, and mutated fruit is worth more (Atomic: an atom token too).
+  // gardenlogic.js decides, garden.js and parrots.js draw. What grows is kept on this device.
+  const GARDEN_KEY = 'glikdev.garden.v1';
+  const gd = kd ? kd.garden : null;                         // a recording's garden: what grows, how fast
+  let plots = null, garden = null, parrots = null, seedFX = {}, nextParrot = null;
+  let wantGarden = null, wantParrot = false, wantPacket = -1, gardenDue = [], forcedMutations = [], picks = {};
+  const toldGarden = {};                                    // the first time of each thing: say what it means
+  const loadGarden = () => { try { const d = JSON.parse(localStorage.getItem(GARDEN_KEY) || 'null'); return d && typeof d === 'object' ? d : null; } catch { return null; } };
+  const savedGarden = live ? loadGarden() : null;
+  if (savedGarden?.told && typeof savedGarden.told === 'object') Object.assign(toldGarden, savedGarden.told);
+  /** what the garden starts with: the recording's, or what was growing here last time (it grew on while you were away, up to an hour) */
+  function gardenStart() {
+    if (gd) return gd.plots ? { plots: gd.plots, visits: gd.visits ?? 0 } : null;
+    if (!savedGarden) return null;
+    const away = Math.max(0, Math.min(3600, (Date.now() - (Number(savedGarden.at) || Date.now())) / 1000));
+    return { ...savedGarden, plots: (Array.isArray(savedGarden.plots) ? savedGarden.plots : []).map((p) => (p && typeof p === 'object' ? { ...p, age: (Number(p.age) || 0) + away } : null)) };
+  }
+  function saveGarden() {
+    if (!live || !plots || !kitty) return;
+    try { localStorage.setItem(GARDEN_KEY, JSON.stringify({ ...plots.toJSON(kitty.t), at: Date.now(), told: toldGarden })); } catch { /* private mode: fine */ }
+  }
+  const tellOnce = (key, text, ms = 7000) => { if (!live || toldGarden[key]) return false; toldGarden[key] = 1; flashHint(text, ms); saveGarden(); return true; };
+  const gardening = kitty && gardenMod ? (async () => {
+    try {
+      plots = createPlots(gardenStart(), kitty.t, GARDEN.plots, gd?.rate ?? 1, live ? (Math.random() * 1e6) | 0 : 1);
+      garden = await gardenMod.createGarden({ scene: world.scene, url: stamped('models/garden.glb'), infoUrl: stamped('models/garden.json'), texUrl: stamped, renderer, plots, preload: !live });
+      const [{ createParrots }, { createTokenFX }] = await Promise.all([import('./parrots.js'), import('./outfits.js')]);
+      parrots = await createParrots({ scene: world.scene, url: stamped('models/parrot.glb'), infoUrl: stamped('models/parrot.json'), perchUrl: stamped('models/perch.glb'),
+        renderer, perchAt: gardenMod.PERCH_AT, packets: garden.packets });
+      for (const f of FRUITS) if (garden.packets[f.id]) seedFX[f.id] = createTokenFX({ scene: world.scene, camera, token: garden.packets[f.id] });
+    } catch (err) { console.warn('Glikdev: the garden or the parrots did not load', err); garden = null; parrots = null; }
+  })() : null;
+  if (!live) await gardening;
+  // the seed bag's counter (beside the atom tokens)
+  const seedsEl = $('seeds'), seedsCount = $('seeds-count'), seedsIcon = $('seeds-icon');
+  const filmSeeds = params.get('seeds') === '1';
+  const showSeeds = !!kitty && !!gardenMod && (filmSeeds || (showUI && !demo && !short));
+  if (showSeeds) { seedsEl.hidden = false; root.classList.add('has-seeds'); if (filmSeeds && (!showUI || short)) seedsEl.classList.add('is-filmed'); }
+  let shownSeeds = null, seedBumpAt = -10, seedRight = -1;
+  const seedHud = { x: 0, y: 0 }, gv = new THREE.Vector3();
+  const playAt = (e, x, y, z) => {                          // a sound from a place in the world: quieter far off, panned where it is
+    if (!audio) return;
+    gv.set(x, y, z);
+    const d = camera.position.distanceTo(gv);
+    gv.project(camera);
+    audio.event(e, Math.max(0, Math.min(1, (90 - d) / 60)), gv.z < 1 ? Math.max(-1, Math.min(1, gv.x)) * 0.7 : 0);
+  };
+  const perchFront = () => { const P = gardenMod.PERCH_AT; return { x: P.x + Math.sin(P.rot) * 6.5, z: P.z + Math.cos(P.rot) * 6.5 }; };
+
+  /** a parrot sets off for the perch with the next seed in turn */
+  function sendParrot(t, seed = null) {
+    if (!parrots || !plots) return false;
+    const id = seed || seedFor(plots.visits);
+    if (!parrots.send(t, id)) return false;
+    if (!seed) plots.visits++;
+    saveGarden();
+    return true;
+  }
+  /** you pick up packet i: the seed flies into your bag */
+  function collectPacket(i, t = kitty.t) {
+    const got = parrots?.pickUp(i, t);
+    if (!got) return;
+    wallet.addSeed(got.id);
+    seedFX[got.id]?.spawn(t, gv.set(got.x, got.y + 0.8, got.z), 1);
+    playAt({ type: 'seed-get' }, got.x, 1, got.z);
+    if (live) {
+      saveWallet(wallet);
+      const f = fruitById(got.id);
+      if (!tellOnce('seed', `A ${f.name.toLowerCase()} seed! ${coarse ? 'Tap' : 'Click'} a soil patch in the garden to plant it`, 8000)) flashHint(`+1 ${f.name.toLowerCase()} seed`, 2400);
+    }
+  }
+  /** you tapped the parrot: off to stand in front of its perch (it gives you the seed when you are close) */
+  function tapParrot() {
+    if (!player) { parrots?.give(kitty.t); return; }
+    const f = perchFront();
+    wantShop = false; wantBox = -1; wantGarden = null; wantPacket = -1;
+    player.goTo(f.x, f.z);
+    wantParrot = true;
+    flashHint('Off to the parrot!', 2400);
+  }
+  function tapPacket(i) {
+    const g = parrots?.lying(kitty.t).find((p) => p.i === i);
+    if (!g) return;
+    if (!player || Math.hypot(player.x - g.x, player.z - g.z) < 7) { collectPacket(i); return; }
+    wantShop = false; wantBox = -1; wantGarden = null; wantParrot = false;
+    player.goTo(g.x, g.z);
+    wantPacket = i;
+  }
+  /** you tapped plot i: plant there (choose a seed), pick it when it is ripe, or see how it is getting on */
+  function tapPlot(i) {
+    const t = kitty.t, p = plots.at(i);
+    if (!p) {
+      if (!wallet.seedTotal) {
+        audio?.event({ type: 'ui-bad' });
+        flashHint(parrots?.visit ? 'No seeds yet. A parrot is bringing one: walk over to its perch' : 'No seeds yet. Parrots bring them: wait by the perch next to the garden', 5000);
+        return;
+      }
+      openSeeds(i);
+      return;
+    }
+    if (plots.ripe(i, t)) { goTend(i, 'pick'); return; }
+    const f = fruitById(p.fruit), m = mutationById(p.mutation), left = Math.ceil(plots.ripeIn(i, t));
+    if (m) garden.showLabel(i, t);
+    flashHint(`${m ? `${m.name} ` : ''}${f.name.toLowerCase()}: ripe in ${left} s${m ? `, worth ×${m.mult}` : ' · Get an atom bomb to land near it and it mutates'}`, 4500);
+  }
+  /** walk over to plot i to plant it or to pick it */
+  function goTend(i, kind, fruit = null) {
+    const stand = gardenMod.standFor(garden.where(i));
+    wantShop = false; wantBox = -1; wantParrot = false; wantPacket = -1;
+    if (!player) { gardenDue.push({ t: kitty.t, i, kind, fruit }); return; }
+    wantGarden = { i, kind, fruit, x: stand.x, z: stand.z };
+    if (Math.hypot(player.x - stand.x, player.z - stand.z) < 2.5) return;   // (step() starts it on the next frame)
+    player.goTo(stand.x, stand.z);
+  }
+  /** you are there: you crouch over it, and a moment later it is planted (or picked) */
+  function tend(w, t) {
+    const at = garden.where(w.i);
+    player?.stop();
+    player?.faceTo(at.x, at.z);
+    player?.petAt(at.x, at.z);
+    gardenDue.push({ t: t + 0.42, i: w.i, kind: w.kind, fruit: w.fruit });
+  }
+  function doTend(d) {
+    const at = garden.where(d.i);
+    if (d.kind === 'plant') {
+      if (!plots.isEmpty(d.i) || (live && !wallet.useSeed(d.fruit))) return;
+      if (!live && wallet.seeds(d.fruit) > 0) wallet.useSeed(d.fruit);
+      plots.plant(d.i, d.fruit, d.t);
+      fx?.dust(d.t, at.x, at.z, 1.0, 6);
+      playAt({ type: 'plant' }, at.x, 1, at.z);
+      if (live) {
+        saveWallet(wallet); saveGarden();
+        if (!tellOnce('planted', 'Planted! It grows by itself. Want it mutated? Stand near it when an atom bomb comes, then dodge', 9000))
+          flashHint(`${fruitById(d.fruit).name} planted`, 2200);
+      }
+      return;
+    }
+    const r = plots.harvest(d.i, d.t);
+    if (!r) return;
+    garden.picked(d.i, d.t, r.fruit, r.mutation);
+    const n = Math.max(1, fruitById(r.fruit).fruit);
+    picks[d.i] = { tokens: r.tokens, atoms: r.atoms, n, left: r.tokens };   // (each fruit pays as it pops off: paintGarden)
+    playAt({ type: 'pick' }, at.x, 2, at.z);
+    if (live) {
+      saveGarden();
+      const m = mutationById(r.mutation), f = fruitById(r.fruit);
+      const what = `${m ? `${m.name} ${f.name.toLowerCase()}` : f.name}${n > 1 ? 's' : ''}`;
+      flashHint(`${what} picked: +${r.tokens} tokens${r.atoms ? ' and an atom token!' : ''}`, 4500);
+    }
+  }
+  /** an atom bomb landed at ev.x, ev.z: every plant close enough may mutate */
+  function onBlast(ev) {
+    if (!plots || !garden) return 0;
+    let changed;
+    const forced = forcedMutations.find((f) => Math.abs(f.at - ev.t) < 0.05);
+    if (forced) { changed = []; for (const [i, m] of forced.list) if (plots.setMutation(i, m, ev.t)) changed.push({ i, mutation: m }); }
+    else if (demo) changed = [];                             // (recordings only change what their script says)
+    else changed = plots.blast(ev.x, ev.z, ev.t, garden.where);
+    let near = false;
+    for (let i = 0; i < plots.size; i++) if (plots.at(i) && Math.hypot(garden.where(i).x - ev.x, garden.where(i).z - ev.z) < GARDEN.reach + 2) near = true;
+    if (near || changed.length) garden.wave(ev.t, ev.x, ev.z);
+    changed.forEach((c, k) => {
+      const at = garden.where(c.i), m = mutationById(c.mutation);
+      fx?.sparkle(ev.t + 0.12 + k * 0.08, at.x, 4.2, at.z, 10, 3.4);
+      audio?.event({ type: 'mutate', m: c.mutation, delay: 0.1 + k * 0.12 });
+      if (live && k === 0) flashHint(`It mutated! ${m.name} ${fruitById(plots.at(c.i).fruit).name.toLowerCase()}: its fruit is worth ×${m.mult}${m.atoms ? ', and an atom token' : ''}`, 7000);
+    });
+    if (live && changed.length) saveGarden();
+    return changed.length;
+  }
+
+  // the seed bag window: choose what to plant (from a soil patch), or just look at what you have (from the counter)
+  const seedDlg = $('seedbag'), seedGrid = $('seedbag-grid'), seedSub = $('seedbag-sub'), seedStatus = $('seedbag-status');
+  let plantingAt = -1;
+  const seedCards = FRUITS.map((f) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'shop-card seed-card'; b.dataset.fruit = f.id;
+    const img = document.createElement('img');
+    img.src = stamped(`models/garden/thumb_seed_${f.id}.webp`); img.alt = ''; img.width = 256; img.height = 256; img.decoding = 'async';
+    const name = document.createElement('span'); name.className = 'shop-name'; name.textContent = f.name;
+    const worth = document.createElement('span'); worth.className = 'seed-worth';
+    worth.textContent = `${f.fruit} fruit · ${f.fruit * f.each} tokens`;
+    const tag = document.createElement('span'); tag.className = 'shop-tag';
+    b.append(img, name, worth, tag);
+    seedGrid?.append(b);
+    return { f, b, tag };
+  });
+  function paintSeeds() {
+    for (const { f, b, tag } of seedCards) {
+      const n = wallet.seeds(f.id);
+      tag.textContent = `×${n}`;
+      b.dataset.state = n > 0 ? (plantingAt >= 0 ? 'buy' : 'owned') : 'dear';
+      b.setAttribute('aria-label', `${f.name} seeds: ${n}${plantingAt >= 0 && n > 0 ? '. Plant one' : ''}`);
+    }
+  }
+  function openSeeds(i = -1) {
+    if (!seedDlg) return;
+    plantingAt = i;
+    $('seedbag-title').textContent = i >= 0 ? 'Plant a seed' : 'Seed bag';
+    seedSub.textContent = i >= 0 ? 'Pick a seed for this patch. It grows by itself; mutated fruit is worth more.'
+      : `Parrots bring the seeds: walk over to the perch when one lands. ${coarse ? 'Tap' : 'Click'} a soil patch in the garden to plant.`;
+    seedStatus.textContent = '';
+    paintSeeds();
+    if (typeof seedDlg.showModal === 'function') seedDlg.showModal(); else seedDlg.setAttribute('open', '');
+    audio?.unlock();
+  }
+  seedGrid?.addEventListener('click', (e) => {
+    const card = e.target.closest('.seed-card');
+    if (!card) return;
+    const f = fruitById(card.dataset.fruit);
+    if (plantingAt < 0) { seedStatus.textContent = `${coarse ? 'Tap' : 'Click'} a soil patch in the garden to plant your ${f.name.toLowerCase()} seed.`; return; }
+    if (wallet.seeds(f.id) < 1) { audio?.event({ type: 'nope' }); seedStatus.textContent = `No ${f.name.toLowerCase()} seeds yet. The parrots bring them in turn.`; return; }
+    const i = plantingAt;
+    seedDlg.close();
+    goTend(i, 'plant', f.id);
+  });
+  $('seedbag-close')?.addEventListener('click', () => seedDlg.close());
+  seedDlg?.addEventListener('click', (e) => { if (e.target === seedDlg) seedDlg.close(); });
+  seedsEl?.addEventListener('click', () => openSeeds(-1));
+
+  /** every frame (live play): the parrots come and go, they give you their seeds, you tend what you walked to */
+  function gardenStep(t) {
+    if (!parrots || !plots || !player || !live || blast?.dead(t)) return;
+    const calm = !document.querySelector('dialog[open]');
+    if (nextParrot == null) nextParrot = t + PARROT.first;
+    if (!parrots.visit && t >= nextParrot) nextParrot = calm && parrots.lying(t).length < 3 && sendParrot(t) ? Infinity : t + 3;
+    if (parrots.waiting(t)) {
+      const P = gardenMod.PERCH_AT, d = Math.hypot(player.x - P.x, player.z - P.z);
+      if (d < PARROT.near || (wantParrot && d < PARROT.near + 6) || t - parrots.perchedAt > PARROT.wait) {
+        if (parrots.give(t)) {
+          if (wantParrot || !player.walker.target) { const D = parrots.dropSpot; player.goTo(D.x + (player.x - D.x) * 0.25, D.z + (player.z - D.z) * 0.25); }   // over to where it lands
+          wantParrot = false;
+        }
+      }
+    }
+    for (const g of parrots.lying(t)) {
+      if (!g.ready) continue;
+      if (Math.hypot(player.x - g.x, player.z - g.z) < 7.5 || (wantPacket === g.i && Math.hypot(player.x - g.x, player.z - g.z) < 9)) { if (wantPacket === g.i) wantPacket = -1; collectPacket(g.i, t); }
+    }
+    if (wantGarden) {
+      const w = wantGarden, d = Math.hypot(player.x - w.x, player.z - w.z);
+      const p = plots.at(w.i);
+      if ((w.kind === 'plant' && p) || (w.kind === 'pick' && !plots.ripe(w.i, t))) wantGarden = null;
+      else if (d < 2.6 || (!player.walker.target && d < 9)) { wantGarden = null; tend(w, t); }
+    }
+  }
+  /** every frame: the garden and the parrots draw, and what they did makes its sounds and pays out */
+  function paintGarden(t) {
+    while (gardenDue.length && t >= gardenDue[0].t) doTend(gardenDue.shift());
+    if (garden) {
+      for (const e of garden.update(t, camera)) {
+        const at = garden.where(e.i);
+        if (e.type === 'grow') { playAt({ type: 'sprout' }, at.x, 1, at.z); fx?.sparkle(t, at.x, 2.2, at.z, 4, 1.8); }
+        if (e.type === 'ripe') {
+          playAt({ type: 'ripe' }, at.x, 3, at.z);
+          fx?.sparkle(t, at.x, 4.5, at.z, 8, 3);
+          tellOnce('ripe', `Your ${fruitById(e.fruit).name.toLowerCase()} is ripe! ${coarse ? 'Tap' : 'Click'} it to pick it`, 7000);
+        }
+        if (e.type === 'fruit-pop') {
+          const pk = picks[e.i];
+          if (!pk) continue;
+          const last = e.n >= pk.n - 1, share = last ? pk.left : Math.round(pk.tokens / pk.n);
+          pk.left -= share;
+          const from = garden.fruitAt(e.i, gv);
+          if (share > 0) { wallet.earn(share); tokenFX?.spawn(e.t, from, Math.min(5, share)); }
+          fx?.sparkle(e.t, from.x, from.y, from.z, 5, 2.2);
+          playAt({ type: 'fruit-pop', k: e.n }, at.x, 4, at.z);
+          if (last && pk.atoms) { wallet.earnAtoms(pk.atoms); atomFX?.spawn(e.t + 0.15, from, pk.atoms); audio?.event({ type: 'atom', delay: 0.15 }); }
+          if (last) { delete picks[e.i]; repaintShop(); repaintCats(); if (live) saveWallet(wallet); }
+        }
+      }
+    }
+    if (parrots) {
+      for (const e of parrots.update(t)) {
+        const P = gardenMod.PERCH_AT;
+        if (e.type === 'squawk') playAt({ type: 'squawk' }, P.x, 6, P.z);
+        else if (e.type === 'flap') playAt({ type: 'flap' }, e.x, e.y, e.z);
+        else if (e.type === 'parrot-in') tellOnce('parrot', 'A parrot is coming with a seed! It lands on the perch by the garden', 7000);
+        else if (e.type === 'parrot-land') playAt({ type: 'flap', big: true }, P.x, 6, P.z);
+        else if (e.type === 'parrot-perch') tellOnce('perch', `The parrot is waiting by the garden. Walk over to it${coarse ? ' (or tap it)' : ''}`, 7000);
+        else if (e.type === 'parrot-off') playAt({ type: 'flap', big: true }, P.x, 6, P.z);
+        else if (e.type === 'packet-drop') playAt({ type: 'seed-drop' }, P.x, 5, P.z);
+        else if (e.type === 'packet-land') { playAt({ type: 'seed-land' }, e.x, 0.5, e.z); fx?.dust(e.t, e.x, e.z, 0.6, 4); }
+        else if (e.type === 'parrot-gone') nextParrot = t + PARROT.every;
+      }
+    }
+    // the seed counter: what has landed in the bag (packets still flying are not counted yet); it bumps as each lands
+    let hud = null;
+    if (showSeeds) {
+      const r = seedsIcon.getBoundingClientRect();
+      if (r.width) { seedHud.x = ((r.left + r.width / 2) / innerWidth) * 2 - 1; seedHud.y = 1 - ((r.top + r.height / 2) / innerHeight) * 2; hud = seedHud; }
+    }
+    let flying = 0;
+    for (const f of Object.values(seedFX)) flying += f.update(t, hud);
+    if (!showSeeds) return;
+    const n = Math.max(0, wallet.seedTotal - flying);
+    if (n !== shownSeeds) {
+      if (shownSeeds !== null && n > shownSeeds) seedBumpAt = t;
+      shownSeeds = n;
+      seedsCount.textContent = String(n);
+      seedsEl.setAttribute('aria-label', `Seeds: ${n}. Open the seed bag`);
+      if (seedDlg?.open) paintSeeds();
+    }
+    // on the left of the atom tokens, however wide their numbers are
+    if (showAtoms && !seedsEl.classList.contains('is-filmed')) {
+      const r = Math.round(innerWidth - atomsEl.getBoundingClientRect().left + 8);
+      if (r !== seedRight && r > 0) { seedRight = r; seedsEl.style.right = `${r}px`; }
+    }
+    const a = (t - seedBumpAt) / 0.32;
+    seedsIcon.style.transform = a >= 0 && a < 1 ? `scale(${(1 + 0.34 * Math.sin(a * Math.PI)).toFixed(3)})` : '';
+  }
+  // recordings: what the script says happens in the garden
+  if (kitty) kitty.on((e) => {
+    if (e.type === 'reset') {
+      plots?.load(gardenStart(), 0); garden?.reset(); parrots?.reset();
+      for (const f of Object.values(seedFX)) f.reset();
+      gardenDue = []; forcedMutations = []; picks = {}; wantGarden = null; wantParrot = false; wantPacket = -1; nextParrot = null;
+      return;
+    }
+    if (e.type !== 'script') return;
+    const w = e.what;
+    if (w.type === 'bomb' && w.mutate) forcedMutations.push({ at: e.t + ATOM_BOX.fall, list: w.mutate });
+    if (w.type === 'parrot') sendParrot(e.t - (w.early || 0), w.seed || 'pineapple');   // early: it set off before the film starts
+    if (w.type === 'give') parrots?.give(e.t);
+    if (w.type === 'pickup') { const g = parrots?.lying(e.t)[0]; if (g) collectPacket(g.i, e.t); }
+    if (w.type === 'plant' || w.type === 'pick') { if (w.type === 'plant' && w.fruit) wallet.addSeed(w.fruit); gardenDue.push({ t: e.t + (w.now ? 0 : 0.42), i: w.i, kind: w.type, fruit: w.fruit }); }
+    if (w.type === 'mutate') {                               // straight onto the plant, with its wave and sparkle
+      if (plots?.setMutation(w.i, w.m, e.t) && garden) {
+        const at = garden.where(w.i);
+        garden.wave(e.t, at.x + 6, at.z + 6);
+        fx?.sparkle(e.t + 0.12, at.x, 4.2, at.z, 10, 3.4);
+        audio?.event({ type: 'mutate', m: w.m });
+      }
+    }
+  });
+
   const kittyState = () => {
     const b = kitty.brain, h = kitty.headPosition();
     return { x: b.x, z: b.z, heading: b.heading, head: [h.x, h.y, h.z],
       bowl: b.bowl ? { x: b.bowl.x, z: b.bowl.z } : null, yarn: b.yarn ? { x: b.yarn.x, y: b.yarn.y, z: b.yarn.z } : null,
       player: player ? { x: player.x, z: player.z } : null,
+      parrot: parrots?.bird.visible ? { x: parrots.bird.position.x, y: parrots.bird.position.y, z: parrots.bird.position.z } : null,
       friend: friend ? (() => { const h = friend.headPosition(); return { x: friend.brain.x, z: friend.brain.z, heading: friend.brain.heading, head: [h.x, h.y, h.z], mode: friend.brain.mode }; })() : null };
   };
 
@@ -878,6 +1229,10 @@ async function start() {
       if (what === 'yarn') { kitty.play(); dismissHint(); return; }
       const bi = atomBox ? atomBox.pick(r) : -1;
       if (bi >= 0) { tapBox(bi); dismissHint(); return; }
+      const pk = parrots ? parrots.pick(r) : null;         // Day 7: the parrot, a seed packet, a soil patch
+      if (pk) { if (pk.what === 'parrot') tapParrot(); else tapPacket(pk.i); dismissHint(); return; }
+      const gi = garden ? garden.pick(r) : -1;
+      if (gi >= 0) { tapPlot(gi); dismissHint(); return; }
       if (store && store.pick(r)) { goShop(); dismissHint(); return; }
       if (r.intersectPlane(groundPlane, hit) && Math.abs(hit.x) < PLATE.half - 4 && Math.abs(hit.z) < PLATE.half - 4) {
         if (player) { backToHer(); walkTo(hit.x, hit.z); }
@@ -892,7 +1247,7 @@ async function start() {
         if (e.buttons || carry) return;
         const r = rayAt(e.clientX, e.clientY);
         const what = kitty.pick(r);
-        canvas.style.cursor = what === 'yarn' ? 'grab' : what || friend?.pick(r) || (atomBox && atomBox.pick(r) >= 0) || (store && store.pick(r)) ? 'pointer' : '';
+        canvas.style.cursor = what === 'yarn' ? 'grab' : what || friend?.pick(r) || (atomBox && atomBox.pick(r) >= 0) || (store && store.pick(r)) || parrots?.pick(r) || (garden && garden.pick(r) >= 0) ? 'pointer' : '';
       });
     }
   }
@@ -925,7 +1280,7 @@ async function start() {
       if (e.target?.closest?.('dialog, input, textarea, [contenteditable]')) return;
       e.preventDefault();
       held.add(e.code);
-      wantShop = false; wantBox = -1;
+      wantShop = false; wantBox = -1; wantGarden = null; wantParrot = false; wantPacket = -1;
       backToHer();
       dismissHint();
     });
@@ -952,6 +1307,7 @@ async function start() {
   function showName(n) { tagName.textContent = n; followName.textContent = player ? 'you' : n; }
   function persist() {
     if (!kitty || !live) return;
+    saveGarden();
     const b = kitty.brain;
     saveCare({ name: care.name, muted: care.muted, cat: care.cat, hunger: +b.hunger.toFixed(3), happy: +b.happy.toFixed(3), at: Date.now(),
       friendName: care.friendName, ...(care.friendMet || friendMet ? { friendMet: true } : {}),
@@ -1390,7 +1746,10 @@ async function start() {
   // hint, until the first tap that does something
   if (showUI && !demo && !short) {
     hintEl.textContent = kitty && player
-      ? (!friendMet                                                        // the day's new thing (Day 6): her friend
+      ? (gardenMod && !wallet.seedTotal && !savedGarden                    // the day's new thing (Day 7): parrots, seeds, a garden
+        ? (coarse ? 'Tap the ground to walk there · New: parrots bring seeds! Plant them in the garden'
+          : 'Click the ground or use WASD to walk · New: parrots bring seeds! Plant them in the garden')
+        : !friendMet                                                        // the day's new thing (Day 6): her friend
         ? (coarse ? `Tap the ground to walk there · New: ${care.name} has a friend! Tap it to pet it`
           : `Click the ground or use WASD to walk · New: ${care.name} has a friend! Click it to pet it`)
         : wallet.atoms === 0 && !SKINS.some((k) => wallet.ownsSkin(k.id))    // Day 5: atom bombs and boxes
@@ -1481,6 +1840,7 @@ async function start() {
             openBox(i);
           }
         }
+        gardenStep(kitty.t);                               // Day 7: parrots, seeds, planting, picking
         // the next atom bomb: a while after the last one, not while a window is open or you are at the shop
         if (atomBox && live) {
           if (nextDrop == null) nextDrop = kitty.t + ATOM_BOX.first;
@@ -1543,6 +1903,7 @@ async function start() {
       camera.updateMatrixWorld();
       paintTokens(kitty.t);
       paintAtoms(kitty.t);
+      paintGarden(kitty.t);
     }
     if (kitty) fx?.update(kitty.t);
     world.update(t);
@@ -1565,7 +1926,7 @@ async function start() {
     const dt = Math.min(0.05, Math.max(0, (ts - last) / 1000));
     if (dialog.open) { last = ts; return; }                // nothing to see behind the Day log
     // when nobody is touching the camera, 30 fps is plenty
-    if (!demo && rig.idle() && !player?.busy() && !(kitty && (kitty.busy() || friend?.busy() || fx?.busy() || tokenFX?.busy() || atomFX?.busy() || atomBox?.busy(kitty.t) || blast?.active(kitty.t) || wardrobe?.busy(kitty.t) || (wandOn && wand.busy())))) { skip = !skip; if (skip) return; }
+    if (!demo && rig.idle() && !player?.busy() && !(kitty && (kitty.busy() || friend?.busy() || fx?.busy() || tokenFX?.busy() || atomFX?.busy() || atomBox?.busy(kitty.t) || parrots?.busy() || garden?.busy(kitty.t) || blast?.active(kitty.t) || wardrobe?.busy(kitty.t) || (wandOn && wand.busy())))) { skip = !skip; if (skip) return; }
     last = ts;
     step((ts - t0) / 1000, dt);
     // Day 6: a device that cannot keep up with the finished picture (glow, grade) gets the plain one; checked over
@@ -1587,6 +1948,7 @@ async function start() {
     get wand() { return wand; }, get wandOn() { return wandOn; },
     get friend() { return friend; }, get fx() { return fx; },
     get atomBox() { return atomBox; }, get atomMod() { return atomMod; }, get blast() { return blast; },
+    get garden() { return garden; }, get parrots() { return parrots; }, get plots() { return plots; }, get gardenMod() { return gardenMod; },
     /** Screen height fraction (from the top) of the visible horizon: the plate's far edge. */
     horizonFrac() {
       camera.updateMatrixWorld();

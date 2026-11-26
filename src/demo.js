@@ -5,7 +5,29 @@
 
 export const DEMOS = ['orbit', 'reveal', 'kitty', 'kittycall', 'kittypet', 'kittywalk', 'kittyname', 'kittyfeed', 'kittyplay', 'kittynap',
   'kittytoken', 'kittydress', 'shopwalk', 'kittytoy', 'kittywake', 'kittyfish', 'fishwalk', 'fishshow', 'fishdangle',
-  'atombox', 'atomhit', 'atomshow', 'friendmeet', 'friendcuddle', 'friendplay', 'friendfeed', 'friendnap', 'friendtricks'];
+  'atombox', 'atomhit', 'atomshow', 'friendmeet', 'friendcuddle', 'friendplay', 'friendfeed', 'friendnap', 'friendtricks',
+  'parrotseed', 'gardenplant', 'gardenmutate', 'gardenpick', 'gardenshow', 'gardenposter'];
+
+// Day 7: the garden (gardenlogic.js places it), its plots, the parrots' perch, and the ways out of their fronts
+const GF = [Math.sin(GARDEN_AT.rot), Math.cos(GARDEN_AT.rot)];            // out of the bed's front
+const GR = [Math.cos(GARDEN_AT.rot), -Math.sin(GARDEN_AT.rot)];           // along the bed (its own +x)
+const PF = [Math.sin(PERCH_AT.rot), Math.cos(PERCH_AT.rot)];
+/** a spot near the garden: f metres out of its front, s along it */
+const byGarden = (f, s = 0) => { const q = gardenFrame(s, f); return [q.x, q.z]; };
+const byPerch = (f, s = 0) => [PERCH_AT.x + PF[0] * f + GR[0] * s, PERCH_AT.z + PF[1] * f + GR[1] * s];
+const facing = (from, to) => Math.atan2(to[0] - from[0], to[1] - from[1]);
+const plot = (i) => { const q = plotAt(i); return [q.x, q.z]; };
+/** where you stand to tend plot i: in front of the bed, straight out from the plot */
+const tendSpot = (i) => {
+  const [x, z] = plot(i), o = gardenFrame(0, 0);
+  const out = GBED.d / 2 + 3.2 - ((x - o.x) * GF[0] + (z - o.z) * GF[1]);
+  return [x + GF[0] * out, z + GF[1] * out];
+};
+// a full garden for the shots that need one (ages in seconds: well past ripe)
+const MUT_BOMB = byGarden(14.5, -9);                     // where the filmed bomb lands: to the side of the bed's front
+const GROWN = (list) => list.map((q) => (q ? { age: 400, ...q } : null));
+
+import { GARDEN_AT, PERCH_AT, gardenFrame, plotAt, BED as GBED } from './gardenlogic.js';
 
 // Day 3: where the shop's doormat is, and where the kitty waits beside it (town.js works these out from SHOP)
 const SHOP_DOOR = [19.97, -21.57], SHOP_WAIT = [12.84, -23.42];
@@ -168,6 +190,58 @@ export const KITTY_DEMOS = {
     script: [{ t: 0.1, type: 'bomb', x: ABOX[0], z: ABOX[1], rot: ABOX_ROT }, { t: 3.7, type: 'atom' }],
     viewer: () => byBox(9, 0),
   },
+  // Day 7 (idea by @elenaabrosimova1968: "Parrots? Yes they give you seeds"): a parrot flies in to the perch with a
+  // dragon fruit seed, squawks, and when you come over it drops the packet at your feet; you pick it up.
+  parrotseed: {
+    start: () => { const [x, z] = byPerch(7.5, -10); return { x, z, heading: facing([x, z], byPerch(2, 0)), mode: 'sit', timer: 60 }; },
+    script: [{ t: 0.1, type: 'parrot', seed: 'dragonfruit' }, { t: 8.9, type: 'give' }, { t: 11.0, type: 'pickup' }],
+    viewer: () => byPerch(20, 3),
+    player: { start: (() => { const [x, z] = byPerch(9.5, -8.5); return { x, z, heading: facing([x, z], byPerch(0, 0)) }; })(),
+      script: [{ t: 7.6, type: 'wave' }, { t: 9.9, type: 'go', x: byPerch(5.0, -3.2)[0], z: byPerch(5.0, -3.2)[1] }] },
+    garden: { plots: GROWN([null, { fruit: 'pineapple' }, null, { fruit: 'mangosteen', age: 22 }, null, { fruit: 'dragonfruit', age: 30 }]) },
+  },
+  // you plant a pineapple seed; the garden runs as a time-lapse (x10): it sprouts, grows, and the fruit ripens
+  gardenplant: {
+    start: () => { const [x, z] = byGarden(13.5, 13); return { x, z, heading: facing([x, z], plot(1)), mode: 'sit', timer: 60 }; },
+    script: [{ t: 0.55, type: 'plant', i: 1, fruit: 'pineapple' }],
+    viewer: () => byGarden(26, 0),
+    player: { start: (() => { const [x, z] = tendSpot(1); return { x: x + GR[0] * 2.2, z: z + GR[1] * 2.2, heading: facing([x, z], plot(1)) }; })(),
+      script: [{ t: 0.15, type: 'pet', x: plot(1)[0], z: plot(1)[1] }, { t: 5.6, type: 'cheer' }] },
+    garden: { rate: 10, plots: GROWN([{ fruit: 'dragonfruit', age: 30 }, null, { fruit: 'mangosteen', age: 12 }, null, null, null]) },
+  },
+  // an atom bomb comes down right in front of the garden; you step out of the ring; it lands, its wave runs over the
+  // plants, and all three mutate: Irradiated, Cherenkov Glow, Atomic
+  gardenmutate: {
+    start: () => { const [x, z] = byGarden(17, 13); return { x, z, heading: facing([x, z], byGarden(0, 0)), mode: 'sit', timer: 60 }; },
+    script: [{ t: 0.2, type: 'bomb', x: MUT_BOMB[0], z: MUT_BOMB[1], rot: GARDEN_AT.rot + 0.5,
+      mutate: [[0, 'irradiated'], [1, 'cherenkov'], [2, 'atomic']] }],
+    viewer: () => byGarden(32, 0),
+    player: { start: (() => { const [x, z] = byGarden(14.2, -8.5); return { x, z, heading: GARDEN_AT.rot + Math.PI }; })(),
+      script: [{ t: 0.95, type: 'go', x: byGarden(19.5, -17.5)[0], z: byGarden(19.5, -17.5)[1] }, { t: 3.3, type: 'face', x: GARDEN_AT.x, z: GARDEN_AT.z }, { t: 4.3, type: 'cheer' }] },
+    garden: { plots: GROWN([{ fruit: 'pineapple' }, { fruit: 'dragonfruit' }, { fruit: 'mangosteen' }, null, null, null]) },
+  },
+  // the Atomic mangosteen tree is picked: its fruit hops off one by one, tokens fly to the counter, and an atom token
+  gardenpick: {
+    start: () => { const [x, z] = byGarden(13.5, 13); return { x, z, heading: facing([x, z], plot(1)), mode: 'sit', timer: 60 }; },
+    script: [{ t: 0.75, type: 'pick', i: 1 }],
+    viewer: () => byGarden(26, 0),
+    player: { start: (() => { const [x, z] = tendSpot(1); return { x: x + GR[0] * 1.6, z: z + GR[1] * 1.6, heading: facing([x, z], plot(1)) }; })(),
+      script: [{ t: 0.35, type: 'pet', x: plot(1)[0], z: plot(1)[1] }, { t: 2.6, type: 'cheer' }] },
+    garden: { plots: GROWN([{ fruit: 'pineapple', mutation: 'cherenkov' }, { fruit: 'mangosteen', mutation: 'atomic' }, { fruit: 'dragonfruit', mutation: 'irradiated' },
+      { fruit: 'dragonfruit' }, { fruit: 'pineapple', mutation: 'atomic' }, { fruit: 'mangosteen', mutation: 'cherenkov' }]) },
+  },
+  // the whole garden, mutated, with the parrot on its perch: a slow sweep past it (the opening shot)
+  gardenshow: {
+    start: () => { const [x, z] = byGarden(15, -12); return { x, z, heading: facing([x, z], byGarden(0, 0)), mode: 'sit', timer: 60 }; },
+    script: [{ t: 0, type: 'parrot', seed: 'mangosteen', early: 7.4 }],
+    viewer: () => byGarden(30, 0),
+    garden: { plots: GROWN([{ fruit: 'pineapple', mutation: 'atomic' }, { fruit: 'mangosteen', mutation: 'cherenkov' }, { fruit: 'dragonfruit', mutation: 'irradiated' },
+      { fruit: 'dragonfruit', mutation: 'cherenkov' }, { fruit: 'mangosteen', mutation: 'atomic' }, { fruit: 'pineapple', mutation: 'irradiated' }]) },
+  },
+  // the posters: past the parrot on its perch, into the mutated garden (fits an upright picture as well as a wide one)
+  gardenposter: { start: (...a) => KITTY_DEMOS.gardenshow.start(...a), script: [{ t: 0, type: 'parrot', seed: 'mangosteen', early: 7.4 }],
+    viewer: () => byGarden(30, 0), garden: { plots: GROWN([{ fruit: 'pineapple', mutation: 'atomic' }, { fruit: 'mangosteen', mutation: 'cherenkov' }, { fruit: 'dragonfruit', mutation: 'irradiated' },
+      { fruit: 'dragonfruit', mutation: 'cherenkov' }, { fruit: 'mangosteen', mutation: 'atomic' }, { fruit: 'pineapple', mutation: 'irradiated' }]) } },
   // Day 6 (idea by @2warp-e8u: "Add another cat so the cat has an friend"): her friend, a cream kitten.
   // It comes galloping in from far away, pulls up in front of her and touches noses; she purrs
   friendmeet: {
@@ -267,6 +341,49 @@ export function demoPose(name, t, home, kitty = null) {
     const a = -0.42 + 0.085 * t, d = lerp(9.6, 8.2, easeInOut(t / 6)), down = easeInOut((t - 1.5) / 1.4);
     const [px, pz] = byBox(Math.cos(a) * d, Math.sin(a) * d);
     return { position: [px, 4.6, pz], look: [ABOX[0], lerp(9, 3.9, down), ABOX[1]], shift: 0 };
+  }
+  if (name === 'parrotseed') {
+    // low in front of the perch: up at the sky as the parrot comes in, down onto the perch as it lands, then the
+    // packet dropping to the ground in front of you
+    const bird = kitty?.parrot;
+    const [px, pz] = byPerch(lerp(18, 14.5, easeInOut((t - 5) / 3)), lerp(8.5, 6.5, easeInOut((t - 5) / 3)));
+    const perchY = 5.2, near = clamp01((t - 4.6) / 2.2), down = easeInOut((t - 8.6) / 1.4);
+    let look = [PERCH_AT.x, perchY, PERCH_AT.z];
+    if (bird && t < 7.2) look = [lerp(bird.x, PERCH_AT.x, easeInOut(near)), lerp(bird.y, perchY, easeInOut(near)), lerp(bird.z, PERCH_AT.z, easeInOut(near))];
+    const drop = byPerch(3.6, -1.2);
+    look = [lerp(look[0], drop[0], down * 0.6), lerp(look[1], 2.2, down), lerp(look[2], drop[1], down * 0.6)];
+    return { position: [px, lerp(3.2, 4.4, near), pz], look, shift: 0 };
+  }
+  if (name === 'gardenplant' || name === 'gardenpick') {
+    // close on the plot from in front of the bed, a little to the side, pushing in; looking up as it grows
+    const [qx, qz] = plot(1);
+    const k = easeInOut(t / 6);
+    const f = lerp(19, 16, k), sd = lerp(-2.2, -1.2, k);   // (just to the side of you: you crouch at the right, the plant in the middle)
+    const pos = [qx + GF[0] * f + GR[0] * sd, lerp(5.8, 6.4, k), qz + GF[1] * f + GR[1] * sd];
+    const up = name === 'gardenplant' ? lerp(1.6, 4.4, easeInOut((t - 1.5) / 4)) : lerp(4.8, 5.6, k);
+    return { position: pos, look: [qx, up, qz], shift: 0 };
+  }
+  if (name === 'gardenmutate') {
+    // in front of the garden and up a little: the bomb comes down into the frame between you and the plants, then the
+    // camera settles on the three plants as they change
+    // (it follows the bomb down onto its spot, then turns to the three plants as the wave reaches them)
+    const down = easeInOut((t - 0.5) / 2.5), over = easeInOut((t - 2.9) / 1.3), close = easeInOut((t - 3.4) / 2.6);
+    const [cx, cz] = byGarden(lerp(38, 29, close), lerp(1, 3, close));
+    const [px, pz] = byGarden(2.5, 0);
+    const look = [lerp(MUT_BOMB[0], px, over), lerp(lerp(22, 2.5, down), 3.9, over), lerp(MUT_BOMB[1], pz, over)];
+    return { position: [cx, lerp(8.5, 8.0, close), cz], look, shift: 0 };
+  }
+  if (name === 'gardenposter') {
+    const [cx, cz] = byPerch(13, 9);
+    const [lx, lz] = byGarden(2, 3);
+    return { position: [cx, 7.2, cz], look: [lerp(lx, PERCH_AT.x, 0.42), 4.2, lerp(lz, PERCH_AT.z, 0.42)], shift: 0 };
+  }
+  if (name === 'gardenshow') {
+    // a slow sweep round the front of the garden, the perch and its parrot on the right
+    const a = -0.55 + 0.11 * t, d = lerp(30, 26, easeInOut(t / 6));
+    const pos = [GARDEN_AT.x + Math.sin(GARDEN_AT.rot + a) * d, lerp(9, 7, easeInOut(t / 6)), GARDEN_AT.z + Math.cos(GARDEN_AT.rot + a) * d];
+    const [lx, lz] = byGarden(1.5, 3);
+    return { position: pos, look: [lx, 3.6, lz], shift: 0 };
   }
   if (!kitty) return null;
   const [kx, kz] = [kitty.x, kitty.z];
