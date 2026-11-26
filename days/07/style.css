@@ -389,6 +389,7 @@ html.no-ui .nametag:not(.is-filmed), html.capture-short .nametag:not(.is-filmed)
   font: 700 18px/1 var(--display); font-variant-numeric: tabular-nums; pointer-events: none;
   transform-origin: 50% 0; will-change: transform, opacity;
 }
+.tokens-loss.is-gain { background: #f6c443; color: var(--ink); }   /* Day 7: an Atomic coin landed: a gold "+2" */
 .tokens.is-filmed .tokens-loss { font-size: 22px; padding: 6px 13px; }
 html.no-ui .tokens:not(.is-filmed), html.capture-short .tokens:not(.is-filmed), html.no-webgl .tokens { display: none !important; }
 /* Day 5: an atom bomb landed on you: a white-out over everything, with one big word in it */
@@ -703,3 +704,125 @@ html.capture-short .bubble { font-size: 16px; max-width: 100%; }
 @keyframes card-in { from { opacity: 0; translate: 0 26px; scale: 0.92; } }
 @keyframes dim-in { from { opacity: 0; } }
 @keyframes hint-in { from { opacity: 0; translate: 0 10px; } }
+/* ---------------------------------------------------------------------------------------------------------
+   Day 7: phones play like a game, not a web page (the owner: "right now it's just a lot of buttons and less
+   game"). One round action bar at the bottom (Cat, Pet, Feed, Play and a menu); the Day log, the channel and the
+   sound live in the menu. The big title shows when the game opens, then shrinks to a small "Day N" with the
+   comment pill (html.ui-compact, set by main.js after a few seconds or the first tap), and the camera rises.
+   --------------------------------------------------------------------------------------------------------- */
+.care-menu { display: none; }
+.menu { max-width: min(340px, 100%); }
+.menu-list { display: grid; gap: 10px; margin: 4px 0 6px; }
+.menu-item {
+  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 52px; padding: 0 16px;
+  border: 2.5px solid var(--ink); border-radius: 16px; background: #fff; color: var(--ink);
+  box-shadow: var(--drop); font: 600 17px/1 var(--display); text-decoration: none; cursor: pointer;
+}
+.menu-item .icon { width: 24px; height: 24px; flex: none; }
+.menu-item:active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(47, 38, 32, 0.22); }
+.menu-item:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.menu-sound .cross { display: none; }
+.menu-sound[aria-pressed="false"] .wave { display: none; }
+.menu-sound[aria-pressed="false"] .cross { display: inline; }
+
+@media (max-width: 759px) and (orientation: portrait), (max-height: 520px) and (orientation: landscape) {
+  /* the action bar: round buttons with a small label under each, centred at the bottom */
+  html.has-care .corner { display: none; }
+  html.has-care .care-sound { display: none; }
+  html.has-care .care-menu { display: inline-flex; }
+  html.has-care .care {
+    left: calc(var(--gutter) + var(--safe-l)); right: calc(var(--gutter) + var(--safe-r));
+    bottom: calc(var(--safe-b) + 24px); justify-content: center; gap: clamp(8px, 3.2vw, 16px);
+  }
+  html.has-care .care-btn {
+    width: 56px; min-width: 56px; height: 56px; min-height: 56px; padding: 0; border-radius: 50%;
+    flex-direction: column; gap: 0;
+  }
+  html.has-care .care-btn .icon { width: 26px; height: 26px; }
+  html.has-care .care-label {
+    display: block; position: absolute; top: calc(100% + 3px); left: 50%; transform: translateX(-50%);
+    font: 700 11px/1 var(--display); letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap;
+    color: var(--ink); text-shadow: 0 0 3px #fff, 0 0 6px #fff, 0 0 10px rgba(255, 255, 255, 0.8);
+  }
+  html.has-care .care-menu { background: var(--ink); color: var(--paper); }
+  html.has-care .care-menu .care-label { color: var(--ink); }
+  html.has-care .care-badge { top: -4px; right: -4px; }
+  html.has-care .follow-chip { bottom: calc(var(--safe-b) + 104px); }
+  html.has-care:not(.ui-compact) .hint { top: var(--hint-top, 40%); bottom: auto; }
+
+  /* the title, once you are playing: a small "Day N" and the comment pill */
+  html.ui-compact .eyebrow > span { display: none; }
+  html.ui-compact .title h1 { font-size: 24px; }
+  html.ui-compact .title-day { display: inline; }
+  html.ui-compact:not(.demo):not(.capture-short) .title-line { display: none; }   /* (outranks the Day 6 rise-in rule) */
+  html.ui-compact .bubble { margin: 6px 0 0; padding: 6px 12px 7px; border-width: 2.5px; border-radius: 999px;
+    font-size: 13.5px; max-width: min(100%, 23em); }
+  html.ui-compact .bubble::after { display: none; }
+  html.ui-compact .hint { top: auto; bottom: calc(var(--safe-b) + 104px); }
+}
+@media (max-height: 520px) and (orientation: landscape) {
+  html.has-care .care { justify-content: flex-end; bottom: calc(var(--safe-b) + 20px); }
+  html.ui-compact .title h1 { font-size: 22px; }
+}
+@media (max-width: 339px) {
+  html.has-care .care-btn { width: 50px; min-width: 50px; height: 50px; min-height: 50px; }
+}
+/* the title shrinking (people playing only; a recording never sees it) */
+@media (prefers-reduced-motion: no-preference) {
+  html.ui-anim .title h1, html.ui-anim .bubble { transition: font-size 380ms cubic-bezier(.2, .8, .2, 1), padding 380ms ease, margin 380ms ease; }
+}
+
+/* ---------------------------------------------------------------------------------------------------------
+   Day 7: touch phones get a move stick (bottom left) and a jump button (bottom right), and the round action
+   buttons stand in a column down the right-hand side (the owner's sketch). html.has-stick is set by main.js.
+   --------------------------------------------------------------------------------------------------------- */
+.stick, .jump-btn { display: none; }
+html.has-stick .stick {
+  display: block; position: fixed; z-index: 3; touch-action: none; user-select: none; -webkit-user-select: none;
+  left: calc(var(--gutter) + var(--safe-l) + 2px); bottom: calc(var(--safe-b) + 22px);
+  width: 128px; height: 128px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 250, 242, 0.42) 0 56%, rgba(255, 250, 242, 0.22) 57% 100%);
+  border: 3px solid rgba(47, 38, 32, 0.5); box-shadow: 0 3px 0 rgba(47, 38, 32, 0.18);
+  -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+}
+html.has-stick .stick[hidden], html.has-stick .jump-btn[hidden] { display: none; }
+.stick-ring { position: absolute; inset: 22px; border-radius: 50%; border: 2px dashed rgba(47, 38, 32, 0.28); pointer-events: none; }
+.stick-knob {
+  position: absolute; left: 50%; top: 50%; width: 58px; height: 58px; margin: -29px 0 0 -29px; border-radius: 50%;
+  background: radial-gradient(circle at 38% 32%, #fffdf8, var(--paper) 60%, #eadfcd);
+  border: 3px solid var(--ink); box-shadow: 0 4px 0 rgba(47, 38, 32, 0.25);
+  pointer-events: none; will-change: transform; transition: transform 140ms cubic-bezier(.2, 1.4, .4, 1);
+}
+.stick.is-held .stick-knob { transition: none; }
+.stick.is-held { border-color: rgba(47, 38, 32, 0.75); }
+html.has-stick .jump-btn {
+  display: grid; place-items: center; position: fixed; z-index: 3; touch-action: none; user-select: none; -webkit-user-select: none;
+  right: calc(var(--gutter) + var(--safe-r) + 2px); bottom: calc(var(--safe-b) + 30px);
+  width: 88px; height: 88px; padding: 0; border-radius: 50%;
+  border: 3px solid var(--ink); background: var(--accent-fill); color: #fff;
+  box-shadow: 0 5px 0 rgba(47, 38, 32, 0.3); cursor: pointer;
+  transition: transform 90ms ease, box-shadow 90ms ease;
+}
+html.has-stick .jump-btn .icon { width: 34px; height: 34px; margin-top: -8px; }
+.jump-label { position: absolute; bottom: 13px; font: 700 12px/1 var(--display); letter-spacing: 0.08em; text-transform: uppercase; }
+.jump-btn.is-down { transform: translateY(4px) scale(0.96); box-shadow: 0 1px 0 rgba(47, 38, 32, 0.3); }
+.jump-btn:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+/* upright: the action buttons in a column on the right, above the jump button */
+@media (max-width: 759px) and (orientation: portrait) {
+  html.has-stick.has-care .care {
+    left: auto; right: calc(var(--gutter) + var(--safe-r) + 18px); bottom: calc(var(--safe-b) + 150px);
+    flex-direction: column; justify-content: flex-end; align-items: center; gap: 24px;
+  }
+  html.has-stick.has-care .care-btn { width: 52px; min-width: 52px; height: 52px; min-height: 52px; }
+  html.has-stick .hint, html.has-stick.ui-compact .hint {
+    top: auto; left: calc(var(--gutter) + var(--safe-l)); right: calc(var(--gutter) + var(--safe-r) + 92px);
+    bottom: calc(var(--safe-b) + 172px); transform: none; width: auto; max-width: none; text-align: left; border-radius: 16px;
+  }
+  html.has-stick .follow-chip { left: calc(var(--gutter) + var(--safe-l)); right: auto; bottom: calc(var(--safe-b) + 164px); }
+}
+/* on its side: the stick and the jump in the bottom corners, the action buttons in a row between them */
+@media (max-height: 520px) and (orientation: landscape) {
+  html.has-stick.has-care .care { left: 170px; right: 130px; justify-content: center; bottom: calc(var(--safe-b) + 24px); }
+  html.has-stick .stick { width: 116px; height: 116px; bottom: calc(var(--safe-b) + 14px); }
+  html.has-stick .jump-btn { width: 80px; height: 80px; bottom: calc(var(--safe-b) + 18px); }
+}

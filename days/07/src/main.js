@@ -15,7 +15,7 @@
 // ?v= through its import map; data and model URLs below get the same stamp (deploy.mjs writes it).
 import { renderDayLog, renderHeadline, latestDay } from './daylog.js';
 import { DEMOS, demoPose, KITTY_DEMOS } from './demo.js';
-import { createWallet, rewardFor, penaltyFor, ITEMS, NEW_ITEM, itemById, SKINS, skinById, ATOM_BOX } from './tokens.js';
+import { createWallet, rewardFor, penaltyFor, ITEMS, NEW_ITEM, itemById, SKINS, skinById, ATOM_BOX, ATOMIC_COIN } from './tokens.js';
 import { createMind, sayWhy, describeMind } from './kittymind.js';
 import { emoteSVG } from './emotes.js';
 import { createPlots, FRUITS, fruitById, mutationById, PARROT, GARDEN, seedFor } from './gardenlogic.js';
@@ -112,7 +112,7 @@ function saveCare(d) { try { localStorage.setItem(CARE_KEY, JSON.stringify(d)); 
 const WALLET_KEY = 'glikdev.tokens.v1';
 function loadWallet() { try { return JSON.parse(localStorage.getItem(WALLET_KEY) || 'null'); } catch { return null; } }
 function saveWallet(w) { try { localStorage.setItem(WALLET_KEY, JSON.stringify(w)); } catch { /* private mode: fine */ } }
-const filmTokens = params.get('tokens') === '1';
+const filmTokens = params.get('tokens') === '1' || params.get('atoms') === '1';   // (Day 7: one coin counter for both)
 // ?wear=crown,bowtie  (filming, posters) she has these on from the start; the purse is not touched
 const paramWear = {};
 for (const id of (params.get('wear') || '').split(',')) { const it = itemById(id.trim()); if (it) paramWear[it.slot] = it.id; }
@@ -230,7 +230,7 @@ async function start() {
     const portrait = aspect < 0.85;
     const wide = aspect >= 1.3;
     const spec = portrait
-      ? { fov: 62, pitch: 30, height: 16, horizon: short ? 0.44 : 0.42 }
+      ? { fov: 62, pitch: 30, height: 16, horizon: short ? 0.44 : root.classList.contains('ui-compact') ? 0.3 : 0.42 }   // (Day 7: once the title is small, more of the world)
       : wide ? { fov: 46, pitch: 26, height: 15, horizon: h < 500 ? 0.45 : 0.4 }
         : { fov: 54, pitch: 28, height: 16, horizon: 0.41 };
     if (portrait && showUI) {
@@ -348,7 +348,7 @@ async function start() {
       // every button, chip and card gives a small tick
       addEventListener('click', (ev) => { if (ev.target?.closest?.('button, a.chip, .daylog-play')) audio.event({ type: 'click' }); }, true);
       // Day 6: the windows (the Day log, naming her, choosing the cat) open and close with a soft sound of their own
-      for (const id of ['daylog', 'namer', 'catpick']) {
+      for (const id of ['daylog', 'namer', 'catpick', 'menu', 'seedbag']) {
         const d = $(id);
         new MutationObserver(() => audio.event({ type: d.open ? 'ui-open' : 'ui-close' })).observe(d, { attributes: true, attributeFilter: ['open'] });
       }
@@ -399,7 +399,12 @@ async function start() {
           () => (friend ? friend.circle() : { x: 0, z: 0, r: 0 }),
           ...[0, 1, 2].map((i) => () => (atomBox ? atomBox.circle(i) : { x: 0, z: 0, r: 0 }))],
         script: pd ? pd.script || [] : null,
-        onStep: (running) => { audio?.event({ type: 'footstep', strong: running }); if (running && kitty) fx?.dust(kitty.t, player.x, player.z, 0.42, 3, player.heading + Math.PI); } });
+        onStep: (running) => { audio?.event({ type: 'footstep', strong: running }); if (running && kitty) fx?.dust(kitty.t, player.x, player.z, 0.42, 3, player.heading + Math.PI); },
+        // Day 7: the jump: a push off the ground, and a thump and a puff of dust as you land
+        onJump: (what) => {
+          if (what === 'up') { audio?.event({ type: 'footstep', strong: true }); audio?.event({ type: 'leap' }); }
+          else { audio?.event({ type: 'footstep', strong: true }); audio?.event({ type: 'land' }); if (kitty) fx?.dust(kitty.t, player.x, player.z, 0.9, 6); }
+        } });
       rig.moveKeys = false;
       rig.canPan = false;                                  // the camera is yours: it cannot wander off
       if (live && params.get('view') === 'first') {
@@ -635,7 +640,7 @@ async function start() {
         if (live) {
           saveWallet(wallet);
           const how = { grumpy: 'is a bit cross with you', angry: 'is angry with you', furious: 'is furious with you', sad: 'is sad' }[e.id];
-          flashHint(`${care.name} ${how}: you lost ${lost} token${lost === 1 ? '' : 's'}. ${e.id === 'sad' ? 'Pet her or play with her' : 'Feed her, or give her time'}`, 7000);
+          flashHint(`${care.name} ${how}: you lost ${lost} coin${lost === 1 ? '' : 's'}. ${e.id === 'sad' ? 'Pet her or play with her' : 'Feed her, or give her time'}`, 7000);
         }
         return;
       }
@@ -650,7 +655,7 @@ async function start() {
       repaintShop();                                       // a token landing while the shop is open: its prices keep up
       if (live) {
         saveWallet(wallet);
-        if (first) flashHint(coarse ? 'A friendship token! Tap the coin to dress her up' : 'A friendship token! Click the coin to dress her up', 7000);
+        if (first) flashHint(coarse ? 'A coin! Tap the coins to dress her up' : 'A coin! Click the coins to dress her up', 7000);
         // the token that makes the day's new thing affordable: say so, once
         else if (!could && wallet.canBuy(NEW_ITEM) && player) flashHint(`You can buy the ${itemById(NEW_ITEM).name.toLowerCase()} now! ${coarse ? 'Tap' : 'Click'} the coin to go to the shop`, 8000);
       }
@@ -674,7 +679,7 @@ async function start() {
   // Day 5: the atom tokens' own counter (under the friendship tokens); tap it for the fur skins
   const atomsEl = $('atoms'), atomsCount = $('atoms-count'), atomsIcon = $('atoms-icon');
   const filmAtoms = params.get('atoms') === '1';
-  const showAtoms = !!kitty && (filmAtoms || (showUI && !demo && !short));
+  const showAtoms = false && !!kitty && (filmAtoms || (showUI && !demo && !short));   // Day 7: no second counter (Atomic coins go into the coins)
   if (showAtoms) {
     atomsEl.hidden = false;
     if (filmAtoms && (!showUI || short)) atomsEl.classList.add('is-filmed');
@@ -702,7 +707,7 @@ async function start() {
           audio?.event({ type: 'nope' });
           if (live) flashHint('Bonk! It got you, so no box this time. Step out of the dark ring before it lands', 6000);
         }
-      } else if (live && !mutated && ev.box >= 0 && wallet.atoms === 0 && !SKINS.some((k) => wallet.ownsSkin(k.id))) {
+      } else if (live && !mutated && ev.box >= 0 && !atomicSeen) {
         flashHint(coarse ? 'You dodged it! Tap the box it left behind' : 'You dodged it! Click the box it left behind', 7000);
       }
     }
@@ -710,7 +715,8 @@ async function start() {
     if (player) {
       const a = bonkAt == null ? 9 : t - bonkAt;
       const sq = a >= 0 && a < 1.2 ? 1 - 0.5 * Math.exp(-a * 4.5) * Math.cos(a * 15) : 1;
-      player.root.scale.set(1 + (1 - sq) * 0.45, sq, 1 + (1 - sq) * 0.45);
+      const js = player.squash();                         // (Day 7: and the jump's own squash and stretch)
+      player.root.scale.set((1 + (1 - sq) * 0.45) * js.xz, sq * js.y, (1 + (1 - sq) * 0.45) * js.xz);
     }
     if (blast) {
       const b = blast.update(t, camera);
@@ -723,41 +729,29 @@ async function start() {
     // the token leaves the chunk a moment after the lid opens
     while (atomBox && atomDue.length && t >= atomDue[0].t) {
       const due = atomDue.shift();
-      const first = wallet.atoms === 0 && !SKINS.some((k) => wallet.ownsSkin(k.id));
-      wallet.earnAtoms(ATOM_BOX.gives);
+      const first = !atomicSeen;
+      atomicSeen = true;
+      wallet.earnAtomic(ATOM_BOX.gives);                   // Day 7: an Atomic coin, worth ATOMIC_COIN coins
       atomFX?.spawn(due.t, atomBox.tokenFrom(due.i, due.t, atomFrom), 1);
       audio?.event({ type: 'atom' });
       repaintCats();
       if (live) {
         saveWallet(wallet);
-        const cheapest = SKINS.find((k) => !wallet.ownsSkin(k.id));
-        if (first) flashHint(coarse ? 'An atom token! They buy new fur for your kitty: tap the atom counter' : 'An atom token! They buy new fur for your kitty: click the atom counter', 8000);
-        else if (cheapest && wallet.atoms === cheapest.price) flashHint(`You can buy the ${cheapest.name.toLowerCase()} fur now! ${coarse ? 'Tap' : 'Click'} the atom counter`, 8000);
+        if (first) flashHint(`An Atomic coin! It is worth ${ATOMIC_COIN} coins`, 6000);
       }
     }
+    // Day 7: an Atomic coin flies into the coin counter, and lands there as +ATOMIC_COIN
     let hud = null;
-    if (showAtoms) {
-      const r = atomsIcon.getBoundingClientRect();
+    if (showTokens) {
+      const r = tokensIcon.getBoundingClientRect();
       if (r.width) { atomHud.x = ((r.left + r.width / 2) / innerWidth) * 2 - 1; atomHud.y = 1 - ((r.top + r.height / 2) / innerHeight) * 2; hud = atomHud; }
     }
     const flying = atomFX ? atomFX.update(t, hud) : 0;
-    if (!showAtoms) return;
-    const n = Math.max(0, wallet.atoms - flying);
-    if (n !== shownAtoms) {
-      if (shownAtoms !== null && n > shownAtoms) atomBumpAt = t;
-      shownAtoms = n;
-      atomsCount.textContent = String(n);
-      atomsEl.setAttribute('aria-label', `Atom tokens: ${n}. See the fur skins`);
-    }
-    // beside the friendship tokens, on their left, however wide their number is
-    if (showTokens && !atomsEl.classList.contains('is-filmed')) {
-      const r = Math.round(innerWidth - tokensEl.getBoundingClientRect().left + 8);
-      if (r !== atomRight && r > 0) { atomRight = r; atomsEl.style.right = `${r}px`; }
-    }
-    const a = (t - atomBumpAt) / 0.32;
-    atomsIcon.style.transform = a >= 0 && a < 1 ? `scale(${(1 + 0.34 * Math.sin(a * Math.PI)).toFixed(3)})` : '';
+    if (flying < atomFlying) pendingGain += (atomFlying - flying) * ATOMIC_COIN;
+    atomFlying = flying;
   }
   let repaintCats = () => {};
+  let atomFlying = 0, pendingGain = 0, atomicSeen = false;   // (Day 7: Atomic coins on their way, and the +2 they make)
   // the counter: shows what has landed (tokens still in the air are not counted yet) and bumps as each one lands
   let shownTokens = null, bumpAt = -10, lossAt = -10;
   const lossEl = $('tokens-loss');
@@ -770,20 +764,21 @@ async function start() {
     }
     const flying = tokenFX ? tokenFX.update(t, hud) : 0;
     if (!showTokens) return;
-    const n = Math.max(0, wallet.tokens - flying);
+    const n = Math.max(0, wallet.tokens - flying - atomFlying * ATOMIC_COIN);
     if (n !== shownTokens) {
       if (shownTokens !== null && n > shownTokens) bumpAt = t;
       shownTokens = n;
       tokensCount.textContent = String(n);
-      tokensEl.setAttribute('aria-label', `Friendship tokens: ${n}. Go to the shop`);
+      tokensEl.setAttribute('aria-label', `Coins: ${n}. Go to the shop`);
     }
     const a = (t - bumpAt) / 0.32;
     tokensIcon.style.transform = a >= 0 && a < 1 ? `scale(${(1 + 0.34 * Math.sin(a * Math.PI)).toFixed(3)})` : '';
     // tokens lost: a red "−2" drops out from under the counter and fades (worked out from the clock, so recordings match)
-    if (pendingLoss) { lossEl.textContent = `\u2212${pendingLoss}`; pendingLoss = 0; lossAt = t; }
+    if (pendingLoss) { lossEl.textContent = `\u2212${pendingLoss}`; pendingLoss = 0; lossAt = t; lossEl.classList.remove('is-gain'); }
+    if (pendingGain) { lossEl.textContent = `+${pendingGain}`; pendingGain = 0; lossAt = t; lossEl.classList.add('is-gain'); }
     const l = (t - lossAt) / 1.6;
     const losing = l >= 0 && l < 1;
-    if (losing !== !lossEl.hidden) { lossEl.hidden = !losing; tokensEl.classList.toggle('is-losing', losing); }
+    if (losing !== !lossEl.hidden) { lossEl.hidden = !losing; tokensEl.classList.toggle('is-losing', losing && !lossEl.classList.contains('is-gain')); }
     if (losing) {
       const pop = Math.min(1, l / 0.12);
       lossEl.style.opacity = (l < 0.7 ? 1 : 1 - (l - 0.7) / 0.3).toFixed(3);
@@ -942,7 +937,7 @@ async function start() {
       saveGarden();
       const m = mutationById(r.mutation), f = fruitById(r.fruit);
       const what = `${m ? `${m.name} ${f.name.toLowerCase()}` : f.name}${n > 1 ? 's' : ''}`;
-      flashHint(`${what} picked: +${r.tokens} tokens${r.atoms ? ' and an atom token!' : ''}`, 4500);
+      flashHint(`${what} picked: +${r.tokens + r.atoms * ATOMIC_COIN} coins${r.atoms ? ` (with an Atomic coin worth ${ATOMIC_COIN})` : ''}`, 4500);
     }
   }
   /** an atom bomb landed at ev.x, ev.z: every plant close enough may mutate */
@@ -960,7 +955,7 @@ async function start() {
       const at = garden.where(c.i), m = mutationById(c.mutation);
       fx?.sparkle(ev.t + 0.12 + k * 0.08, at.x, 4.2, at.z, 10, 3.4);
       audio?.event({ type: 'mutate', m: c.mutation, delay: 0.1 + k * 0.12 });
-      if (live && k === 0) flashHint(`It mutated! ${m.name} ${fruitById(plots.at(c.i).fruit).name.toLowerCase()}: its fruit is worth ×${m.mult}${m.atoms ? ', and an atom token' : ''}`, 7000);
+      if (live && k === 0) flashHint(`It mutated! ${m.name} ${fruitById(plots.at(c.i).fruit).name.toLowerCase()}: its fruit is worth ×${m.mult}${m.atoms ? ', plus an Atomic coin' : ''}`, 7000);
     });
     if (live && changed.length) saveGarden();
     return changed.length;
@@ -976,7 +971,7 @@ async function start() {
     img.src = stamped(`models/garden/thumb_seed_${f.id}.webp`); img.alt = ''; img.width = 256; img.height = 256; img.decoding = 'async';
     const name = document.createElement('span'); name.className = 'shop-name'; name.textContent = f.name;
     const worth = document.createElement('span'); worth.className = 'seed-worth';
-    worth.textContent = `${f.fruit} fruit · ${f.fruit * f.each} tokens`;
+    worth.textContent = `${f.fruit} fruit · ${f.fruit * f.each} coins`;
     const tag = document.createElement('span'); tag.className = 'shop-tag';
     b.append(img, name, worth, tag);
     seedGrid?.append(b);
@@ -1062,7 +1057,7 @@ async function start() {
           if (share > 0) { wallet.earn(share); tokenFX?.spawn(e.t, from, Math.min(5, share)); }
           fx?.sparkle(e.t, from.x, from.y, from.z, 5, 2.2);
           playAt({ type: 'fruit-pop', k: e.n }, at.x, 4, at.z);
-          if (last && pk.atoms) { wallet.earnAtoms(pk.atoms); atomFX?.spawn(e.t + 0.15, from, pk.atoms); audio?.event({ type: 'atom', delay: 0.15 }); }
+          if (last && pk.atoms) { wallet.earnAtomic(pk.atoms); atomFX?.spawn(e.t + 0.15, from, pk.atoms); audio?.event({ type: 'atom', delay: 0.15 }); }
           if (last) { delete picks[e.i]; repaintShop(); repaintCats(); if (live) saveWallet(wallet); }
         }
       }
@@ -1099,8 +1094,8 @@ async function start() {
       if (seedDlg?.open) paintSeeds();
     }
     // on the left of the atom tokens, however wide their numbers are
-    if (showAtoms && !seedsEl.classList.contains('is-filmed')) {
-      const r = Math.round(innerWidth - atomsEl.getBoundingClientRect().left + 8);
+    if (showTokens && !seedsEl.classList.contains('is-filmed')) {
+      const r = Math.round(innerWidth - tokensEl.getBoundingClientRect().left + 8);
       if (r !== seedRight && r > 0) { seedRight = r; seedsEl.style.right = `${r}px`; }
     }
     const a = (t - seedBumpAt) / 0.32;
@@ -1287,13 +1282,78 @@ async function start() {
     addEventListener('keyup', (e) => held.delete(e.code));
     addEventListener('blur', () => held.clear());
   }
+  // Day 7: the move stick (phones): where it is pushed, and how far (0..1)
+  const stick = { id: null, x: 0, y: 0, mag: 0 };
   function steerPlayer() {
+    if (stick.mag > 0) {                                   // pushed up = away from the camera, as with W
+      const s = Math.sin(rig.az), c = Math.cos(rig.az), r = stick.x, f = -stick.y;
+      player.steer(c * r - s * f, -s * r - c * f, stick.mag);
+      steering = true;
+      return;
+    }
     if (!held.size) { if (steering) { steering = false; player.steer(0, 0); } return; }
     let r = 0, f = 0;
     for (const k of held) { r += MOVE[k][0]; f += MOVE[k][1]; }
     const s = Math.sin(rig.az), c = Math.cos(rig.az);       // the camera looks along (-sin az, -cos az); its right is (cos az, -sin az)
     player.steer(c * r - s * f, -s * r - c * f);
     steering = true;
+  }
+  /** Day 7: jump (the button, J, or Space when the fish is not out) */
+  function doJump() {
+    if (!player || !kitty || blast?.dead(kitty.t)) return;
+    audio?.unlock();
+    if (player.jump()) dismissHint();
+  }
+  if (player && live) {
+    addEventListener('keydown', (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+      if (e.code !== 'KeyJ' && !(e.code === 'Space' && !wandOn)) return;
+      if (e.target?.closest?.('dialog, input, textarea, button, a, [contenteditable]')) return;
+      e.preventDefault();
+      doJump();
+    });
+  }
+  const stickEl = $('stick'), knob = $('stick-knob'), jumpBtn = $('jump');
+  if (player && live && showUI && (coarse || params.get('touch') === '1')) {   // (?touch=1: the touch controls on any device, for testing)
+    stickEl.hidden = false; jumpBtn.hidden = false;
+    root.classList.add('has-stick');
+    const R = 48;                                          // how far the knob goes (px)
+    const move = (e) => {
+      const r = stickEl.getBoundingClientRect();
+      let dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);
+      const d = Math.hypot(dx, dy);
+      if (d > R) { dx *= R / d; dy *= R / d; }
+      knob.style.transform = `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px)`;
+      const m = Math.min(1, d / R);
+      stick.x = dx / Math.max(1, Math.min(d, R)); stick.y = dy / Math.max(1, Math.min(d, R));
+      stick.mag = m < 0.16 ? 0 : (m - 0.16) / 0.84;         // a little dead zone in the middle
+    };
+    stickEl.addEventListener('pointerdown', (e) => {
+      if (stick.id != null) return;
+      stick.id = e.pointerId;
+      try { stickEl.setPointerCapture(e.pointerId); } catch { /* gone already */ }
+      stickEl.classList.add('is-held');
+      audio?.unlock();
+      backToHer();
+      wantShop = false; wantBox = -1; wantGarden = null; wantParrot = false; wantPacket = -1;
+      dismissHint();
+      move(e);
+      e.preventDefault();
+    });
+    stickEl.addEventListener('pointermove', (e) => { if (e.pointerId === stick.id) move(e); });
+    const release = (e) => {
+      if (e.pointerId !== stick.id) return;
+      stick.id = null; stick.mag = 0; stick.x = 0; stick.y = 0;
+      knob.style.transform = '';
+      stickEl.classList.remove('is-held');
+    };
+    for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) stickEl.addEventListener(ev, release);
+    // the jump button answers the moment it is pressed (a game button, not a link); a keyboard press works too
+    jumpBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); jumpBtn.classList.add('is-down'); doJump(); });
+    for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) jumpBtn.addEventListener(ev, () => jumpBtn.classList.remove('is-down'));
+    jumpBtn.addEventListener('click', (e) => { if (e.detail === 0) doJump(); });
+    jumpBtn.addEventListener('contextmenu', (e) => e.preventDefault());
+    stickEl.addEventListener('contextmenu', (e) => e.preventDefault());
   }
   addEventListener('keydown', (e) => {
     if (e.code !== 'KeyC' || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
@@ -1337,10 +1397,21 @@ async function start() {
     $('care-pet').addEventListener('click', act(() => kitty.pet()));
     $('care-feed').addEventListener('click', act(() => kitty.feed()));
     $('care-play').addEventListener('click', act(() => kitty.play()));
+    const menuSound = $('menu-sound');
     const paintSound = () => {
       soundBtn.setAttribute('aria-pressed', String(!care.muted));
       soundBtn.setAttribute('aria-label', care.muted ? 'Sound off' : 'Sound on');
+      menuSound.setAttribute('aria-pressed', String(!care.muted));
+      $('menu-sound-label').textContent = care.muted ? 'Sound off' : 'Sound on';
     };
+    // Day 7: the phone menu (the Day log, the channel, the sound), from the round button at the end of the bar
+    const menu = $('menu');
+    $('care-menu').addEventListener('click', () => { audio?.unlock(); if (typeof menu.showModal === 'function') menu.showModal(); else menu.setAttribute('open', ''); });
+    $('menu-close').addEventListener('click', () => menu.close());
+    menu.addEventListener('click', (e) => { if (e.target === menu) menu.close(); });
+    $('menu-daylog').addEventListener('click', () => { menu.close(); openBtn.click(); });
+    $('menu-channel').addEventListener('click', () => menu.close());
+    menuSound.addEventListener('click', () => soundBtn.click());
     paintSound();
     soundBtn.addEventListener('click', () => {
       care.muted = !care.muted;
@@ -1406,7 +1477,7 @@ async function start() {
         const price = document.createElement('span');
         price.className = 'cat-price';
         const coin = document.createElement('img');
-        coin.src = stamped('models/shop/atomtoken.webp'); coin.alt = ''; coin.width = 22; coin.height = 22;
+        coin.src = stamped('models/shop/token.webp'); coin.alt = ''; coin.width = 22; coin.height = 22;   // (Day 7: coins)
         const n = document.createElement('b');
         n.textContent = String(skinById(c.skin).price);
         price.append(coin, n);
@@ -1422,7 +1493,7 @@ async function start() {
       if (!c.skin) return;
       const price = skinById(c.skin).price, mine = hasCat(k);
       b.dataset.state = mine ? 'owned' : wallet.canBuySkin(c.skin) ? 'buy' : 'dear';
-      b.setAttribute('aria-label', mine ? `${c.label} fur: hers` : `${c.label} fur: ${price} atom tokens${wallet.canBuySkin(c.skin) ? '. Buy it' : ', not enough yet'}`);
+      b.setAttribute('aria-label', mine ? `${c.label} fur: hers` : `${c.label} fur: ${price} coins${wallet.canBuySkin(c.skin) ? '. Buy it' : ', not enough yet'}`);
     });
     paintCats();
     repaintCats = paintCats;
@@ -1442,8 +1513,8 @@ async function start() {
         const sk = skinById(CATS[k].skin);
         if (!wallet.buySkin(sk.id)) {
           audio?.event({ type: 'nope' });
-          const need = sk.price - wallet.atoms;
-          catStatus.textContent = `${need} more atom token${need === 1 ? '' : 's'} for the ${sk.name.toLowerCase()} fur. Dodge an atom bomb, then tap the box it leaves.`;
+          const need = sk.price - wallet.tokens;
+          catStatus.textContent = `${need} more coin${need === 1 ? '' : 's'} for the ${sk.name.toLowerCase()} fur. Look after her, grow fruit, or open atom boxes.`;
           return;
         }
         saveWallet(wallet);
@@ -1505,7 +1576,7 @@ async function start() {
         tag.textContent = on ? (isToy ? 'Put away' : 'Take off') : owned ? (isToy ? 'Use' : 'Wear') : String(it.price);
         b.setAttribute('aria-label', on ? (isToy ? `${it.name}: it is out. Put it away` : `${it.name}: she is wearing it. Take it off`)
           : owned ? (isToy ? `${it.name}: hers. Play with it` : `${it.name}: hers. Put it on`)
-            : `${it.name}: ${it.price} tokens${wallet.canBuy(it.id) ? '. Buy it' : ', not enough yet'}`);
+            : `${it.name}: ${it.price} coins${wallet.canBuy(it.id) ? '. Buy it' : ', not enough yet'}`);
       }
     };
     repaintShop = () => { if (shop.open) paintShop(); };
@@ -1545,7 +1616,7 @@ async function start() {
       if (wallet.buy(it.id)) { dressNow('buy'); if (it.slot === 'toy') setTimeout(() => kitty.play(), 500); return; }
       audio?.event({ type: 'nope' });
       const need = it.price - wallet.tokens;
-      shopStatus.textContent = `${need} more token${need === 1 ? '' : 's'} for the ${it.name.toLowerCase()}. Pet her, feed her or play with her to earn them.`;
+      shopStatus.textContent = `${need} more coin${need === 1 ? '' : 's'} for the ${it.name.toLowerCase()}. Look after her, grow fruit, or open atom boxes.`;
     });
     $('shop-close').addEventListener('click', () => shop.close());
     shop.addEventListener('click', (e) => { if (e.target === shop) shop.close(); });
@@ -1752,13 +1823,13 @@ async function start() {
         : !friendMet                                                        // the day's new thing (Day 6): her friend
         ? (coarse ? `Tap the ground to walk there · New: ${care.name} has a friend! Tap it to pet it`
           : `Click the ground or use WASD to walk · New: ${care.name} has a friend! Click it to pet it`)
-        : wallet.atoms === 0 && !SKINS.some((k) => wallet.ownsSkin(k.id))    // Day 5: atom bombs and boxes
+        : wallet.earned === 0                                                 // Day 5: atom bombs and boxes
         ? (coarse ? 'Tap the ground to walk there · Tap your kitty to pet her · Dodge the atom bombs'
           : 'Click the ground or use WASD to walk · Click your kitty to pet her · Dodge the atom bombs')
         : !wallet.owns(NEW_ITEM)
         ? (coarse ? 'Tap the ground to walk there · Tap your kitty to pet her · In the shop: a fish on a stick'
           : 'Click the ground or use WASD to walk · Click your kitty to pet her · In the shop: a fish on a stick')
-        : coarse ? 'Tap the ground to walk there · Tap your kitty to pet her · Walk to the shop to spend tokens'
+        : coarse ? 'Tap the ground to walk there · Tap your kitty to pet her · Walk to the shop to spend coins'
           : 'Click the ground or use WASD to walk · Drag to look around · Click your kitty to pet her')
       : kitty ? (coarse ? 'Tap the ground to call the kitty · Tap her to pet her · Two fingers to move'
         : 'Click the ground to call the kitty · Click her to pet her · Drag to look around · Right-drag or WASD to move')
@@ -1774,7 +1845,30 @@ async function start() {
     else hintEl.textContent = how;
   };
   if (wandOn) onWand(true);
+  // Day 7: on a phone the big title is for the first look; once you are playing it shrinks to "Day N" and the
+  // comment pill, and the camera glides up to show more of the world (the horizon follows the pill)
+  let compacted = false;
+  function compactTitle() {
+    if (compacted || !(showUI && !demo && !short) || !kitty) return;
+    compacted = true;
+    const s0 = home.shift;
+    root.classList.add('ui-anim', 'ui-compact');
+    setTimeout(() => {                                     // once the title has shrunk (its own transition), frame again
+      layout();
+      const s1 = home.shift, t0 = performance.now();
+      if (Math.abs(s1 - s0) < 1e-4 || firstPerson) return;
+      const glide = (now) => {
+        const k = Math.min(1, (now - t0) / 650), e = k * k * (3 - 2 * k);
+        setShift(s0 + (s1 - s0) * e, 0);
+        if (k < 1 && !external) requestAnimationFrame(glide);
+      };
+      setShift(s0, 0);
+      requestAnimationFrame(glide);
+    }, 420);
+  }
+  if (showUI && !demo && !short && kitty) setTimeout(compactTitle, 7000);
   function dismissHint() {
+    compactTitle();
     if (hinted) return;
     hinted = true;
     if (!hintEl.dataset.yarn) hintEl.classList.add('is-gone');
@@ -1901,8 +1995,8 @@ async function start() {
       if (wand && player) wand.update(dt, kitty.t, kitty.brain.yarn, player.heading);
       wardrobe?.update(kitty.t);
       camera.updateMatrixWorld();
+      paintAtoms(kitty.t);                                 // (first: the Atomic coins it starts flying are counted at once)
       paintTokens(kitty.t);
-      paintAtoms(kitty.t);
       paintGarden(kitty.t);
     }
     if (kitty) fx?.update(kitty.t);

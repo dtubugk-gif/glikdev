@@ -50,12 +50,19 @@ export const itemById = (id) => ITEMS.find((i) => i.id === id) || null;
 //   wait on the plate at once (no more bombs fall until one is opened)
 export const ATOM_BOX = { gives: 1, first: 16, every: 13,   // (first: 16 s since Day 6, so the friend's hello comes first)
   fall: 2.8, blast: 3.9, max: 3 };
-/** Fur skins: the ginger kitty's own coat, recoloured (models/skins/<id>.webp, made by art/day05/make_skins.py). */
+/** Fur skins: the ginger kitty's own coat, recoloured (models/skins/<id>.webp, made by art/day05/make_skins.py).
+ *  (Day 7: priced in coins, like everything else; they were 3, 5 and 8 atom tokens) */
 export const SKINS = [
-  { id: 'silver', name: 'Silver', price: 3 },
-  { id: 'tuxedo', name: 'Tuxedo', price: 5 },
-  { id: 'atomic', name: 'Atomic', price: 8 },
+  { id: 'silver', name: 'Silver', price: 15 },
+  { id: 'tuxedo', name: 'Tuxedo', price: 25 },
+  { id: 'atomic', name: 'Atomic', price: 35 },
 ];
+
+// Day 7 (the owner: "the game would only have one type of coin ... every single type of token ... would just be
+// mutations for the coin, which will give you more coins for one coin. Like the atom coin will give you two"):
+// there is ONE money, the coin. The friendship token is now just a coin; the atom token is an Atomic coin, worth
+// this many coins. An old save's atom tokens are turned into coins at this rate.
+export const ATOMIC_COIN = 2;
 export const skinById = (id) => SKINS.find((k) => k.id === id) || null;
 
 // Day 7 (idea by @elenaabrosimova1968): seeds the parrots bring, kept in a seed bag (gardenlogic.js FRUITS)
@@ -116,9 +123,9 @@ const int = (n) => (Number.isFinite(Number(n)) ? Math.max(0, Math.min(MAX_TOKENS
  */
 export function createWallet(saved = null) {
   const s = saved && typeof saved === 'object' ? saved : {};
-  let tokens = int(s.tokens);
-  let earned = Math.max(tokens, int(s.earned));
-  let atoms = int(s.atoms);
+  const oldAtoms = int(s.atoms);                              // (from before Day 7: each one an Atomic coin now)
+  let tokens = Math.min(MAX_TOKENS, int(s.tokens) + oldAtoms * ATOMIC_COIN);
+  let earned = Math.max(tokens, int(s.earned) + oldAtoms * ATOMIC_COIN);
   const skins = new Set((Array.isArray(s.skins) ? s.skins : []).filter((id) => skinById(id)));
   const seeds = {};
   for (const id of SEED_IDS) { const v = s.seeds && typeof s.seeds === 'object' ? Number(s.seeds[id]) : 0; seeds[id] = Number.isFinite(v) ? Math.max(0, Math.min(MAX_SEEDS, Math.floor(v))) : 0; }
@@ -151,9 +158,8 @@ export function createWallet(saved = null) {
       tokens -= k;
       return k;
     },
-    /** atom tokens (Day 5): from the atom box, spent on fur skins */
-    get atoms() { return atoms; },
-    earnAtoms(n) { const k = int(n); atoms = Math.min(MAX_TOKENS, atoms + k); return k; },
+    /** Day 7: n Atomic coins (from an atom box, or Atomic fruit), each worth ATOMIC_COIN coins; returns the coins */
+    earnAtomic(n) { const k = int(n) * ATOMIC_COIN; tokens = Math.min(MAX_TOKENS, tokens + k); earned = Math.min(MAX_TOKENS * 100, earned + k); return k; },
     ownsSkin: (id) => skins.has(id),
     /** the seed bag (Day 7): how many of one kind, and of all */
     seeds: (id) => (SEED_IDS.includes(id) ? seeds[id] : 0),
@@ -161,12 +167,12 @@ export function createWallet(saved = null) {
     addSeed(id, n = 1) { if (!SEED_IDS.includes(id)) return 0; const k = Math.max(0, Math.min(MAX_SEEDS - seeds[id], int(n))); seeds[id] += k; return k; },
     /** takes one seed out of the bag to plant it; false when there is none */
     useSeed(id) { if (!SEED_IDS.includes(id) || seeds[id] < 1) return false; seeds[id]--; return true; },
-    canBuySkin: (id) => { const k = skinById(id); return !!k && !skins.has(id) && atoms >= k.price; },
-    /** buys a fur skin with atom tokens; false when it is unknown, already hers or too dear */
+    canBuySkin: (id) => { const k = skinById(id); return !!k && !skins.has(id) && tokens >= k.price; },
+    /** buys a fur skin with coins; false when it is unknown, already hers or too dear */
     buySkin(id) {
       const k = skinById(id);
-      if (!k || skins.has(id) || atoms < k.price) return false;
-      atoms -= k.price;
+      if (!k || skins.has(id) || tokens < k.price) return false;
+      tokens -= k.price;
       skins.add(id);
       return true;
     },
@@ -191,6 +197,6 @@ export function createWallet(saved = null) {
       wearing[slot] = null;
       return true;
     },
-    toJSON: () => ({ tokens, earned, owned: [...owned], wearing: { ...wearing }, atoms, skins: [...skins], seeds: { ...seeds } }),
+    toJSON: () => ({ tokens, earned, owned: [...owned], wearing: { ...wearing }, skins: [...skins], seeds: { ...seeds } }),
   };
 }
