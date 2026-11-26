@@ -80,7 +80,8 @@ function labelSprite(text, dot) {
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
-  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, depthTest: false }));
+  // (it writes its depth where it is drawn, so the film lens sees it at the plant's distance and keeps it sharp)
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: true, depthTest: false, alphaTest: 0.35 }));
   s.renderOrder = 8;
   s.userData.aspect = w / h;
   return s;
@@ -394,7 +395,7 @@ export async function createGarden(o) {
         if (s.label) {
           const from = Math.max(p.mutatedAt, s.labelAt ?? -1e9), age = t - from;
           const on = age >= 0 && age < LABEL.for;
-          s.label.visible = on;
+          s.label.visible = on && o.labels !== false;      // (a Short leaves them out: its own caption says it)
           if (on) {
             const pop = age < 0.45 ? easeOutBack(age / 0.45, 2.4) : 1;
             const fade = 1 - smooth((age - (LABEL.for - 0.5)) / 0.5);

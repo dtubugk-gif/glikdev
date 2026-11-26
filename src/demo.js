@@ -24,7 +24,7 @@ const tendSpot = (i) => {
   return [x + GF[0] * out, z + GF[1] * out];
 };
 // a full garden for the shots that need one (ages in seconds: well past ripe)
-const MUT_BOMB = byGarden(14.5, -9);                     // where the filmed bomb lands: to the side of the bed's front
+const MUT_BOMB = byGarden(14.5, 9);                      // (on the perch's side: her bed stays out of the shot)                     // where the filmed bomb lands: to the side of the bed's front
 const GROWN = (list) => list.map((q) => (q ? { age: 400, ...q } : null));
 
 import { GARDEN_AT, PERCH_AT, gardenFrame, plotAt, BED as GBED } from './gardenlogic.js';
@@ -212,12 +212,12 @@ export const KITTY_DEMOS = {
   // an atom bomb comes down right in front of the garden; you step out of the ring; it lands, its wave runs over the
   // plants, and all three mutate: Irradiated, Cherenkov Glow, Atomic
   gardenmutate: {
-    start: () => { const [x, z] = byGarden(17, 13); return { x, z, heading: facing([x, z], byGarden(0, 0)), mode: 'sit', timer: 60 }; },
+    start: () => { const [x, z] = byGarden(16, -15); return { x, z, heading: facing([x, z], byGarden(0, 0)), mode: 'sit', timer: 60 }; },
     script: [{ t: 0.2, type: 'bomb', x: MUT_BOMB[0], z: MUT_BOMB[1], rot: GARDEN_AT.rot + 0.5,
       mutate: [[0, 'irradiated'], [1, 'cherenkov'], [2, 'atomic']] }],
     viewer: () => byGarden(32, 0),
-    player: { start: (() => { const [x, z] = byGarden(14.2, -8.5); return { x, z, heading: GARDEN_AT.rot + Math.PI }; })(),
-      script: [{ t: 0.95, type: 'go', x: byGarden(19.5, -17.5)[0], z: byGarden(19.5, -17.5)[1] }, { t: 3.3, type: 'face', x: GARDEN_AT.x, z: GARDEN_AT.z }, { t: 4.3, type: 'cheer' }] },
+    player: { start: (() => { const [x, z] = byGarden(14.2, 8.5); return { x, z, heading: GARDEN_AT.rot + Math.PI }; })(),
+      script: [{ t: 0.95, type: 'go', x: byGarden(20, 19)[0], z: byGarden(20, 19)[1] }, { t: 3.3, type: 'face', x: GARDEN_AT.x, z: GARDEN_AT.z }, { t: 4.3, type: 'cheer' }] },
     garden: { plots: GROWN([{ fruit: 'pineapple' }, { fruit: 'dragonfruit' }, { fruit: 'mangosteen' }, null, null, null]) },
   },
   // the Atomic mangosteen tree is picked: its fruit hops off one by one, tokens fly to the counter, and an atom token
@@ -367,10 +367,13 @@ export function demoPose(name, t, home, kitty = null) {
     // in front of the garden and up a little: the bomb comes down into the frame between you and the plants, then the
     // camera settles on the three plants as they change
     // (it follows the bomb down onto its spot, then turns to the three plants as the wave reaches them)
-    const down = easeInOut((t - 0.5) / 2.5), over = easeInOut((t - 2.9) / 1.3), close = easeInOut((t - 3.4) / 2.6);
-    const [cx, cz] = byGarden(lerp(38, 29, close), lerp(1, 3, close));
+    // (it rides down with the bomb: the bomb stays in the upper middle as the ring on the ground comes into view)
+    const over = easeInOut((t - 2.9) / 1.3), close = easeInOut((t - 3.4) / 2.6);
+    const [cx, cz] = byGarden(lerp(37, 29, close), lerp(10, 3, close));
     const [px, pz] = byGarden(2.5, 0);
-    const look = [lerp(MUT_BOMB[0], px, over), lerp(lerp(22, 2.5, down), 3.9, over), lerp(MUT_BOMB[1], pz, over)];
+    const fallK = clamp01((t - 0.2) / 2.8), bombY = 46 * (1 - fallK ** 1.5);
+    const follow = Math.max(3.2, bombY * 0.72 + 1.5);
+    const look = [lerp(MUT_BOMB[0], px, over), lerp(follow, 3.9, over), lerp(MUT_BOMB[1], pz, over)];
     return { position: [cx, lerp(8.5, 8.0, close), cz], look, shift: 0 };
   }
   if (name === 'gardenposter') {

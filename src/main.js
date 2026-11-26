@@ -325,8 +325,16 @@ async function start() {
     world.setShadowFocus(() => (player ? focus.set((player.x + kitty.brain.x) / 2, 0, (player.z + kitty.brain.z) / 2) : kitty.focus(focus)), 22);
     const fishAt = new THREE.Vector3();
     world.setCineSubjects(() => {
-      const list = [[kitty.brain.x, 0.32, kitty.brain.z]];
+      // Day 7: the garden's shots keep the garden (and its parrot) sharp, not the kitty sitting by the camera
+      const gardenShot = !!demo && (demo.startsWith('garden') || demo.startsWith('parrot'));
+      const list = gardenShot ? [] : [[kitty.brain.x, 0.32, kitty.brain.z]];
       try {                                              // you and the rod join a few frames after her
+        if (gardenShot) {
+          if (garden) list.push(...garden.subjects());
+          if (parrots) list.push(...parrots.subjects());
+          if (player && demo !== 'gardenmutate' && demo !== 'gardenshow' && demo !== 'gardenposter') list.push([player.x, 0.9, player.z]);
+          return list.length ? list : [[kitty.brain.x, 0.32, kitty.brain.z]];
+        }
         if (player) list.push([player.x, 0.9, player.z]);
         if (friend && fd) list.push([friend.brain.x, 0.3, friend.brain.z]);
         if (wand?.fish?.visible) list.push(wand.fish.getWorldPosition(fishAt).toArray());
@@ -815,7 +823,7 @@ async function start() {
   const gardening = kitty && gardenMod ? (async () => {
     try {
       plots = createPlots(gardenStart(), kitty.t, GARDEN.plots, gd?.rate ?? 1, live ? (Math.random() * 1e6) | 0 : 1);
-      garden = await gardenMod.createGarden({ scene: world.scene, url: stamped('models/garden.glb'), infoUrl: stamped('models/garden.json'), texUrl: stamped, renderer, plots, preload: !live });
+      garden = await gardenMod.createGarden({ scene: world.scene, url: stamped('models/garden.glb'), infoUrl: stamped('models/garden.json'), texUrl: stamped, renderer, plots, preload: !live, labels: !short });
       const [{ createParrots }, { createTokenFX }] = await Promise.all([import('./parrots.js'), import('./outfits.js')]);
       parrots = await createParrots({ scene: world.scene, url: stamped('models/parrot.glb'), infoUrl: stamped('models/parrot.json'), perchUrl: stamped('models/perch.glb'),
         renderer, perchAt: gardenMod.PERCH_AT, packets: garden.packets });
