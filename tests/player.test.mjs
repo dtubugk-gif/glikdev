@@ -128,3 +128,33 @@ test('a bouncier toy really bounces higher than the yarn', () => {
   };
   assert.ok(peak(0.66) > peak(undefined) * 1.5, `${peak(0.66)} vs ${peak(undefined)}`);
 });
+
+test('Day 7: a jump: crouch, up 2.6 m and down again, once at a time; you keep going while in the air', async () => {
+  const { createWalker, JUMP, PLAYER } = await import('../src/player.js');
+  const w = createWalker({});
+  const ev = [];
+  w.onJump = (what) => ev.push([what, +w.t.toFixed(3)]);
+  assert.equal(w.y(), 0);
+  w.steer(0, -1, 1);
+  assert.ok(w.jump());
+  assert.equal(w.jump(), false, 'no second jump in the air');
+  let top = 0, z0 = w.z;
+  for (let i = 0; i < 60 * JUMP.total; i++) { w.step(1 / 60); top = Math.max(top, w.y()); }
+  assert.ok(Math.abs(top - JUMP.height) < 0.02, `apex ${top}`);
+  assert.equal(w.y(), 0, 'back on the ground');
+  assert.ok(w.z < z0 - 2, 'it kept running');
+  assert.deepEqual(ev.map((e) => e[0]), ['up', 'land']);
+  assert.ok(Math.abs(ev[1][1] - ev[0][1] - JUMP.air) < 0.03);
+  const sq = w.squash();
+  assert.ok(Math.abs(sq.y * sq.xz * sq.xz - 1) < 1e-9, 'squash keeps the volume');
+  assert.ok(w.jump(), 'and again');
+  assert.equal(w.anim().name, 'Jump');
+  // the stick pushed part way walks; all the way runs
+  const s = createWalker({});
+  s.steer(1, 0, 0.1);
+  for (let i = 0; i < 120; i++) s.step(1 / 60);
+  assert.ok(s.speed < PLAYER.walk * 1.1, `gentle push: ${s.speed}`);
+  s.steer(1, 0, 1);
+  for (let i = 0; i < 120; i++) s.step(1 / 60);
+  assert.ok(s.speed > PLAYER.run * 0.9, `full push: ${s.speed}`);
+});

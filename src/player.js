@@ -34,6 +34,10 @@ const STEP = 1 / 60;
 const CLIPS = ['Idle', 'Walk', 'Run', 'Wave'];
 // Day 6: two more, played once each (from Idle back to Idle): a jump for joy, and a crouch to stroke a cat
 const ONCE = { Cheer: 1.4, Pet: 2.4 };
+/** Day 7 (the owner: "a jump button"): a jump, second by second, and how high it goes (m). The 'Jump' clip in
+ *  player.glb is timed to it: it crouches for `crouch`, leaves the ground, lands `air` later, and recovers. */
+export const JUMP = { crouch: 0.1, air: 0.62, land: 0.18, height: 2.6 };
+JUMP.total = JUMP.crouch + JUMP.air + JUMP.land;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const easeOut = (k) => 1 - (1 - clamp(k, 0, 1)) ** 3;
 const easeInOut = (k) => { k = clamp(k, 0, 1); return k * k * (3 - 2 * k); };
@@ -69,6 +73,7 @@ export function createWalker(o = {}) {
     target: null, dir: null, waveUntil: -1, arrived: 0, actName: null, actUntil: -1,
     boxes: o.boxes || [], circles: o.circles || [],
     wand: false, castAt: -10, aim: null, aimOut: false, rodYaw: HOLD.restYaw, rodElev: HOLD.restElev,
+    jumpAt: -10, jumps: 0, mag: 1,
   };
   const clampIn = (x, z) => {
     const r = Math.hypot(x, z);
@@ -77,12 +82,39 @@ export function createWalker(o = {}) {
     return [x, z];
   };
   w.goTo = (x, z) => { const [tx, tz] = clampIn(x, z); w.target = { x: tx, z: tz }; w.dir = null; w.waveUntil = -1; w.actUntil = -1; };
-  w.steer = (dx, dz) => {
+  /** the keyboard or the move stick: a direction to keep going; `mag` 0..1 (the stick pushed part way walks) */
+  w.steer = (dx, dz, mag = 1) => {
     const d = Math.hypot(dx, dz);
     w.dir = d > 1e-3 ? { x: dx / d, z: dz / d } : null;
+    w.mag = Math.max(0, Math.min(1, mag));
     if (w.dir) { w.target = null; w.waveUntil = -1; w.actUntil = -1; }
   };
   w.stop = () => { w.target = null; w.dir = null; };
+  // ---- Day 7: the jump. You keep going the way you were going; only up and down are added.
+  /** jumps, unless you are already in the air (a new one may start as the last one lands) */
+  w.jump = () => {
+    const a = w.t - w.jumpAt;
+    if (a >= 0 && a < JUMP.crouch + JUMP.air) return false;
+    w.jumpAt = w.t; w.jumps++; w.waveUntil = -1; w.actUntil = -1;
+    return true;
+  };
+  /** how high your feet are off the ground (m) */
+  w.y = () => {
+    const a = w.t - w.jumpAt - JUMP.crouch;
+    if (a <= 0 || a >= JUMP.air) return 0;
+    const k = a / JUMP.air;
+    return JUMP.height * 4 * k * (1 - k);
+  };
+  w.airborne = () => w.y() > 0;
+  /** squash and stretch (height, and the width that keeps your volume): down in the crouch, long as you leave, flat as you land */
+  w.squash = () => {
+    const a = w.t - w.jumpAt;
+    let y = 1;
+    if (a >= 0 && a < JUMP.crouch) y = 1 - 0.12 * Math.sin((a / JUMP.crouch) * Math.PI / 2);
+    else if (a >= JUMP.crouch && a < JUMP.crouch + 0.16) y = 1 + 0.09 * Math.sin(((a - JUMP.crouch) / 0.16) * Math.PI);
+    else if (a >= JUMP.crouch + JUMP.air && a < JUMP.total) y = 1 - 0.14 * Math.sin(((a - JUMP.crouch - JUMP.air) / JUMP.land) * Math.PI);
+    return { y, xz: 1 / Math.sqrt(y) };
+  };
   w.wave = () => { if (!w.target && !w.dir && !w.wand) w.waveUntil = w.t + 2.0; };   // (your waving hand holds the stick)
   /** Day 6: 'Cheer' (a jump for joy) or 'Pet' (crouch and stroke the cat in front of you), when you are standing still */
   w.act = (name, faceX, faceZ) => {
@@ -126,7 +158,7 @@ export function createWalker(o = {}) {
   w.step = (dt = STEP) => {
     w.t += dt;
     let want = 0, hx = 0, hz = 0;
-    if (w.dir) { hx = w.dir.x; hz = w.dir.z; want = PLAYER.run; }
+    if (w.dir) { hx = w.dir.x; hz = w.dir.z; want = PLAYER.walk * 0.55 + (PLAYER.run - PLAYER.walk * 0.55) * w.mag; }
     else if (w.target) {
       const dx = w.target.x - w.x, dz = w.target.z - w.z, d = Math.hypot(dx, dz);
       if (d < 0.25) { w.target = null; w.arrived = w.t; }
@@ -172,8 +204,12 @@ export function createWalker(o = {}) {
     const kr = 1 - Math.exp(-dt * 8);
     w.rodYaw += (yawT - w.rodYaw) * kr;
     w.rodElev += (elevT - w.rodElev) * kr;
+    // the jump's two moments: off the ground, and back on it
+    const ja = w.t - w.jumpAt - JUMP.crouch;
+    if (ja >= 0 && ja - dt < 0) w.onJump?.('up');
+    if (ja >= JUMP.air && ja - dt < JUMP.air) w.onJump?.('land');
     // footfalls: one every stride's length (longer strides when running), for the sound of your steps
-    if (w.speed > 0.6) {
+    if (w.speed > 0.6 && !w.airborne()) {
       const run = w.speed > PLAYER.walk * 1.35;
       w.stride = (w.stride ?? 1.2) + w.speed * dt;
       const len = run ? 3.3 : 2.05;
@@ -183,6 +219,7 @@ export function createWalker(o = {}) {
   w.moving = () => w.speed > 0.3;
   /** which clip, and how fast it plays */
   w.anim = () => {
+    if (w.t - w.jumpAt < JUMP.total) return { name: 'Jump', rate: 1, once: true, key: w.jumps };
     if (w.speed > PLAYER.walk * 1.35) return { name: 'Run', rate: Math.min(1.5, Math.max(0.8, w.speed / 9.4)) };
     if (w.speed > 0.3) return { name: 'Walk', rate: Math.min(1.6, Math.max(0.6, w.speed / 4.1)) };
     if (w.t < w.actUntil) return { name: w.actName, rate: 1, once: true };
@@ -222,7 +259,7 @@ export async function createPlayer(o) {
   root.add(blob);
 
   const startOpts = { ...o.start, boxes: o.boxes, circles: o.circles };
-  let walker, mixer, actions, cur, curName, scriptAt, acc = 0;
+  let walker, mixer, actions, cur, curName, curKey = null, scriptAt, acc = 0;
   // ---- Day 4: the stick in your right hand. The clips know nothing of it: after each one has posed you, your
   // right arm is bent (two-bone IK) so the hand is on the grip, and the rod is laid in it.
   const arm = ['upperarm_R', 'forearm_R', 'hand_R'].map((n) => model.getObjectByName(n));
@@ -301,17 +338,20 @@ export async function createPlayer(o) {
     walker.setWand(wandOn);
     if (mixer) { mixer.stopAllAction(); mixer.uncacheRoot(mixer.getRoot()); }
     mixer = new THREE.AnimationMixer(model);
-    actions = Object.fromEntries([...CLIPS, ...Object.keys(ONCE)].filter((n) => clips[n]).map((n) => [n, mixer.clipAction(clips[n])]));
-    cur = null; curName = ''; scriptAt = 0;
+    actions = Object.fromEntries([...CLIPS, ...Object.keys(ONCE), 'Jump'].filter((n) => clips[n]).map((n) => [n, mixer.clipAction(clips[n])]));
+    cur = null; curName = ''; curKey = null; scriptAt = 0;
+    walker.onJump = (what) => o.onJump?.(what, walker);
     show(walker.anim(), true);
     mixer.update(0);
     place();
     holdRod();
   }
   function show(a, instant = false) {
-    const name = actions[a.name] ? a.name : 'Idle';
+    // (no 'Jump' clip in an older player.glb: you keep the clip you had, and the jump is only the leap itself)
+    const name = actions[a.name] ? a.name : a.name === 'Jump' ? (curName || 'Idle') : 'Idle';
     const act = actions[name];
-    if (name === curName) { act.timeScale = a.rate; return; }
+    if (name === curName && (a.key == null || a.key === curKey)) { act.timeScale = a.rate; return; }
+    curKey = a.key ?? null;
     act.reset();
     act.setLoop(a.once ? THREE.LoopOnce : THREE.LoopRepeat, Infinity);
     act.clampWhenFinished = true;
@@ -321,13 +361,20 @@ export async function createPlayer(o) {
     if (cur && !instant) act.crossFadeFrom(cur, 0.18, false); else if (cur) cur.stop();
     cur = act; curName = name;
   }
-  function place() { root.position.set(walker.x, 0, walker.z); root.rotation.y = walker.heading; }
+  function place() {
+    const y = walker.y();
+    root.position.set(walker.x, y, walker.z); root.rotation.y = walker.heading;
+    blob.position.y = 0.04 - y;                            // your shadow stays on the ground, smaller and paler as you rise
+    blob.scale.setScalar(1 - Math.min(0.45, y / 8));
+    blob.material.opacity = 0.5 * (1 - Math.min(0.6, y / 6));
+  }
   function tick() {
     if (o.script) {
       while (scriptAt < o.script.length && o.script[scriptAt].t <= walker.t + 1e-6) {
         const s = o.script[scriptAt++];
         if (s.type === 'go') walker.goTo(s.x, s.z);
         else if (s.type === 'wave') walker.wave();
+        else if (s.type === 'jump') walker.jump();
         else if (s.type === 'face') walker.faceTo(s.x, s.z);
         else if (s.type === 'cheer' || s.type === 'pet') walker.act(s.type === 'cheer' ? 'Cheer' : 'Pet', s.x, s.z);
       }
@@ -345,7 +392,11 @@ export async function createPlayer(o) {
     get walker() { return walker; },
     get x() { return walker.x; }, get z() { return walker.z; }, get t() { return walker.t; },
     goTo(x, z) { walker.goTo(x, z); },
-    steer(dx, dz) { walker.steer(dx, dz); },
+    steer(dx, dz, mag = 1) { walker.steer(dx, dz, mag); },
+    /** Day 7: jump (false while you are already in the air); the squash and stretch to draw it with */
+    jump() { return walker.jump(); },
+    squash() { return walker.squash(); },
+    get airborne() { return walker.airborne(); },
     stop() { walker.stop(); },
     wave() { walker.wave(); },
     /** Day 6: a jump for joy; or crouch and stroke the cat at (x, z) */
@@ -365,7 +416,7 @@ export async function createPlayer(o) {
     position(out = new THREE.Vector3()) { return out.set(walker.x, 0, walker.z); },
     /** first person: you do not see your own body (your shadow stays) */
     setBodyVisible(v) { model.visible = v; if (rod) rod.visible = wandOn && v; },
-    busy() { return walker.moving() || !!walker.target || !!walker.dir || !!walker.face || walker.t < walker.waveUntil || walker.t < walker.actUntil || walker.t - walker.castAt < HOLD.swing + 0.1; },
+    busy() { return walker.moving() || !!walker.target || !!walker.dir || !!walker.face || walker.t < walker.waveUntil || walker.t < walker.actUntil || walker.t - walker.castAt < HOLD.swing + 0.1 || walker.t - walker.jumpAt < JUMP.total; },
     /** Day 4: the fish on a stick. giveRod: the rod's model (a group, drawn at HOLD.scale); setWand: in your hand or put away */
     giveRod(obj) { rod = obj; root.add(obj); holdRod(); },
     setWand(on) { wandOn = !!on; walker.setWand(wandOn); if (!wandOn) unbend(); holdRod(); },

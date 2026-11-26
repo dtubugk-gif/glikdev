@@ -399,7 +399,12 @@ async function start() {
           () => (friend ? friend.circle() : { x: 0, z: 0, r: 0 }),
           ...[0, 1, 2].map((i) => () => (atomBox ? atomBox.circle(i) : { x: 0, z: 0, r: 0 }))],
         script: pd ? pd.script || [] : null,
-        onStep: (running) => { audio?.event({ type: 'footstep', strong: running }); if (running && kitty) fx?.dust(kitty.t, player.x, player.z, 0.42, 3, player.heading + Math.PI); } });
+        onStep: (running) => { audio?.event({ type: 'footstep', strong: running }); if (running && kitty) fx?.dust(kitty.t, player.x, player.z, 0.42, 3, player.heading + Math.PI); },
+        // Day 7: the jump: a push off the ground, and a thump and a puff of dust as you land
+        onJump: (what) => {
+          if (what === 'up') { audio?.event({ type: 'footstep', strong: true }); audio?.event({ type: 'leap' }); }
+          else { audio?.event({ type: 'footstep', strong: true }); audio?.event({ type: 'land' }); if (kitty) fx?.dust(kitty.t, player.x, player.z, 0.9, 6); }
+        } });
       rig.moveKeys = false;
       rig.canPan = false;                                  // the camera is yours: it cannot wander off
       if (live && params.get('view') === 'first') {
@@ -710,7 +715,8 @@ async function start() {
     if (player) {
       const a = bonkAt == null ? 9 : t - bonkAt;
       const sq = a >= 0 && a < 1.2 ? 1 - 0.5 * Math.exp(-a * 4.5) * Math.cos(a * 15) : 1;
-      player.root.scale.set(1 + (1 - sq) * 0.45, sq, 1 + (1 - sq) * 0.45);
+      const js = player.squash();                         // (Day 7: and the jump's own squash and stretch)
+      player.root.scale.set((1 + (1 - sq) * 0.45) * js.xz, sq * js.y, (1 + (1 - sq) * 0.45) * js.xz);
     }
     if (blast) {
       const b = blast.update(t, camera);
@@ -1287,13 +1293,78 @@ async function start() {
     addEventListener('keyup', (e) => held.delete(e.code));
     addEventListener('blur', () => held.clear());
   }
+  // Day 7: the move stick (phones): where it is pushed, and how far (0..1)
+  const stick = { id: null, x: 0, y: 0, mag: 0 };
   function steerPlayer() {
+    if (stick.mag > 0) {                                   // pushed up = away from the camera, as with W
+      const s = Math.sin(rig.az), c = Math.cos(rig.az), r = stick.x, f = -stick.y;
+      player.steer(c * r - s * f, -s * r - c * f, stick.mag);
+      steering = true;
+      return;
+    }
     if (!held.size) { if (steering) { steering = false; player.steer(0, 0); } return; }
     let r = 0, f = 0;
     for (const k of held) { r += MOVE[k][0]; f += MOVE[k][1]; }
     const s = Math.sin(rig.az), c = Math.cos(rig.az);       // the camera looks along (-sin az, -cos az); its right is (cos az, -sin az)
     player.steer(c * r - s * f, -s * r - c * f);
     steering = true;
+  }
+  /** Day 7: jump (the button, J, or Space when the fish is not out) */
+  function doJump() {
+    if (!player || !kitty || blast?.dead(kitty.t)) return;
+    audio?.unlock();
+    if (player.jump()) dismissHint();
+  }
+  if (player && live) {
+    addEventListener('keydown', (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+      if (e.code !== 'KeyJ' && !(e.code === 'Space' && !wandOn)) return;
+      if (e.target?.closest?.('dialog, input, textarea, button, a, [contenteditable]')) return;
+      e.preventDefault();
+      doJump();
+    });
+  }
+  const stickEl = $('stick'), knob = $('stick-knob'), jumpBtn = $('jump');
+  if (player && live && showUI && (coarse || params.get('touch') === '1')) {   // (?touch=1: the touch controls on any device, for testing)
+    stickEl.hidden = false; jumpBtn.hidden = false;
+    root.classList.add('has-stick');
+    const R = 48;                                          // how far the knob goes (px)
+    const move = (e) => {
+      const r = stickEl.getBoundingClientRect();
+      let dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);
+      const d = Math.hypot(dx, dy);
+      if (d > R) { dx *= R / d; dy *= R / d; }
+      knob.style.transform = `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px)`;
+      const m = Math.min(1, d / R);
+      stick.x = dx / Math.max(1, Math.min(d, R)); stick.y = dy / Math.max(1, Math.min(d, R));
+      stick.mag = m < 0.16 ? 0 : (m - 0.16) / 0.84;         // a little dead zone in the middle
+    };
+    stickEl.addEventListener('pointerdown', (e) => {
+      if (stick.id != null) return;
+      stick.id = e.pointerId;
+      try { stickEl.setPointerCapture(e.pointerId); } catch { /* gone already */ }
+      stickEl.classList.add('is-held');
+      audio?.unlock();
+      backToHer();
+      wantShop = false; wantBox = -1; wantGarden = null; wantParrot = false; wantPacket = -1;
+      dismissHint();
+      move(e);
+      e.preventDefault();
+    });
+    stickEl.addEventListener('pointermove', (e) => { if (e.pointerId === stick.id) move(e); });
+    const release = (e) => {
+      if (e.pointerId !== stick.id) return;
+      stick.id = null; stick.mag = 0; stick.x = 0; stick.y = 0;
+      knob.style.transform = '';
+      stickEl.classList.remove('is-held');
+    };
+    for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) stickEl.addEventListener(ev, release);
+    // the jump button answers the moment it is pressed (a game button, not a link); a keyboard press works too
+    jumpBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); jumpBtn.classList.add('is-down'); doJump(); });
+    for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) jumpBtn.addEventListener(ev, () => jumpBtn.classList.remove('is-down'));
+    jumpBtn.addEventListener('click', (e) => { if (e.detail === 0) doJump(); });
+    jumpBtn.addEventListener('contextmenu', (e) => e.preventDefault());
+    stickEl.addEventListener('contextmenu', (e) => e.preventDefault());
   }
   addEventListener('keydown', (e) => {
     if (e.code !== 'KeyC' || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
