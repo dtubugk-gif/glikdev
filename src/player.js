@@ -110,9 +110,10 @@ export function createWalker(o = {}) {
   w.squash = () => {
     const a = w.t - w.jumpAt;
     let y = 1;
-    if (a >= 0 && a < JUMP.crouch) y = 1 - 0.12 * Math.sin((a / JUMP.crouch) * Math.PI / 2);
-    else if (a >= JUMP.crouch && a < JUMP.crouch + 0.16) y = 1 + 0.09 * Math.sin(((a - JUMP.crouch) / 0.16) * Math.PI);
-    else if (a >= JUMP.crouch + JUMP.air && a < JUMP.total) y = 1 - 0.14 * Math.sin(((a - JUMP.crouch - JUMP.air) / JUMP.land) * Math.PI);
+    // (gentle: the 'Jump' clip crouches and lands with the body itself; this only adds a little spring)
+    if (a >= 0 && a < JUMP.crouch) y = 1 - 0.04 * Math.sin((a / JUMP.crouch) * Math.PI / 2);
+    else if (a >= JUMP.crouch && a < JUMP.crouch + 0.16) y = 1 + 0.05 * Math.sin(((a - JUMP.crouch) / 0.16) * Math.PI);
+    else if (a >= JUMP.crouch + JUMP.air && a < JUMP.total) y = 1 - 0.05 * Math.sin(((a - JUMP.crouch - JUMP.air) / JUMP.land) * Math.PI);
     return { y, xz: 1 / Math.sqrt(y) };
   };
   w.wave = () => { if (!w.target && !w.dir && !w.wand) w.waveUntil = w.t + 2.0; };   // (your waving hand holds the stick)
@@ -358,7 +359,7 @@ export async function createPlayer(o) {
     act.timeScale = a.rate;
     act.setEffectiveWeight(1);
     act.play();
-    if (cur && !instant) act.crossFadeFrom(cur, 0.18, false); else if (cur) cur.stop();
+    if (cur && !instant) act.crossFadeFrom(cur, name === 'Jump' ? 0.06 : 0.18, false); else if (cur) cur.stop();   // (a jump's crouch is only 0.1 s: a quick blend keeps it)
     cur = act; curName = name;
   }
   function place() {
