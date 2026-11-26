@@ -134,8 +134,8 @@
     <span>Back to <span class="follow-name" id="follow-name">Kitty</span></span>
   </button>
 
-  <!-- Day 3: her friendship tokens; tap to open the wardrobe -->
-  <button class="chip tokens" id="tokens" type="button" aria-haspopup="dialog" aria-controls="shop" aria-label="Friendship tokens: 0. Go to the shop" hidden>
+  <!-- the coins (Day 3, as friendship tokens; Day 7: the one money of the game); tap to go to the shop -->
+  <button class="chip tokens" id="tokens" type="button" aria-haspopup="dialog" aria-controls="shop" aria-label="Coins: 0. Go to the shop" hidden>
     <img id="tokens-icon" src="models/shop/token.webp?v=0d055102b391" alt="" width="34" height="34">
     <span class="tokens-count" id="tokens-count">0</span>
     <span class="tokens-loss" id="tokens-loss" aria-hidden="true" hidden></span>
@@ -200,7 +200,7 @@
   <dialog class="namer catpick" id="catpick" aria-labelledby="catpick-title">
     <div class="namer-card">
       <h2 id="catpick-title">Choose your cat</h2>
-      <p class="namer-sub">She keeps her name and her hearts. New fur is bought with atom tokens: dodge an atom bomb, then tap the box it leaves.</p>
+      <p class="namer-sub">She keeps her name and her hearts. New fur costs coins. An atom box holds an Atomic coin, worth 2 coins.</p>
       <div class="cats" id="cats" role="group" aria-labelledby="catpick-title"></div>
       <p class="cat-status" id="cat-status" role="status" aria-live="polite"></p>
       <p class="cat-credits">The atom boxes and the fur they buy are Day&nbsp;5’s, an idea by @elenaabrosimova1968.</p>
@@ -214,9 +214,9 @@
     <div class="namer-card">
       <div class="shop-head">
         <h2 id="shop-title">Kitty shop</h2>
-        <p class="shop-purse"><img src="models/shop/token.webp?v=0d055102b391" alt="" width="28" height="28"><span id="shop-have">0</span><span class="shop-purse-label"> tokens</span></p>
+        <p class="shop-purse"><img src="models/shop/token.webp?v=0d055102b391" alt="" width="28" height="28"><span id="shop-have">0</span><span class="shop-purse-label"> coins</span></p>
       </div>
-      <p class="namer-sub">Welcome to the kitty shop! Pet her, feed her and play with her to earn friendship tokens. Make her angry and you lose some.</p>
+      <p class="namer-sub">Welcome to the kitty shop! Pet her, feed her and play with her to earn coins. Grow fruit and open atom boxes for more. Make her angry and you lose some.</p>
       <div id="shop-items">
         <h3 class="shop-sub" id="shop-outfits-title">Outfits</h3>
         <div class="shop-grid" id="shop-grid" role="group" aria-labelledby="shop-outfits-title"></div>
@@ -267,7 +267,7 @@
         <ul class="mutation-list">
           <li><img src="models/garden/thumb_fruit_pineapple_irradiated.webp?v=0d055102b391" alt="" width="56" height="56"><span><b>Irradiated</b> fruit is worth ×2</span></li>
           <li><img src="models/garden/thumb_fruit_pineapple_cherenkov.webp?v=0d055102b391" alt="" width="56" height="56"><span><b>Cherenkov Glow</b> fruit is worth ×3</span></li>
-          <li><img src="models/garden/thumb_fruit_pineapple_atomic.webp?v=0d055102b391" alt="" width="56" height="56"><span><b>Atomic</b> fruit is worth ×5, plus an atom token</span></li>
+          <li><img src="models/garden/thumb_fruit_pineapple_atomic.webp?v=0d055102b391" alt="" width="56" height="56"><span><b>Atomic</b> fruit is worth ×5, plus an Atomic coin</span></li>
         </ul>
       </div>
       <p class="cat-credits">Idea by @elenaabrosimova1968. The parrot, the garden and every plant were made in Blender for Day&nbsp;7.</p>

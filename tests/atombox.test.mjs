@@ -4,33 +4,36 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { ATOM_BOX, SKINS, skinById, createWallet } from '../src/tokens.js';
+import { ATOM_BOX, SKINS, skinById, createWallet, ATOMIC_COIN } from '../src/tokens.js';
 import { boxPose, boxLife, bombPose, wasHit, landSpot, TIMING, MODEL, BOMB, BOX_R, STAND, NEAR } from '../src/atombox.js';
 import { KITTY_DEMOS, DEMOS, demoPose } from '../src/demo.js';
 
 const GAME = join(dirname(fileURLToPath(import.meta.url)), '..');
 
-test('atom tokens: a second purse, kept with the first', () => {
+test('Day 7: one coin. An Atomic coin is worth ATOMIC_COIN coins; old atom tokens become coins', () => {
+  assert.equal(ATOMIC_COIN, 2, 'the owner: the atom coin is worth two coins');
   const w = createWallet({ tokens: 4 });
-  assert.equal(w.atoms, 0);
-  assert.equal(w.earnAtoms(1), 1);
-  assert.equal(w.earnAtoms(-3), 0);
-  assert.equal(w.earnAtoms('x'), 0);
-  assert.equal(w.atoms, 1);
-  assert.equal(w.tokens, 4, 'friendship tokens are untouched');
+  assert.equal(w.atoms, undefined, 'no second purse any more');
+  assert.equal(w.earnAtomic(1), ATOMIC_COIN);
+  assert.equal(w.earnAtomic(-3), 0);
+  assert.equal(w.earnAtomic('x'), 0);
+  assert.equal(w.tokens, 4 + ATOMIC_COIN);
   const again = createWallet(JSON.parse(JSON.stringify(w)));
-  assert.equal(again.atoms, 1);
-  assert.equal(again.tokens, 4);
-  // a save from before Day 5 has none; a broken one never breaks the rest
-  assert.equal(createWallet({ tokens: 9, owned: ['bowtie'] }).atoms, 0);
+  assert.equal(again.tokens, 4 + ATOMIC_COIN);
+  assert.ok(!('atoms' in JSON.parse(JSON.stringify(again))), 'saves have no atoms field');
+  // a save from Day 5 or 6: its atom tokens are turned into coins, once
+  const old = createWallet({ tokens: 9, atoms: 3, skins: ['silver'] });
+  assert.equal(old.tokens, 9 + 3 * ATOMIC_COIN);
+  assert.equal(createWallet(JSON.parse(JSON.stringify(old))).tokens, 9 + 3 * ATOMIC_COIN, 'not twice');
+  assert.ok(old.ownsSkin('silver'), 'the skins it bought stay hers');
   for (const bad of [{ atoms: -2 }, { atoms: 'lots', skins: 'all' }, { atoms: 1e12, skins: ['nope', 7, null] }]) {
-    const b = createWallet(bad);
-    assert.ok(b.atoms >= 0 && b.atoms <= 9999);
-    assert.ok(!SKINS.some((k) => b.ownsSkin(k.id)));
+    const k = createWallet(bad);
+    assert.ok(k.tokens >= 0 && k.tokens <= 9999);
+    assert.ok(!SKINS.some((sk) => k.ownsSkin(sk.id)));
   }
 });
 
-test('fur skins are bought with atom tokens, once, and stay hers', () => {
+test('fur skins are bought with coins, once, and stay hers', () => {
   assert.ok(SKINS.length >= 2);
   const ids = new Set();
   for (const k of SKINS) {
@@ -45,21 +48,16 @@ test('fur skins are bought with atom tokens, once, and stay hers', () => {
   const cheap = [...SKINS].sort((a, b) => a.price - b.price)[0];
   const w = createWallet();
   assert.equal(w.canBuySkin(cheap.id), false);
-  assert.equal(w.buySkin(cheap.id), false, 'no atom tokens yet');
-  for (let i = 0; i < cheap.price; i++) w.earnAtoms(ATOM_BOX.gives);
+  assert.equal(w.buySkin(cheap.id), false, 'no coins yet');
+  w.earn(cheap.price + 2);
   assert.equal(w.canBuySkin(cheap.id), true);
   assert.equal(w.buySkin('nope'), false);
   assert.equal(w.buySkin(cheap.id), true);
-  assert.equal(w.atoms, 0);
+  assert.equal(w.tokens, 2);
   assert.equal(w.ownsSkin(cheap.id), true);
   assert.equal(w.buySkin(cheap.id), false, 'not twice');
   const again = createWallet(JSON.parse(JSON.stringify(w)));
   assert.equal(again.ownsSkin(cheap.id), true);
-  // friendship tokens cannot buy a skin, and atom tokens cannot buy from the shop
-  const rich = createWallet({ tokens: 500 });
-  assert.equal(rich.buySkin(cheap.id), false);
-  const atomic = createWallet({ atoms: 500 });
-  assert.equal(atomic.buy('bowtie'), false);
 });
 
 test('a bomb falls for a set time, faster and faster, with its warning ring on the ground all the way', () => {
