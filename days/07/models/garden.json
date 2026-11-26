@@ -1,0 +1,197 @@
+{
+ "scale": 14,
+ "bed": {
+  "w": 1.45,
+  "d": 0.95,
+  "h": 0.06,
+  "soil": 0.046
+ },
+ "plots": [
+  [
+   -0.45,
+   0.05,
+   0.205
+  ],
+  [
+   0.0,
+   0.05,
+   0.205
+  ],
+  [
+   0.45,
+   0.05,
+   0.205
+  ],
+  [
+   -0.45,
+   0.05,
+   -0.205
+  ],
+  [
+   0.0,
+   0.05,
+   -0.205
+  ],
+  [
+   0.45,
+   0.05,
+   -0.205
+  ]
+ ],
+ "plotRadius": 0.105,
+ "moundRadius": 0.062,
+ "plants": {
+  "Pineapple": {
+   "fruit": 1,
+   "heights": {
+    "Sprout": 0.0432,
+    "Young": 0.1191,
+    "Grown": 0.2032
+   },
+   "fruitAt": [
+    [
+     0.0,
+     0.1513,
+     -0.0
+    ]
+   ]
+  },
+  "Dragonfruit": {
+   "fruit": 3,
+   "heights": {
+    "Sprout": 0.0508,
+    "Young": 0.2,
+    "Grown": 0.3449
+   },
+   "fruitAt": [
+    [
+     0.0,
+     0.2051,
+     0.1535
+    ],
+    [
+     0.1315,
+     0.1749,
+     0.0699
+    ],
+    [
+     -0.1324,
+     0.1696,
+     0.0764
+    ]
+   ]
+  },
+  "Mangosteen": {
+   "fruit": 4,
+   "heights": {
+    "Sprout": 0.0436,
+    "Young": 0.2,
+    "Grown": 0.4745
+   },
+   "fruitAt": [
+    [
+     -0.0479,
+     0.243,
+     0.1187
+    ],
+    [
+     0.071,
+     0.233,
+     0.1136
+    ],
+    [
+     0.1287,
+     0.247,
+     -0.0181
+    ],
+    [
+     -0.1307,
+     0.238,
+     -0.0184
+    ]
+   ]
+  }
+ },
+ "fruitSize": {
+  "Pineapple": [
+   0.0596,
+   0.0987,
+   0.0629
+  ],
+  "Dragonfruit": [
+   0.0692,
+   0.0758,
+   0.0658
+  ],
+  "Mangosteen": [
+   0.045,
+   0.0541,
+   0.045
+  ]
+ },
+ "seedHold": [
+  0.0,
+  0.025,
+  -0.0
+ ],
+ "atomRings": {
+  "radius": 0.035,
+  "electronAxis": "y",
+  "scale": {
+   "Pineapple": 1.55,
+   "Dragonfruit": 1.25,
+   "Mangosteen": 1.0
+  }
+ },
+ "skins": {
+  "Pineapple": {
+   "base": "garden/pineapple_base.webp",
+   "irradiated": "garden/pineapple_irradiated.webp",
+   "cherenkov": "garden/pineapple_cherenkov.webp",
+   "atomic": "garden/pineapple_atomic.webp"
+  },
+  "Dragonfruit": {
+   "base": "garden/dragonfruit_base.webp",
+   "irradiated": "garden/dragonfruit_irradiated.webp",
+   "cherenkov": "garden/dragonfruit_cherenkov.webp",
+   "atomic": "garden/dragonfruit_atomic.webp"
+  },
+  "Mangosteen": {
+   "base": "garden/mangosteen_base.webp",
+   "irradiated": "garden/mangosteen_irradiated.webp",
+   "cherenkov": "garden/mangosteen_cherenkov.webp",
+   "atomic": "garden/mangosteen_atomic.webp"
+  }
+ },
+ "leafTint": {
+  "irradiated": "#d9e45a",
+  "cherenkov": "#5a8fe8",
+  "atomic": "#66d9ae"
+ },
+ "mutatedRoughness": {
+  "irradiated": 1.0,
+  "cherenkov": 0.85,
+  "atomic": 0.7
+ },
+ "tris": {
+  "GardenBed": 9588,
+  "Mound": 626,
+  "Pineapple_Loose": 2128,
+  "Dragonfruit_Loose": 1728,
+  "Mangosteen_Loose": 1256,
+  "Pineapple_Sprout": 412,
+  "Pineapple_Young": 1216,
+  "Pineapple_Grown": 4744,
+  "Seed_Pineapple": 568,
+  "Dragonfruit_Sprout": 216,
+  "Dragonfruit_Young": 1852,
+  "Dragonfruit_Grown": 13928,
+  "Seed_Dragonfruit": 568,
+  "Mangosteen_Sprout": 80,
+  "Mangosteen_Young": 320,
+  "Mangosteen_Grown": 8368,
+  "Seed_Mangosteen": 568,
+  "AtomRings": 2520,
+  "total": 50686
+ }
+}
