@@ -146,6 +146,26 @@
   <div class="boom" id="boom" aria-hidden="true" hidden><span id="boom-word">BOOM!</span></div>
   <!-- Day 8: bedtime: the light goes soft and warm while you sleep in your bed -->
   <div class="dusk" id="dusk" aria-hidden="true"></div>
+  <!-- phones play sideways (owner, 2026-11-27): held upright, the game asks you to turn the phone -->
+  <div class="turn" id="turn" role="dialog" aria-modal="true" aria-labelledby="turn-title" hidden>
+    <div class="turn-card">
+      <svg class="turn-phone" viewBox="0 0 120 120" aria-hidden="true">
+        <g class="turn-device">
+          <rect x="38" y="14" width="44" height="92" rx="9" fill="#fff8ec" stroke="#2f2620" stroke-width="5"/>
+          <rect x="45" y="25" width="30" height="66" rx="3" fill="#b0d6ee"/>
+          <path d="M45 75 L58 62 L66 70 L75 60 L75 91 L45 91 Z" fill="#8fc27a"/>
+          <circle cx="66" cy="38" r="5" fill="#ec6f35"/>
+          <circle cx="60" cy="98" r="3" fill="#2f2620"/>
+        </g>
+        <path class="turn-arrow" d="M96 40 A40 40 0 0 1 96 80" fill="none" stroke="#c9531f" stroke-width="6" stroke-linecap="round"/>
+        <path class="turn-arrow" d="M87 76 L97 83 L103 72" fill="none" stroke="#c9531f" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <h2 id="turn-title">Turn your phone sideways</h2>
+      <p class="turn-sub" id="turn-sub">Glikdev plays sideways: more room for the world.</p>
+      <button class="turn-go" id="turn-go" type="button" hidden>Play sideways</button>
+      <button class="turn-stay" id="turn-stay" type="button">Keep it upright</button>
+    </div>
+  </div>
   <!-- Day 5: atom tokens from the atom box; tap to see the fur skins they buy -->
   <button class="chip tokens atoms" id="atoms" type="button" aria-haspopup="dialog" aria-controls="catpick" aria-label="Atom tokens: 0. See the fur skins" hidden>
     <img id="atoms-icon" src="models/shop/atomtoken.webp?v=080b8e02d6f5" alt="" width="34" height="34">
