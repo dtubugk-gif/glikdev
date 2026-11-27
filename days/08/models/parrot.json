@@ -1,0 +1,230 @@
+{
+ "scale": 14,
+ "clips": {
+  "Perch": 3.0,
+  "Squawk": 1.0,
+  "Drop": 0.9,
+  "Hop": 0.5,
+  "TakeOff": 0.6,
+  "Fly": 0.4,
+  "Glide": 1.2,
+  "Land": 0.7
+ },
+ "loops": [
+  "Perch",
+  "Fly",
+  "Glide"
+ ],
+ "fps": 30,
+ "dropRelease": 0.45,
+ "landTouch": 0.4,
+ "landFeetOnGripFrom": 0.2667,
+ "takeOffLift": 0.02,
+ "takeOffLeave": 0.2,
+ "socket": "SeedSocket",
+ "socketRest": [
+  0.0,
+  0.0748,
+  0.067
+ ],
+ "perchGrip": [
+  -0.054,
+  0.42,
+  -0.0
+ ],
+ "perchGrips": [
+  [
+   -0.054,
+   0.42,
+   -0.0
+  ],
+  [
+   0.054,
+   0.42,
+   -0.0
+  ]
+ ],
+ "perchGripNames": [
+  "PerchGrip",
+  "PerchGrip_1"
+ ],
+ "barRadius": 0.009,
+ "barAxis": "x",
+ "size": {
+  "beakToTail": 0.2359,
+  "height": 0.1338,
+  "wingspan": 0.384,
+  "bodyWidth": 0.076
+ },
+ "flight": {
+  "bodyPitchDeg": 50.0,
+  "bodyCentre": [
+   0.0,
+   0.075,
+   -0.03
+  ],
+  "note": "in Fly/Glide the body lies level, about 0.02 above its perched place; the feet are tucked"
+ },
+ "blink": {
+  "bones": [
+   "lidUp_L",
+   "lidUp_R",
+   "lidLo_L",
+   "lidLo_R"
+  ],
+  "inClip": "Perch",
+  "closedAt": 1.4333,
+  "from": 1.34,
+  "to": 1.54,
+  "open": {
+   "lidUp_L": [
+    -0.2581,
+    -0.701,
+    -0.5898,
+    0.3068
+   ],
+   "lidUp_R": [
+    -0.2581,
+    0.701,
+    0.5898,
+    0.3068
+   ],
+   "lidLo_L": [
+    -0.2581,
+    -0.701,
+    -0.5898,
+    0.3068
+   ],
+   "lidLo_R": [
+    -0.2581,
+    0.701,
+    0.5898,
+    0.3068
+   ]
+  },
+  "closed": {
+   "lidUp_L": [
+    -0.3954,
+    -0.1518,
+    -0.9034,
+    0.0664
+   ],
+   "lidUp_R": [
+    -0.3954,
+    0.1518,
+    0.9034,
+    0.0664
+   ],
+   "lidLo_L": [
+    -0.0597,
+    -0.9059,
+    -0.1364,
+    0.3965
+   ],
+   "lidLo_R": [
+    -0.0597,
+    0.9059,
+    0.1364,
+    0.3965
+   ]
+  },
+  "note": "bone.quaternion [x, y, z, w]: slerp open -> closed to blink by hand (after the mixer update)"
+ },
+ "bones": [
+  "root",
+  "body",
+  "chest",
+  "neck1",
+  "neck2",
+  "head",
+  "jaw",
+  "crest",
+  "lidUp_L",
+  "lidLo_L",
+  "lidUp_R",
+  "lidLo_R",
+  "SeedSocket",
+  "shoulder_L",
+  "elbow_L",
+  "hand_L",
+  "primary_L",
+  "wingFold_L",
+  "shoulder_R",
+  "elbow_R",
+  "hand_R",
+  "primary_R",
+  "wingFold_R",
+  "tail1",
+  "tail2",
+  "thigh_L",
+  "shin_L",
+  "foot_L",
+  "toeF1_L",
+  "toeF2_L",
+  "toeB1_L",
+  "toeB2_L",
+  "thigh_R",
+  "shin_R",
+  "foot_R",
+  "toeF1_R",
+  "toeF2_R",
+  "toeB1_R",
+  "toeB2_R"
+ ],
+ "materials": [
+  "M_Parrot",
+  "M_ParrotEye"
+ ],
+ "meshes": [
+  "Parrot",
+  "Eyes"
+ ],
+ "tris": {
+  "parrot": 10359,
+  "eyes": 680,
+  "all": 11039
+ },
+ "glbBytes": 1918540,
+ "feet": {
+  "Perch": {
+   "maxFootErrorMm": 0.0,
+   "startMm": 0.0,
+   "endMm": 0.0
+  },
+  "Squawk": {
+   "maxFootErrorMm": 0.0,
+   "startMm": 0.0,
+   "endMm": 0.0
+  },
+  "Drop": {
+   "maxFootErrorMm": 0.0,
+   "startMm": 0.0,
+   "endMm": 0.0
+  },
+  "Hop": {
+   "maxFootErrorMm": 11.913,
+   "startMm": 0.0,
+   "endMm": 0.0
+  },
+  "TakeOff": {
+   "maxFootErrorMm": 73.49,
+   "startMm": 0.0,
+   "endMm": 65.408
+  },
+  "Fly": {
+   "maxFootErrorMm": 73.406,
+   "startMm": 65.408,
+   "endMm": 65.408
+  },
+  "Glide": {
+   "maxFootErrorMm": 71.563,
+   "startMm": 70.63,
+   "endMm": 70.63
+  },
+  "Land": {
+   "maxFootErrorMm": 70.63,
+   "startMm": 70.63,
+   "endMm": 0.0
+  }
+ }
+}

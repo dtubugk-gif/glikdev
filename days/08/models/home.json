@@ -1,0 +1,150 @@
+{
+ "scale": 14,
+ "walls": {
+  "outer": [
+   19.6,
+   11.6
+  ],
+  "inner": [
+   18.4,
+   10.4
+  ],
+  "eave": 10.5,
+  "ridge": 19.0
+ },
+ "door": {
+  "half": 7.5,
+  "apex": 9.0
+ },
+ "floorTop": 0.14,
+ "ownerBed": {
+  "center": [
+   -11.5,
+   -5.6
+  ],
+  "size": [
+   5.2,
+   8.6
+  ],
+  "mattressTop": 1.9,
+  "pillow": [
+   -11.5,
+   2.12,
+   -8.0
+  ],
+  "pillowTop": 2.12,
+  "pillowCenter": [
+   -11.5,
+   -8.0
+  ],
+  "pillowSize": [
+   3.7,
+   2.4
+  ],
+  "headboardFront": -9.48,
+  "quiltTop": 2.09,
+  "quiltZ": [
+   -4.15,
+   -1.78
+  ]
+ },
+ "basket": {
+  "center": [
+   13.2,
+   -5.2
+  ],
+  "outer": 3.6,
+  "cushionTop": 0.55,
+  "frontDip": 0.767,
+  "rim": 1.483
+ },
+ "herBed": {
+  "center": [
+   2.0,
+   -4.0
+  ],
+  "keep": 6.3
+ },
+ "nodes": [
+  "Roof",
+  "WallFront",
+  "WallBack",
+  "WallLeft",
+  "WallRight",
+  "Inside",
+  "OwnerBed",
+  "Basket",
+  "Outside"
+ ],
+ "materials": {
+  "Roof": [
+   "Home_Roof_Tile",
+   "Home_Roof_Wood",
+   "Home_Roof_Plaster",
+   "Home_Roof_Brick",
+   "Home_Roof_Stone",
+   "Home_Roof_Plain"
+  ],
+  "WallFront": [
+   "Home_WallFront_Plaster",
+   "Home_WallFront_Wood",
+   "Home_WallFront_Stone",
+   "Home_WallFront_Plain",
+   "Home_WallFront_Glass"
+  ],
+  "WallBack": [
+   "Home_WallBack_Plaster",
+   "Home_WallBack_Wood",
+   "Home_WallBack_Stone",
+   "Home_WallBack_Plain",
+   "Home_WallBack_Glass",
+   "Home_WallBack_Picture"
+  ],
+  "WallLeft": [
+   "Home_WallLeft_Plaster",
+   "Home_WallLeft_Wood",
+   "Home_WallLeft_Stone",
+   "Home_WallLeft_Glass"
+  ],
+  "WallRight": [
+   "Home_WallRight_Plaster",
+   "Home_WallRight_Wood",
+   "Home_WallRight_Stone",
+   "Home_WallRight_Glass"
+  ],
+  "Inside": [
+   "Home_Inside_Wood",
+   "Home_Inside_Cloth",
+   "Home_Inside_Plain"
+  ],
+  "OwnerBed": [
+   "Home_OwnerBed_Wood",
+   "Home_OwnerBed_Cloth",
+   "Home_OwnerBed_Quilt"
+  ],
+  "Basket": [
+   "Home_Basket_Wicker",
+   "Home_Basket_Cloth",
+   "Home_Basket_Plain"
+  ],
+  "Outside": [
+   "Home_Outside_Wood",
+   "Home_Outside_Stone",
+   "Home_Outside_Cloth",
+   "Home_Outside_Plain"
+  ]
+ },
+ "tris": {
+  "Roof": 30102,
+  "WallFront": 11352,
+  "WallBack": 9250,
+  "WallLeft": 3846,
+  "WallRight": 3846,
+  "Inside": 7482,
+  "OwnerBed": 5480,
+  "Basket": 14048,
+  "Outside": 8594
+ },
+ "triangles": 94000,
+ "bytes": 5946828
+}
