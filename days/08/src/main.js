@@ -231,8 +231,10 @@ async function start() {
     const wide = aspect >= 1.3;
     const spec = portrait
       ? { fov: 62, pitch: 30, height: 16, horizon: short ? 0.44 : root.classList.contains('ui-compact') ? 0.3 : 0.42 }   // (Day 7: once the title is small, more of the world)
-      : wide ? { fov: 46, pitch: 26, height: 15, horizon: h < 500 ? 0.45 : 0.4 }
+      // (a sideways phone: once the title is small the world rises too, so you stand above the action buttons)
+      : wide ? { fov: 46, pitch: 26, height: 15, horizon: h < 500 ? (root.classList.contains('ui-compact') && !short ? 0.3 : 0.45) : 0.4 }
         : { fov: 54, pitch: 28, height: 16, horizon: 0.41 };
+    tagMinY = 0;                                           // (turned sideways: the title is in a corner, clearOfTitle keeps tags off it)
     if (portrait && showUI) {
       // keep the horizon below the bubble, however long the day's headline is
       const b = document.querySelector('.bubble')?.getBoundingClientRect();
@@ -632,6 +634,7 @@ async function start() {
         wallet = freshWallet(); rewardState = {}; filmWear = { ...paramWear };
         tokenFX?.reset();
         atomBox?.reset(); atomFX?.reset(); atomDue = []; nextDrop = null; dropped = 0; bonkAt = null;
+        nap.on = false; nap.paidAt = -1e9; nap.both = null; nap.state = null;   // Day 8: bedtime starts over too
         fx?.reset();
         blast?.reset();
         wand?.event(e, null);
@@ -1188,8 +1191,24 @@ async function start() {
     if (what === 'house' && player) { backToHer(); walkTo(homeMod.DOOR_IN.x, homeMod.DOOR_IN.z); }
   }
   /** each step: bedtime starts when you flop into bed, pays once you have all slept a while, ends when you get up */
+  /** where your head is while you lie in bed (the z's and the coins start there) */
+  function headInBed() {
+    const h = homeMod.OWNER_BED, f = [Math.sin(h.heading), Math.cos(h.heading)];
+    return homeHead.set(h.lie.x + f[0] * 1.1, h.top + 1.6, h.lie.z + f[1] * 1.1);   // (your head: 1.1 m toward the headboard)
+  }
   function bedtimeStep(t) {
     if (!player || !house) return;
+    // a recording may start anywhere in its scene, so it does not go by what happened before: you are in bed or
+    // not, and the coins come at the time its demo gives (napCoinsAt), flying from that very moment
+    if (demo) {
+      nap.on = player.inBed;
+      if (kd?.napCoinsAt != null && t >= kd.napCoinsAt && nap.paidAt < kd.napCoinsAt) {
+        nap.paidAt = kd.napCoinsAt;
+        wallet.earn(homeMod.NAP.coins);
+        tokenFX?.spawn(kd.napCoinsAt, headInBed(), homeMod.NAP.coins);
+      }
+      return;
+    }
     const st = player.bedState;
     if (st !== nap.state) {
       // (a recording scripts the cats itself, so that any frame of it can be drawn on its own)
@@ -1215,7 +1234,7 @@ async function start() {
         if (t - nap.both >= homeMod.NAP.after) {
           nap.paidAt = t; nap.both = null;
           wallet.earn(homeMod.NAP.coins);
-          tokenFX?.spawn(t, homeHead, homeMod.NAP.coins);
+          tokenFX?.spawn(t, headInBed(), homeMod.NAP.coins);
           audio?.event({ type: 'token', n: homeMod.NAP.coins });
           repaintShop();
           if (live) { saveWallet(wallet); flashHint(`A nap together: +${homeMod.NAP.coins} coins`, 3200); }
@@ -1240,11 +1259,7 @@ async function start() {
     const liftAt = kd?.homeOpen != null ? Math.min(1, Math.max(0, (t - kd.homeOpen) / 1.1)) : null;
     house.update(demo ? 10 : dt, camera.position, homeFocus, open, liftAt == null ? null : liftAt * liftAt * (3 - 2 * liftAt));
     // your z's
-    if (player?.asleep) {
-      const h = homeMod.OWNER_BED, f = [Math.sin(h.heading), Math.cos(h.heading)];
-      homeHead.set(h.lie.x + f[0] * 1.1, h.top + 1.6, h.lie.z + f[1] * 1.1);   // (your head: 1.1 m toward the headboard)
-      house.zzz(t, homeHead);
-    } else house.zzz(t, null);
+    house.zzz(t, player?.asleep ? headInBed() : null);
     if (duskEl) duskEl.classList.toggle('is-on', !!player?.inBed && nap.on);
   }
 
@@ -1877,13 +1892,26 @@ async function start() {
     if (!vis) return;
     const edge = Math.min(70, innerWidth / 2);
     const x = Math.max(edge, Math.min(innerWidth - edge, (fPos.x + 1) / 2 * innerWidth));
-    let y = Math.max(tagMinY, (1 - fPos.y) / 2 * innerHeight);
+    let y = Math.max(tagMinY, clearOfTitle(x, (ftag.offsetWidth || 120) / 2, ftag.offsetHeight || 34), (1 - fPos.y) / 2 * innerHeight);
     // her tag (and what floats over it) wins the spot: the friend's tag tucks in under it
     if (!tag.hidden && tag.style.visibility !== 'hidden') {
       const a = tag.getBoundingClientRect(), w = ftag.offsetWidth || 120, h = ftag.offsetHeight || 34;
       if (Math.abs(x - (a.left + a.width / 2)) < (a.width + w) / 2 + 6 && y > a.top - 6 && y - h < a.bottom + 6) y = a.bottom + h + 8;
     }
     ftag.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -100%)`;
+  }
+  // a sideways phone: the title sits in a corner, not across the top; a name tag under it is kept just below it
+  const titleBits = [...document.querySelectorAll('.title-day, .title-line, .bubble')];
+  function clearOfTitle(x, half, tall) {
+    if (!showUI || demo || short || tagMinY) return 0;                // (upright: tagMinY keeps everything under it)
+    let low = 0;
+    for (const el of titleBits) {
+      const r = el.getBoundingClientRect();
+      if (!r.width || !r.height || getComputedStyle(el).display === 'none') continue;
+      if (x + half < r.left - 6 || x - half > r.right + 6) continue;
+      low = Math.max(low, r.bottom + 6 + tall);
+    }
+    return low;
   }
   // every frame: the tag floats over her head; hearts and the hungry badge follow her needs
   const tagPos = new THREE.Vector3();
@@ -1903,6 +1931,7 @@ async function start() {
     const x = live && mind ? Math.max(edge, Math.min(innerWidth - edge, rawX)) : rawX;                    // (recordings keep the tag exactly where it was)
     const faceUp = live && !emoteEl.hidden && nowMs() < emoteUntil;                               // the big face is showing over her tag
     let floor = tagMinY + room + (faceUp && tagMinY ? 26 : 0);                                    // never up over the title card
+    floor = Math.max(floor, clearOfTitle(x, (tag.offsetWidth || 150) / 2, (tag.offsetHeight || 36) + room));
     if (live && !hintEl.hidden && !hintEl.classList.contains('is-gone')) {                        // nor over a message that is showing (phones held upright: it sits under the title)
       const hr = hintEl.getBoundingClientRect();
       const stack = faceUp ? (room ? 148 : 104) : room ? 82 : 36;                                 // her tag, her thought and the big face, as high as they reach
@@ -1938,6 +1967,48 @@ async function start() {
       tagSr.textContent = `, ${feelWord ? `feeling ${feelWord.toLowerCase()}, ` : ''}happiness ${hearts} of 5${hungry ? ', hungry' : ''}. Rename${mind ? ', and see her mind' : ''}`;
     }
   }
+
+  // ------------------------------------------------------------ phones play sideways (owner, 2026-11-27)
+  // Held upright, a card asks you to turn the phone. Where the browser allows it (Android), "Play sideways" goes full
+  // screen and locks the screen sideways; elsewhere (iPhone) you turn it yourself. "Keep it upright" lets you play
+  // upright for the rest of this visit.
+  (() => {
+    const turn = $('turn');
+    if (!turn || !showUI || demo || short || !coarse) return;
+    const portrait = matchMedia('(orientation: portrait)');
+    const canLock = !!(screen.orientation && typeof screen.orientation.lock === 'function' && document.documentElement.requestFullscreen);
+    let upright = params.has('upright');
+    try { upright ||= sessionStorage.getItem('glikdev.upright') === '1'; } catch { /* no storage: ask every time */ }
+    const go = $('turn-go'), stay = $('turn-stay'), sub = $('turn-sub');
+    go.hidden = !canLock;
+    if (!canLock) sub.textContent = 'Glikdev plays sideways: turn your phone to play.';
+    const show = () => {
+      const on = portrait.matches && !upright;
+      if (turn.hidden !== on) return;
+      turn.hidden = !on;
+      root.classList.toggle('is-turning', on);
+    };
+    portrait.addEventListener?.('change', show);
+    addEventListener('resize', show);
+    go.addEventListener('click', async () => {
+      audio?.unlock();
+      try {
+        await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
+        await screen.orientation.lock('landscape');
+      } catch {
+        go.hidden = true;                                  // (not allowed here after all: turn it by hand)
+        sub.textContent = 'Turn your phone sideways to play.';
+      }
+      show();
+    });
+    stay.addEventListener('click', () => {
+      upright = true;
+      try { sessionStorage.setItem('glikdev.upright', '1'); } catch { /* fine: this visit only */ }
+      audio?.unlock();
+      show();
+    });
+    show();
+  })();
 
   // hint, until the first tap that does something
   if (showUI && !demo && !short) {
@@ -2079,7 +2150,7 @@ async function start() {
       const f = kitty.interest(interest);
       if (player) {
         f.set(player.x, 0, player.z);                       // third person: locked on you
-        if (nap.on && house) { const m = homeMod.homeFrame(3, -5); f.x += (m.x - f.x) * 0.8; f.z += (m.z - f.z) * 0.8; }   // Day 8: bedtime: the room
+        if (nap.on && house) { const m = innerWidth > innerHeight ? homeMod.homeFrame(0, 4) : homeMod.homeFrame(3, -5); f.x += (m.x - f.x) * 0.8; f.z += (m.z - f.z) * 0.8; }   // Day 8: bedtime: the room (sideways: aimed in front of the beds, so they sit above the buttons)
         // ...leaning toward your fish while it is out on its line, so the chase stays in the picture
         const y = wandOn ? kitty.brain.yarn : null;
         let lx = 0, lz = 0;

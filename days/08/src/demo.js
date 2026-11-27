@@ -302,12 +302,12 @@ export const KITTY_DEMOS = {
     viewer: () => H(0, 40),
     player: { start: { ...OWNER_BED.side, heading: OUT - 0.3 }, script: [{ t: 0.15, type: 'bed' }] },
     friend: { start: { ...xz(H(8.5, 5.5)), heading: OUT - 0.4, mode: 'sit', timer: 60 }, script: [{ t: 1.6, type: 'basket' }] },
-    homeOpen: -10,
+    homeOpen: -10, napCoinsAt: 10.4,                     // (all three asleep by 9 s: the nap pays)
   },
   // Day 8: home time: you run in at the door with the two cats behind you, and the roof lifts off as you go in
   homewalk: {
     start: () => ({ ...xz(H(7, 31)), heading: OUT + Math.PI, mode: 'idle', timer: 60 }),
-    script: [{ t: 0.6, type: 'walk', ...xz(H(4.5, 4)) }],
+    script: [{ t: 0.4, type: 'call', ...xz(H(4.5, 4)) }],     // (called: she trots in with you)
     viewer: () => H(0, 40),
     player: { start: { ...xz(H(-2.5, 33)), heading: OUT + Math.PI }, script: [{ t: 0.2, type: 'go', ...xz(H(-6, -1)) }] },
     friend: { start: { ...xz(H(12, 35)), heading: OUT + Math.PI, mode: 'idle', timer: 60 }, script: [] },
