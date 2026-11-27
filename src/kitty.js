@@ -308,7 +308,7 @@ export async function createKitty(o) {
   fx.add(paw);
 
   // ---------------------------------------------------------------- state
-  let brain, mixer, actions, cur, curKey, heartLog, callLog, bowlLog, scriptAt, look, lastSpin;
+  let brain, mixer, actions, cur, curKey, heartLog, callLog, bowlLog, scriptAt, look, lastSpin, homeHooks = null;
   let bed = null;                                // Day 3: her bed (town.js BED_SPOT), so she stands and lies ON its cushion
   // Day 3: the toy that is out (it takes the yarn's place): does it roll, how well does it bounce
   const toy = { roll: true, bounce: undefined, yaw: 0 };
@@ -330,6 +330,7 @@ export async function createKitty(o) {
     brain = createBrain({ ...startOpts, mind: typeof o.mind === 'function' ? o.mind() : o.mind || null });
     brain.toyBounce = toy.bounce;
     brain.bed = bed;
+    if (homeHooks) Object.assign(brain, homeHooks);       // Day 8: the way round the house (kept over a restart)
     brain.wandTip = wandTip;
     if (wandOn) brain.setWand(true);
     newMixer();
@@ -438,6 +439,8 @@ export async function createKitty(o) {
         else if (s.type === 'feed') brain.feed();
         else if (s.type === 'play') brain.play();
         else if (s.type === 'nap') brain.nap();
+        else if (s.type === 'tobed') brain.toBed({ snuggle: s.snuggle !== false });   // Day 8: bedtime
+        else if (s.type === 'wakeup') brain.wakeUp();
         else if (s.type === 'cast') brain.cast(s.x, s.z);
         else if (s.type === 'castnear') brain.castNear();
         else if (s.type === 'dangle') brain.dangle();
@@ -653,6 +656,8 @@ export async function createKitty(o) {
     feed() { return brain.feed(); },
     /** Day 3: her bed (see town.js BED_SPOT): where she goes to sleep, and how high its cushion is */
     setBed(spot) { bed = spot; brain.bed = spot; place(); },
+    /** Day 8: the home: { route, collide, keep } (kittybrain.js), so she walks round it and in at its door */
+    setHome(hooks) { homeHooks = hooks; Object.assign(brain, hooks || { route: null, collide: null, keep: null }); },
     /** Day 3: where you are standing, so she can come over to you of her own accord */
     setFriend(x, z) { brain.friend = [x, z]; },
     play() { brain.play(); },

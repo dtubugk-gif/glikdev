@@ -6,7 +6,8 @@
 export const DEMOS = ['orbit', 'reveal', 'kitty', 'kittycall', 'kittypet', 'kittywalk', 'kittyname', 'kittyfeed', 'kittyplay', 'kittynap',
   'kittytoken', 'kittydress', 'shopwalk', 'kittytoy', 'kittywake', 'kittyfish', 'fishwalk', 'fishshow', 'fishdangle',
   'atombox', 'atomhit', 'atomshow', 'friendmeet', 'friendcuddle', 'friendplay', 'friendfeed', 'friendnap', 'friendtricks',
-  'parrotseed', 'gardenplant', 'gardenmutate', 'gardenpick', 'gardenshow', 'gardenposter'];
+  'parrotseed', 'gardenplant', 'gardenmutate', 'gardenpick', 'gardenshow', 'gardenposter',
+  'homebed', 'homewalk', 'homebasket', 'homeposter'];
 
 // Day 7: the garden (gardenlogic.js places it), its plots, the parrots' perch, and the ways out of their fronts
 const GF = [Math.sin(GARDEN_AT.rot), Math.cos(GARDEN_AT.rot)];            // out of the bed's front
@@ -28,20 +29,26 @@ const MUT_BOMB = byGarden(14.5, 9);                      // (on the perch's side
 const GROWN = (list) => list.map((q) => (q ? { age: 400, ...q } : null));
 
 import { GARDEN_AT, PERCH_AT, gardenFrame, plotAt, BED as GBED } from './gardenlogic.js';
+import { HOME, HER_BED_AT, OWNER_BED, BASKET, homeFrame, DOOR_OUT } from './homelogic.js';
 
 // Day 3: where the shop's doormat is, and where the kitty waits beside it (town.js works these out from SHOP)
 const SHOP_DOOR = [19.97, -21.57], SHOP_WAIT = [12.84, -23.42];
 // you, standing just behind her shoulder, turned to the camera (used by the close shots: in frame, not in her way)
 const BESIDE = { start: { x: -3.81, z: -0.78, heading: 0.75 } };
-// Day 3: her bed (town.js BED) and the way out of its front; you, standing beside it
-const BED = [-19, -13], BED_OUT = Math.atan2(19, 13);
-const BY_BED = { start: { x: BED[0] - 7.4, z: BED[1] + 4.4, heading: BED_OUT + 0.55 } };
+// Day 3: her bed (town.js BED) and the way out of its front; you, standing beside it. Day 8: it is in the home.
+const BED = [HER_BED_AT.x, HER_BED_AT.z], BED_OUT = HER_BED_AT.rot;
+const BY_BED = { start: { ...homeFrame(-5.5, 1.5), heading: BED_OUT + 0.55 } };
+// Day 8: the home. A spot in it, in its own frame (+z out of the door), as [x, z]; and the way out of its door
+const H = (lx, lz) => { const q = homeFrame(lx, lz); return [q.x, q.z]; };
+const HP = (lx, ly, lz) => { const q = homeFrame(lx, lz); return [q.x, ly, q.z]; };
+const OUT = HOME.rot;                                    // heading out of the door
 
 // Day 5: where the filmed atom bomb lands and leaves its box, the way the box's front faces (F: toward the camera
 // and the sun) and its right-hand side (S)
 const ABOX = [12.1, 6.3], ABOX_F = [-0.2614, 0.9652], ABOX_S = [0.9652, 0.2614], ABOX_ROT = Math.atan2(-0.2614, 0.9652);
 const byBox = (f, s) => [ABOX[0] + ABOX_F[0] * f + ABOX_S[0] * s, ABOX[1] + ABOX_F[1] * f + ABOX_S[1] * s];
 const lerp = (a, b, k) => a + (b - a) * k;
+const xz = ([x, z]) => ({ x, z });
 const DEG = Math.PI / 180;
 const clamp01 = (x) => Math.min(1, Math.max(0, x));
 const easeOut = (k) => 1 - (1 - clamp01(k)) ** 3;
@@ -287,6 +294,42 @@ export const KITTY_DEMOS = {
     viewer: () => [Math.sin(0.25) * 20, Math.cos(0.25) * 20],
     friend: { start: { x: 8.5, z: 4.5, heading: -1.2, mode: 'sit', timer: 60 }, script: [] },
   },
+  // Day 8: bedtime, seen dollhouse-style (the roof is off): you hop into your bed and flop down, she goes to hers,
+  // Mochi curls up in its basket, and everyone sleeps
+  homebed: {
+    start: () => ({ ...xz(H(1.5, 6.5)), heading: OUT + 0.25, mode: 'sit', timer: 60 }),
+    script: [{ t: 0.5, type: 'tobed' }],
+    viewer: () => H(0, 40),
+    player: { start: { ...OWNER_BED.side, heading: OUT - 0.3 }, script: [{ t: 0.15, type: 'bed' }] },
+    friend: { start: { ...xz(H(8.5, 5.5)), heading: OUT - 0.4, mode: 'sit', timer: 60 }, script: [{ t: 1.6, type: 'basket' }] },
+    homeOpen: -10,
+  },
+  // Day 8: home time: you run in at the door with the two cats behind you, and the roof lifts off as you go in
+  homewalk: {
+    start: () => ({ ...xz(H(7, 31)), heading: OUT + Math.PI, mode: 'idle', timer: 60 }),
+    script: [{ t: 0.6, type: 'walk', ...xz(H(4.5, 4)) }],
+    viewer: () => H(0, 40),
+    player: { start: { ...xz(H(-2.5, 33)), heading: OUT + Math.PI }, script: [{ t: 0.2, type: 'go', ...xz(H(-6, -1)) }] },
+    friend: { start: { ...xz(H(12, 35)), heading: OUT + Math.PI, mode: 'idle', timer: 60 }, script: [] },
+    homeOpen: 2.1,
+  },
+  // Day 8: Mochi trots into its basket, turns round and curls up; she is asleep in her bed beside it
+  homebasket: {
+    start: () => ({ x: HER_BED_AT.x, z: HER_BED_AT.z, heading: OUT, mode: 'sleep', timer: 60, energy: 0.3 }),
+    script: [{ t: 0, type: 'tobed' }],
+    viewer: () => H(6, 40),
+    friend: { start: { ...xz(H(9.5, 4.5)), heading: OUT + 2.6, mode: 'sit', timer: 60 }, script: [{ t: 0.4, type: 'basket' }] },
+    homeOpen: -10, homeFocus: 'friend',
+  },
+  // Day 8: the poster: the cottage from the front, the two cats sitting at its door, you beside them
+  homeposter: {
+    start: () => ({ ...xz(H(-3, 17)), heading: OUT + 0.35, mode: 'sit', timer: 60 }),
+    script: [],
+    viewer: () => H(-6, 50),
+    player: { start: { ...xz(H(-11, 17.5)), heading: OUT + 0.25 }, script: [] },
+    friend: { start: { ...xz(H(4.5, 16.5)), heading: OUT - 0.2, mode: 'sit', timer: 60 }, script: [] },
+    homeFocus: 'kitty',
+  },
   // she strolls across the plate; the camera tracks alongside
   kittywalk: {
     start: () => ({ x: -16, z: 2, heading: Math.PI / 2, mode: 'idle' }),
@@ -387,6 +430,31 @@ export function demoPose(name, t, home, kitty = null) {
     const pos = [GARDEN_AT.x + Math.sin(GARDEN_AT.rot + a) * d, lerp(9, 7, easeInOut(t / 6)), GARDEN_AT.z + Math.cos(GARDEN_AT.rot + a) * d];
     const [lx, lz] = byGarden(1.5, 3);
     return { position: pos, look: [lx, 3.6, lz], shift: 0 };
+  }
+  if (name === 'homebed') {
+    // the dollhouse view: high in front of the open front, looking down into the room; a slow push in and across,
+    // from your bed and hers to the basket as Mochi curls up
+    const k = easeInOut(t / 8), across = easeInOut((t - 2.2) / 4.5);
+    const pos = HP(lerp(-5, -1, across), lerp(33, 30, k), lerp(40, 36, k));
+    return { position: pos, look: HP(lerp(-4.5, 0, across), 0.5, -5.4), shift: 0 };
+  }
+  if (name === 'homebasket') {
+    // close on the basket from the room's middle, a little above: Mochi in, round, and down
+    const k = easeInOut(t / 6);
+    return { position: HP(lerp(4, 5.5, k), lerp(9.5, 8.6, k), lerp(9.5, 7.8, k)), look: HP(12.2, 1.1, -5), shift: 0 };
+  }
+  if (name === 'homeposter') {
+    // (wide or tall: the camera is a little to the left and well back, so you, her and Mochi all fit in a phone's frame)
+    const tall = home.fov > 58;
+    return { position: tall ? HP(-9, 10, 64) : HP(-17, 10.5, 52), look: tall ? HP(-2.5, 7.4, 0) : HP(-2, 8.5, 0), shift: 0 };
+  }
+  if (name === 'homewalk' && kitty?.player) {
+    // behind you and up, as you run for the door; then up over the front wall as the roof lifts, looking in
+    const p = kitty.player, inK = easeInOut((t - 2.2) / 2.6);
+    const [bx, bz] = H(0, 1), [ox, oz] = [bx - HOME.x, bz - HOME.z];                      // out of the door, as a direction
+    const back = lerp(17, 30, inK), up = lerp(8, 24, inK);
+    const pos = [p.x + ox * back + oz * 3, up, p.z + oz * back - ox * 3];
+    return { position: pos, look: [p.x - ox * lerp(6, 3, inK), lerp(3.6, 1.4, inK), p.z - oz * lerp(6, 3, inK)], shift: 0 };
   }
   if (!kitty) return null;
   const [kx, kz] = [kitty.x, kitty.z];

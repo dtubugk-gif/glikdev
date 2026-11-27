@@ -19,6 +19,8 @@
 //            bowl: {x, z, eatenAt} | null }
 //   player: { x, z } | null        bed: { x, z, r, outer, ex, ez } | null
 //   keepOut(x, z) -> [x, z]       pushes a spot out of buildings (optional)
+//   Day 8, the home (all optional): basket: { x, z, r, outer, ex, ez } its own bed;
+//   route(x, z, tx, tz) -> {x, z} the next spot on the way; collide(x, z, r, basketOK) -> [x, z] out of the walls
 
 export const STEP = 1 / 60;
 
@@ -162,8 +164,12 @@ export function createFriendBrain(o = {}) {
     const nx = h[0] + fx * 1.1, nz = h[2] + fz * 1.1;
     return { x: nx + fx * (m + 0.15), z: nz + fz * (m + 0.15), lx: h[0], lz: h[2] };
   }
-  /** curled up beside her bed (or beside her, wherever she sleeps) */
-  function sleepSpot(k, bed) {
+  /** Day 8: its own basket (the home): asleep in it while she sleeps in her bed, or when you sent it there */
+  const inBasket = (w) => !!w.basket && Math.hypot(f.x - w.basket.x, f.z - w.basket.z) < w.basket.r * 0.7;
+  const basketTime = () => f.t < f.basketUntil;
+  /** curled up beside her bed (or beside her, wherever she sleeps; Day 8: in its basket, when there is one) */
+  function sleepSpot(k, bed, basket) {
+    if (basket && (basketTime() || (bed && Math.hypot(k.x - bed.x, k.z - bed.z) < bed.outer))) return { x: basket.x, z: basket.z, basket: true };
     if (bed && Math.hypot(k.x - bed.x, k.z - bed.z) < bed.outer) {
       const s = (f.x - bed.x) * bed.ez - (f.z - bed.z) * bed.ex >= 0 ? 1 : -1;     // the side it is on
       return { x: bed.x + bed.ex * (bed.outer + 2.2) + bed.ez * s * (bed.outer * 0.75), z: bed.z + bed.ez * (bed.outer + 2.2) - bed.ex * s * (bed.outer * 0.75) };
@@ -192,7 +198,7 @@ export function createFriendBrain(o = {}) {
     const k = w.kitty;
     if (!k) return null;
     if (f.hello && f.t >= (o.helloDelay ?? 0)) return 'hello';
-    if (k.asleep) return 'sleep';
+    if (k.asleep || basketTime()) return 'sleep';
     if (k.bowl && k.bowl.eatenAt == null && (k.eating || Math.hypot(k.bowl.x - k.x, k.bowl.z - k.z) < 9)) return 'eat';
     if (k.playing) return 'watch';
     const d = Math.hypot(k.x - f.x, k.z - f.z);
@@ -204,9 +210,9 @@ export function createFriendBrain(o = {}) {
     switch (want) {
       case 'hello': { const s = boopSpot(k); go(s, 'hello', { fast: 2, close: true }); break; }
       case 'sleep': {
-        const s = sleepSpot(k, w.bed);
-        if (Math.hypot(s.x - f.x, s.z - f.z) < 2.5) { if (!lying()) lieDown(k); }
-        else go(s, 'sleep', { fast: Math.hypot(s.x - f.x, s.z - f.z) > 25 ? 1 : 0 });
+        const s = sleepSpot(k, w.bed, w.basket);
+        if (Math.hypot(s.x - f.x, s.z - f.z) < (s.basket ? 0.8 : 2.5)) { if (!lying()) lieDown(k, w); }
+        else go(s, 'sleep', { fast: Math.hypot(s.x - f.x, s.z - f.z) > 25 ? 1 : 0, close: !!s.basket });
         break;
       }
       case 'eat': { const s = eatSpot(k); go(s, 'eat', { fast: 1, close: true }); break; }
@@ -219,9 +225,10 @@ export function createFriendBrain(o = {}) {
       default:
     }
   }
-  function lieDown(k) {
+  function lieDown(k, w = null) {
     f.target = null; f.goal = null;
-    if (k) f.heading = wrap(Math.atan2(k.x - f.x, k.z - f.z) + 1.2 * (rand() - 0.5));
+    if (w && inBasket(w)) f.heading = wrap(Math.atan2(w.basket.ex, w.basket.ez) + 0.5 * (rand() - 0.5));   // in its basket: facing out of the front
+    else if (k) f.heading = wrap(Math.atan2(k.x - f.x, k.z - f.z) + 1.2 * (rand() - 0.5));
     if (sitting()) { enter('liedown', 1.4); emit('sigh'); }
     else { f.after = 'nap'; enter('sitdown', FRIEND.clips.Sit); }
   }
@@ -258,7 +265,7 @@ export function createFriendBrain(o = {}) {
     if (g === 'hello' && k) { f.hello = false; f.met = true; f.lastSocial = f.t; f.face = { x: k.head[0], z: k.head[2], then: 'boop' }; enter('face'); emit('friend-hello'); return; }
     if ((g === 'nuzzle' || g === 'boop') && k) { f.face = { x: k.head[0], z: k.head[2], then: g }; enter('face'); return; }
     if (g === 'eat' && k?.bowl) { f.face = { x: k.bowl.x, z: k.bowl.z, then: 'eat' }; enter('face'); return; }
-    if (g === 'sleep') { lieDown(k); return; }
+    if (g === 'sleep') { lieDown(k, w); return; }
     if (g === 'player' && w.player) { f.face = { x: w.player.x, z: w.player.z, then: rand() < 0.5 ? 'playbow' : 'boop' }; enter('face'); emit('trill'); return; }
     if (g === 'watch' && k) { f.face = { x: (k.yarn || k).x, z: (k.yarn || k).z, then: 'idle' }; enter('face'); return; }
     if (k && (g === 'follow' || g == null)) { f.face = { x: k.x, z: k.z, then: rand() < 0.55 ? 'sit' : 'idle' }; enter('face'); return; }
@@ -266,15 +273,19 @@ export function createFriendBrain(o = {}) {
   }
 
   // ---------------------------------------------------------------- moving
+  let W = null;                                            // the world this step (for the way round the house)
   function steer(dt, top, turnRate) {
-    const dx = f.target.x - f.x, dz = f.target.z - f.z;
-    const dist = Math.hypot(dx, dz);
+    // Day 8: round the house, or in and out at its door (W.route), never through a wall (keepClear: W.collide)
+    const way = W?.route ? W.route(f.x, f.z, f.target.x, f.target.z) : f.target;
+    const via = way.x !== f.target.x || way.z !== f.target.z;
+    const dx = way.x - f.x, dz = way.z - f.z;
+    const dist = via ? Math.hypot(f.target.x - f.x, f.target.z - f.z) : Math.hypot(dx, dz);
     const diff = wrap(Math.atan2(dx, dz) - f.heading);
     f.heading = wrap(f.heading + clamp(diff, -turnRate * dt, turnRate * dt));
     const align = clamp(Math.cos(diff), 0.15, 1);
     const slow = clamp(dist / (top * 0.6), 0.3, 1);
     f.speed += (top * align * slow - f.speed) * (1 - Math.exp(-dt * 5));
-    const s = Math.min(f.speed * dt, dist);
+    const s = Math.min(f.speed * dt, via ? Math.hypot(dx, dz) + 1 : dist);
     f.x += Math.sin(f.heading) * s;
     f.z += Math.cos(f.heading) * s;
     return dist;
@@ -305,16 +316,28 @@ export function createFriendBrain(o = {}) {
       if (d < r && d > 1e-3) { f.x = w.bed.x + (dx / d) * r; f.z = w.bed.z + (dz / d) * r; }
     }
     if (w.keepOut) [f.x, f.z] = w.keepOut(f.x, f.z);
+    // Day 8: the house's walls; off your bed, and off its basket unless that is where it is going to sleep
+    if (w.collide) [f.x, f.z] = w.collide(f.x, f.z, FRIEND.radius, f.goal === 'sleep' || lying() || inBasket(w));
     f.x = clamp(f.x, -LIMIT, LIMIT); f.z = clamp(f.z, -LIMIT, LIMIT);
   }
 
   // ---------------------------------------------------------------- the player's verbs, and hers
   /** the first meeting: it comes running in to her from wherever it is */
   f.hello = !!o.hello;
+  /** Day 8: you tapped its basket: off it goes for a nap in it (for `seconds`, or until she wakes, or a pet) */
+  f.basketUntil = 0;
+  f.toBasket = (seconds = 30) => {
+    if (f.hello) return false;
+    f.basketUntil = f.t + seconds;
+    f.lastThink = -1e9;                                    // decide again right away
+    return true;
+  };
+  /** Day 8: bedtime is over: out of the basket (unless she still sleeps) */
+  f.endBasket = () => { f.basketUntil = 0; };
   f.meet = () => { f.hello = true; f.met = false; };
   /** you pet it: it sits, turns to you and purrs (a sleeping kitten just stretches and comes to) */
   f.pet = (from) => {
-    if (lying()) { wake(); emit('mew'); return false; }
+    if (lying()) { f.basketUntil = 0; wake(); emit('mew'); return false; }
     f.target = null; f.goal = null; f.next = null;
     f.happy = clamp(f.happy + 0.1, 0, 1);
     emit('pet');
@@ -334,6 +357,8 @@ export function createFriendBrain(o = {}) {
     if (kind === 'nuzzle' && k) { f.lastSocial = f.t; go(nuzzleSpot(k), 'nuzzle', { close: true }); return; }
     if (kind === 'boop' && k) { f.lastSocial = f.t; go(boopSpot(k), 'boop', { close: true }); return; }
     if (kind === 'pet') { f.pet(w.player); return; }
+    if (kind === 'basket') { f.toBasket(s.seconds ?? 1e6); return; }   // Day 8: off to its basket for a nap
+    if (kind === 'unbasket') { f.endBasket(); return; }
     if (kind === 'sit') { if (!sitting()) { f.target = null; f.goal = null; enter('sitdown', FRIEND.clips.Sit); } return; }
     if (ACTS[kind]) act(kind, s.face === false || !k ? null : { x: k.x, z: k.z });   // (face: false = where it is already looking)
   };
@@ -349,6 +374,7 @@ export function createFriendBrain(o = {}) {
   // ---------------------------------------------------------------- the step
   f.step = (dt, w) => {
     f.t += dt; f.timer -= dt;
+    W = w;
     const k = w.kitty;
     // look at her face while it is near her and not on the move (the renderer turns its head)
     if (k && !MOVING.includes(f.mode) && Math.hypot(k.x - f.x, k.z - f.z) < 16 && !(f.pal && f.pal.until > f.t && f.pal.you)) f.pal = { x: k.head[0], y: k.head[1], z: k.head[2], until: f.t + 0.5 };
@@ -363,7 +389,7 @@ export function createFriendBrain(o = {}) {
       if (!want && f.goal === 'follow' && k && Math.hypot(k.x - f.x, k.z - f.z) < FRIEND.near * 0.75 && !k.moving) arrive(w);
     }
     // wake when she wakes
-    if (lying() && k && !k.asleep) wake();
+    if (lying() && k && !k.asleep && !basketTime()) { f.basketUntil = 0; wake(); }
 
     switch (f.mode) {
       case 'sit': case 'idle':

@@ -81,7 +81,9 @@ html.world-ready .poster { opacity: 0; pointer-events: none; }
   letter-spacing: -0.01em;
   text-wrap: balance;
 }
-.title-day { color: var(--accent); }
+.title-day { color: var(--accent);
+  /* Day 8: a thin cream rim, so "Day N." reads over anything in the world behind it (the home's orange roof) */
+  -webkit-text-stroke: 0.06em var(--paper); paint-order: stroke fill; }
 .title-line { overflow-wrap: anywhere; }   /* long headlines from later days wrap instead of running off a phone */
 
 /* the logo's speech bubble: a caption, not a button */
@@ -826,3 +828,10 @@ html.has-stick .jump-btn .icon { width: 34px; height: 34px; margin-top: -8px; }
   html.has-stick .stick { width: 116px; height: 116px; bottom: calc(var(--safe-b) + 14px); }
   html.has-stick .jump-btn { width: 80px; height: 80px; bottom: calc(var(--safe-b) + 18px); }
 }
+
+/* Day 8: bedtime. While you sleep in your bed the light goes soft and warm at the edges (no glow, nothing neon) */
+.dusk { position: fixed; inset: 0; pointer-events: none; z-index: 2; opacity: 0; transition: opacity 1.6s ease;
+  background: radial-gradient(120% 95% at 50% 52%, rgba(255, 214, 160, 0) 42%, rgba(70, 44, 36, 0.34) 100%),
+    linear-gradient(rgba(255, 196, 140, 0.10), rgba(255, 196, 140, 0.10)); }
+.dusk.is-on { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .dusk { transition: none; } }

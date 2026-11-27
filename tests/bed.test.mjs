@@ -4,14 +4,20 @@ import assert from 'node:assert/strict';
 import { createBrain, STEP } from '../src/kittybrain.js';
 import { createMind } from '../src/kittymind.js';
 
-// the bed as town.js describes it (kept in step with it by the last test)
-const BED = { x: -19, z: -13, r: 0.292 * 14, outer: 0.43 * 14, h: 0.062 * 14 };
-{ const rot = Math.atan2(19, 13); BED.ex = Math.sin(rot); BED.ez = Math.cos(rot); }
+import { HER_BED_AT, route, collide, inHouse, outOfHome } from '../src/homelogic.js';
+
+// the bed as town.js describes it (kept in step with it by the last test). Day 8: it is in the home, so she
+// walks there the way the game has her walk: round the house and in at its door (route), never through a wall.
+const BED = { x: HER_BED_AT.x, z: HER_BED_AT.z, r: 0.292 * 14, outer: 0.43 * 14, h: 0.062 * 14 };
+{ const rot = HER_BED_AT.rot; BED.ex = Math.sin(rot); BED.ez = Math.cos(rot); }
 
 function kittyAt(x, z, over = {}) {
   const mind = createMind({ seed: over.seed ?? 5 });
   const b = createBrain({ seed: 2, mind, mode: 'sit', timer: 99, x, z });
   b.bed = BED;
+  b.route = (x, z, tx, tz) => route(x, z, tx, tz, 2.4);
+  b.collide = (x, z) => collide(x, z, 2.4, { bed: true, basket: true });
+  b.keep = (p) => outOfHome(p.x, p.z, 3);
   b.friend = [30, 30];
   return { b, mind };
 }
@@ -138,8 +144,9 @@ test('the bed in the world is the bed these tests use', async () => {
   // town.js needs three.js, which node cannot load from the import map: read its numbers from the source
   const { readFileSync } = await import('node:fs');
   const src = readFileSync(new URL('../src/town.js', import.meta.url), 'utf8');
-  assert.match(src, /export const BED = \{ x: -19, z: -13, scale: 14 \};/);
+  assert.match(src, /export const BED = \{ x: HER_BED_AT\.x, z: HER_BED_AT\.z, scale: 14, rot: HER_BED_AT\.rot \};/);
   assert.match(src, /const BED_MODEL = \{ outer: 0\.43, cushion: 0\.292, top: 0\.062 \};/);
   const demo = readFileSync(new URL('../src/demo.js', import.meta.url), 'utf8');
-  assert.match(demo, /const BED = \[-19, -13\]/);
+  assert.match(demo, /const BED = \[HER_BED_AT\.x, HER_BED_AT\.z\], BED_OUT = HER_BED_AT\.rot;/);
+  assert.ok(inHouse(BED.x, BED.z, 6), 'her bed is inside the home, clear of its walls');
 });

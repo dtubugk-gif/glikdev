@@ -4,6 +4,7 @@
 import * as THREE from '../vendor/three/three.module.js';
 import { GLTFLoader } from '../vendor/three/addons/loaders/GLTFLoader.js';
 import { skyReflections } from './outfits.js';
+import { HER_BED_AT } from './homelogic.js';
 
 /** Where it stands (metres) and which way its counter faces (toward the middle of the plate). */
 export const SHOP = { x: 25, z: -27, scale: 14 };
@@ -82,8 +83,8 @@ export async function createShop(o) {
 // ---------------------------------------------------------------- her bed (the owner: "lie down on a bed and go to sleep")
 // models/bed.glb (art/day03/build_bed.py): a round bolster bed, its low front (+Z in its own frame) turned to the
 // middle of the plate. Sizes are the model's (metres at cat scale) times its scale.
-export const BED = { x: -19, z: -13, scale: 14 };
-BED.rot = Math.atan2(-BED.x, -BED.z);
+// Day 8: it is inside the home now (homelogic.js HER_BED_AT), its front turned to the door
+export const BED = { x: HER_BED_AT.x, z: HER_BED_AT.z, scale: 14, rot: HER_BED_AT.rot };
 const BED_MODEL = { outer: 0.43, cushion: 0.292, top: 0.062 };
 /** what the kitty needs to know: where it is, how big the cushion is, how high, and which way is out of its front */
 export const BED_SPOT = { x: BED.x, z: BED.z, r: BED_MODEL.cushion * BED.scale, outer: BED_MODEL.outer * BED.scale,

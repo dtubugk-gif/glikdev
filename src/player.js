@@ -38,6 +38,9 @@ const ONCE = { Cheer: 1.4, Pet: 2.4 };
  *  player.glb is timed to it: it crouches for `crouch`, leaves the ground, lands `air` later, and recovers. */
 export const JUMP = { crouch: 0.1, air: 0.62, land: 0.18, height: 2.6 };
 JUMP.total = JUMP.crouch + JUMP.air + JUMP.land;
+/** Day 8 (the home): you hop into your bed and flop down (the Jump clip turns into 'Sleep' near the top of the hop),
+ *  and hop back out. `sleepAt`: how far through the air the Sleep clip takes over; `fade`: its cross-fade (s). */
+export const BEDTIME = { sleepAt: 0.42, fade: 0.38, wakeFade: 0.3 };
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const easeOut = (k) => 1 - (1 - clamp(k, 0, 1)) ** 3;
 const easeInOut = (k) => { k = clamp(k, 0, 1); return k * k * (3 - 2 * k); };
@@ -74,6 +77,9 @@ export function createWalker(o = {}) {
     boxes: o.boxes || [], circles: o.circles || [],
     wand: false, castAt: -10, aim: null, aimOut: false, rodYaw: HOLD.restYaw, rodElev: HOLD.restElev,
     jumpAt: -10, jumps: 0, mag: 1,
+    // Day 8: the way round the house (route(x, z, tx, tz, r) -> {x, z}); your bed, and where you are with it:
+    // bed { lie: {x, z}, side: {x, z}, heading, top }; bedState null | 'going' | 'flop' | 'in' | 'hop'
+    route: o.route || null, bed: null, bedState: null, bedAt: -10,
   };
   const clampIn = (x, z) => {
     const r = Math.hypot(x, z);
@@ -81,10 +87,36 @@ export function createWalker(o = {}) {
     for (const b of w.boxes) [x, z] = outOfBox(x, z, b, PLAYER.radius);
     return [x, z];
   };
-  w.goTo = (x, z) => { const [tx, tz] = clampIn(x, z); w.target = { x: tx, z: tz }; w.dir = null; w.waveUntil = -1; w.actUntil = -1; };
+  w.goTo = (x, z) => {
+    if (w.bedState === 'going') w.bedState = null;          // somewhere else after all
+    const [tx, tz] = clampIn(x, z); w.target = { x: tx, z: tz }; w.dir = null; w.waveUntil = -1; w.actUntil = -1;
+  };
+  // ---- Day 8: your bed
+  const inOrOn = () => w.bedState === 'flop' || w.bedState === 'in' || w.bedState === 'hop';
+  /** off to bed: you walk to its side, then hop in and flop down */
+  w.goToBed = (bed) => {
+    if (inOrOn()) return false;
+    w.goTo(bed.side.x, bed.side.z);
+    w.bed = bed; w.bedState = 'going';
+    return true;
+  };
+  /** in it (or on the way down into it) */
+  w.inBed = () => w.bedState === 'flop' || w.bedState === 'in';
+  /** asleep: lying still in it */
+  w.asleep = () => w.bedState === 'in';
+  /** up you get: a hop back out to its side (false if you are not in it) */
+  w.getUp = () => {
+    if (!w.inBed()) return false;
+    w.bedState = 'hop'; w.bedAt = w.t; w.jumpAt = w.t; w.jumps++;
+    return true;
+  };
+  const flopping = () => w.t - w.bedAt;
+  /** how far through the hop's air time (0..1) */
+  const hopK = () => clamp((flopping() - JUMP.crouch) / JUMP.air, 0, 1);
   /** the keyboard or the move stick: a direction to keep going; `mag` 0..1 (the stick pushed part way walks) */
   w.steer = (dx, dz, mag = 1) => {
     const d = Math.hypot(dx, dz);
+    if (d > 1e-3 && w.bedState === 'going') w.bedState = null;
     w.dir = d > 1e-3 ? { x: dx / d, z: dz / d } : null;
     w.mag = Math.max(0, Math.min(1, mag));
     if (w.dir) { w.target = null; w.waveUntil = -1; w.actUntil = -1; }
@@ -100,6 +132,11 @@ export function createWalker(o = {}) {
   };
   /** how high your feet are off the ground (m) */
   w.y = () => {
+    if (w.bedState === 'in') return w.bed.top;
+    if (w.bedState === 'flop' || w.bedState === 'hop') {
+      const k = hopK(), up = w.bedState === 'flop' ? easeInOut(k) : 1 - easeInOut(k);
+      return JUMP.height * 4 * k * (1 - k) + w.bed.top * up;
+    }
     const a = w.t - w.jumpAt - JUMP.crouch;
     if (a <= 0 || a >= JUMP.air) return 0;
     const k = a / JUMP.air;
@@ -158,13 +195,22 @@ export function createWalker(o = {}) {
   w.faceTo = (x, z) => { w.face = { x, z }; };
   w.step = (dt = STEP) => {
     w.t += dt;
+    // Day 8: arrived beside your bed: in you hop
+    if (w.bedState === 'going' && !w.target) {
+      if (Math.hypot(w.x - w.bed.side.x, w.z - w.bed.side.z) < 1.2) { w.bedState = 'flop'; w.bedAt = w.t; w.jumpAt = w.t; w.jumps++; w.speed = 0; w.face = null; w.onJump?.('bed-up'); }
+      else w.bedState = null;                               // (it could not be reached)
+    }
+    if (inOrOn()) { bedStep(dt); if (inOrOn()) return; }
     let want = 0, hx = 0, hz = 0;
+    // Day 8: a tapped spot round the house or through its door: head for the next corner (or the door) first
+    const way = w.target && w.route ? w.route(w.x, w.z, w.target.x, w.target.z, PLAYER.radius) : w.target;
     if (w.dir) { hx = w.dir.x; hz = w.dir.z; want = PLAYER.walk * 0.55 + (PLAYER.run - PLAYER.walk * 0.55) * w.mag; }
     else if (w.target) {
       const dx = w.target.x - w.x, dz = w.target.z - w.z, d = Math.hypot(dx, dz);
       if (d < 0.25) { w.target = null; w.arrived = w.t; }
       else {
-        hx = dx / d; hz = dz / d;
+        const wx = way.x - w.x, wz = way.z - w.z, wd = Math.hypot(wx, wz) || 1;
+        hx = wx / wd; hz = wz / wd;
         const top = d > PLAYER.runFrom || w.speed > PLAYER.walk * 1.4 ? PLAYER.run : PLAYER.walk;
         want = Math.min(top, Math.max(1.2, d * 3.2));       // ease into the spot
       }
@@ -217,9 +263,33 @@ export function createWalker(o = {}) {
       if (w.stride >= len) { w.stride -= len; w.onStep?.(run); }
     } else w.stride = 1.2;                                   // the first step lands soon after setting off
   };
+  /** in bed, flopping into it, or hopping out: you are moved here, not walked */
+  function bedStep(dt) {
+    const B = w.bed, k = hopK();
+    w.speed = 0; w.stride = 1.2;
+    if (w.bedState === 'in') {
+      w.x = B.lie.x; w.z = B.lie.z; w.heading = B.heading;
+      if (w.dir || w.target) w.getUp();                     // you want to go somewhere: up first
+      return;
+    }
+    const a = w.bedState === 'flop' ? B.side : B.lie, b = w.bedState === 'flop' ? B.lie : B.side, e = easeInOut(k);
+    w.x = a.x + (b.x - a.x) * e; w.z = a.z + (b.z - a.z) * e;
+    // into bed: turn to lie along it; out of it: turn to face the way you hop
+    const want = w.bedState === 'flop' ? B.heading : Math.atan2(B.side.x - B.lie.x, B.side.z - B.lie.z);
+    w.heading = wrap(w.heading + wrap(want - w.heading) * Math.min(1, dt * 9));
+    const ja = flopping() - JUMP.crouch;
+    if (ja >= JUMP.air && ja - dt < JUMP.air) w.onJump?.(w.bedState === 'flop' ? 'bed-land' : 'land');
+    if (flopping() >= JUMP.total) {
+      if (w.bedState === 'flop') { w.bedState = 'in'; w.x = B.lie.x; w.z = B.lie.z; w.heading = B.heading; }
+      else { w.bedState = null; w.x = B.side.x; w.z = B.side.z; w.jumpAt = -10; }
+    }
+  }
   w.moving = () => w.speed > 0.3;
   /** which clip, and how fast it plays */
   w.anim = () => {
+    if (w.bedState === 'in') return { name: 'Sleep', rate: 1, fade: BEDTIME.fade };
+    if (w.bedState === 'flop') return hopK() >= BEDTIME.sleepAt ? { name: 'Sleep', rate: 1, fade: BEDTIME.fade } : { name: 'Jump', rate: 1, once: true, key: w.jumps };
+    if (w.bedState === 'hop') return { name: 'Jump', rate: 1, once: true, key: w.jumps, fade: BEDTIME.wakeFade };
     if (w.t - w.jumpAt < JUMP.total) return { name: 'Jump', rate: 1, once: true, key: w.jumps };
     if (w.speed > PLAYER.walk * 1.35) return { name: 'Run', rate: Math.min(1.5, Math.max(0.8, w.speed / 9.4)) };
     if (w.speed > 0.3) return { name: 'Walk', rate: Math.min(1.6, Math.max(0.6, w.speed / 4.1)) };
@@ -259,7 +329,28 @@ export async function createPlayer(o) {
   blob.renderOrder = 1;
   root.add(blob);
 
-  const startOpts = { ...o.start, boxes: o.boxes, circles: o.circles };
+  const startOpts = { ...o.start, boxes: o.boxes, circles: o.circles, route: o.route };
+  // Day 8: asleep, your eyes are shut. The eyes are painted (M_PlayerEye's map): a closed-eyes picture on the same
+  // layout (models/player_eye_closed.webp, by Fable 5.2) takes its place while the Sleep clip shows
+  const eyeMats = [];
+  model.traverse((m) => { if (m.isMesh) for (const mat of [].concat(m.material)) if (/PlayerEye/i.test(mat.name) && mat.map && !eyeMats.includes(mat)) eyeMats.push(mat); });
+  let eyesShut = null, eyesShown = false;
+  if (o.sleepEyesUrl && eyeMats.length) {
+    new THREE.TextureLoader().loadAsync(o.sleepEyesUrl).then((tex) => {
+      const src = eyeMats[0].map;
+      tex.flipY = src.flipY; tex.colorSpace = src.colorSpace; tex.channel = src.channel;
+      tex.wrapS = src.wrapS; tex.wrapT = src.wrapT; tex.anisotropy = src.anisotropy;
+      tex.offset.copy(src.offset); tex.repeat.copy(src.repeat); tex.rotation = src.rotation; tex.center.copy(src.center);
+      for (const mat of eyeMats) mat.userData.openEyes = mat.map;
+      eyesShut = tex;
+    }).catch((err) => console.warn('Glikdev: the closed eyes did not load', err));
+  }
+  function eyes() {
+    const shut = !!eyesShut && curName === 'Sleep';
+    if (shut === eyesShown) return;
+    eyesShown = shut;
+    for (const mat of eyeMats) { mat.map = shut ? eyesShut : mat.userData.openEyes; mat.needsUpdate = true; }
+  }
   let walker, mixer, actions, cur, curName, curKey = null, scriptAt, acc = 0;
   // ---- Day 4: the stick in your right hand. The clips know nothing of it: after each one has posed you, your
   // right arm is bent (two-bone IK) so the hand is on the grip, and the rod is laid in it.
@@ -339,7 +430,7 @@ export async function createPlayer(o) {
     walker.setWand(wandOn);
     if (mixer) { mixer.stopAllAction(); mixer.uncacheRoot(mixer.getRoot()); }
     mixer = new THREE.AnimationMixer(model);
-    actions = Object.fromEntries([...CLIPS, ...Object.keys(ONCE), 'Jump'].filter((n) => clips[n]).map((n) => [n, mixer.clipAction(clips[n])]));
+    actions = Object.fromEntries([...CLIPS, ...Object.keys(ONCE), 'Jump', 'Sleep'].filter((n) => clips[n]).map((n) => [n, mixer.clipAction(clips[n])]));
     cur = null; curName = ''; curKey = null; scriptAt = 0;
     walker.onJump = (what) => o.onJump?.(what, walker);
     show(walker.anim(), true);
@@ -359,7 +450,7 @@ export async function createPlayer(o) {
     act.timeScale = a.rate;
     act.setEffectiveWeight(1);
     act.play();
-    if (cur && !instant) act.crossFadeFrom(cur, name === 'Jump' ? 0.06 : 0.18, false); else if (cur) cur.stop();   // (a jump's crouch is only 0.1 s: a quick blend keeps it)
+    if (cur && !instant) act.crossFadeFrom(cur, a.fade ?? (name === 'Jump' ? 0.06 : 0.18), false); else if (cur) cur.stop();   // (a jump's crouch is only 0.1 s: a quick blend keeps it)
     cur = act; curName = name;
   }
   function place() {
@@ -367,7 +458,7 @@ export async function createPlayer(o) {
     root.position.set(walker.x, y, walker.z); root.rotation.y = walker.heading;
     blob.position.y = 0.04 - y;                            // your shadow stays on the ground, smaller and paler as you rise
     blob.scale.setScalar(1 - Math.min(0.45, y / 8));
-    blob.material.opacity = 0.5 * (1 - Math.min(0.6, y / 6));
+    blob.material.opacity = walker.inBed() || walker.bedState === 'hop' ? 0 : 0.5 * (1 - Math.min(0.6, y / 6));   // (in bed: the bed has its own shade)
   }
   function tick() {
     if (o.script) {
@@ -378,10 +469,13 @@ export async function createPlayer(o) {
         else if (s.type === 'jump') walker.jump();
         else if (s.type === 'face') walker.faceTo(s.x, s.z);
         else if (s.type === 'cheer' || s.type === 'pet') walker.act(s.type === 'cheer' ? 'Cheer' : 'Pet', s.x, s.z);
+        else if (s.type === 'bed' && o.bed) walker.goToBed(o.bed);      // Day 8
+        else if (s.type === 'getup') walker.getUp();
       }
     }
     walker.step(STEP);
     show(walker.anim());
+    eyes();
     unbend();                                              // the clips pose your arm as they always did...
     mixer.update(STEP);
     place();
@@ -417,7 +511,13 @@ export async function createPlayer(o) {
     position(out = new THREE.Vector3()) { return out.set(walker.x, 0, walker.z); },
     /** first person: you do not see your own body (your shadow stays) */
     setBodyVisible(v) { model.visible = v; if (rod) rod.visible = wandOn && v; },
-    busy() { return walker.moving() || !!walker.target || !!walker.dir || !!walker.face || walker.t < walker.waveUntil || walker.t < walker.actUntil || walker.t - walker.castAt < HOLD.swing + 0.1 || walker.t - walker.jumpAt < JUMP.total; },
+    /** Day 8: your bed (homelogic.js OWNER_BED, as the walker wants it): go to bed, get up, where you are with it */
+    goToBed(bed = o.bed) { return bed ? walker.goToBed(bed) : false; },
+    getUp() { return walker.getUp(); },
+    get inBed() { return walker.inBed(); },
+    get asleep() { return walker.asleep(); },
+    get bedState() { return walker.bedState; },
+    busy() { return walker.inBed() || walker.bedState === 'hop' || walker.moving() || !!walker.target || !!walker.dir || !!walker.face || walker.t < walker.waveUntil || walker.t < walker.actUntil || walker.t - walker.castAt < HOLD.swing + 0.1 || walker.t - walker.jumpAt < JUMP.total; },
     /** Day 4: the fish on a stick. giveRod: the rod's model (a group, drawn at HOLD.scale); setWand: in your hand or put away */
     giveRod(obj) { rod = obj; root.add(obj); holdRod(); },
     setWand(on) { wandOn = !!on; walker.setWand(wandOn); if (!wandOn) unbend(); holdRod(); },

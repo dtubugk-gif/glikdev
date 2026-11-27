@@ -246,9 +246,9 @@ test('every file the garden and the parrots need is there', () => {
   for (const m of ['gardenlogic', 'garden', 'parrots']) assert.ok(html.includes(`"./src/${m}.js"`), `${m}.js in the import map`);
   assert.ok(html.includes('Day 7') && /id="seeds"/.test(html) && /id="seedbag"/.test(html));
   const days = JSON.parse(readFileSync(join(GAME, 'days.json'), 'utf8'));
-  const last = days[days.length - 1];
-  assert.equal(last.day, 7);
-  assert.equal(last.by, 'elenaabrosimova1968');
+  const day7 = days.find((d) => d.day === 7);             // (Day 8 came after it)
+  assert.ok(day7);
+  assert.equal(day7.by, 'elenaabrosimova1968');
   const audio = readFileSync(join(GAME, 'src/kittyaudio.js'), 'utf8');
   for (const n of ['squawk1', 'flap1', 'mut_atomic', 'fruitpop3']) assert.ok(audio.includes(`sounds/${n}.mp3`));
 });

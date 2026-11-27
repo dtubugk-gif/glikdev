@@ -137,6 +137,9 @@ export function createBrain(o = {}) {
   b.stormed = false;                  // furious, and already stalked off for it
   b.bed = null;                       // her bed: { x, z, r (cushion), outer, h (cushion height), ex, ez (unit vector out of its front) }
   b.bedAt = 0;                        // not before this time does she set off for bed again
+  // Day 8: the home. route(x, z, tx, tz) -> {x, z}: the next spot on the way (round the house, in at its door);
+  // collide(x, z) -> [x, z]: out of its walls; keep({x, z}) -> {x, z}: a spot she is sent to, off the furniture
+  b.route = null; b.collide = null; b.keep = null;
   const playing = () => !!b.yarn && (b.goal === 'yarn' || ['pounce', 'bat'].includes(b.mode) || ['pounce', 'swipe'].includes(b.face?.then));
   const toyDown = () => !!(b.yarn && !b.yarn.held && !b.yarn.air && !b.yarn.reel && b.yarn.flying === 0);
   const friendSpot = () => b.friend || [b.x + (b.viewer[0] - b.x) * 0.4, b.z + (b.viewer[1] - b.z) * 0.4];
@@ -177,6 +180,7 @@ export function createBrain(o = {}) {
    */
   function wakeCross() {
     b.target = null; b.goal = null;
+    b.snuggle = false;
     mind.feel('woken');
     cheer(-0.06);
     emit('woken', { angry: true });
@@ -228,6 +232,9 @@ export function createBrain(o = {}) {
     if (d < bd.r * 0.4) { b.target = null; b.goal = null; lieDown(); return; }     // on it already
     const front = dx * bd.ex + dz * bd.ez;                 // how far out in front of the bed she is
     const gate = { x: bd.x + bd.ex * (bd.outer + 4.5), z: bd.z + bd.ez * (bd.outer + 4.5) };
+    // Day 8: her bed is in the home. From outside she comes in at the door, which is in front of it: to its front
+    const w = b.route ? b.route(b.x, b.z, bd.x, bd.z) : null;
+    if (w && Math.hypot(w.x - bd.x, w.z - bd.z) > 0.5) { go(gate, 'bed', d > 34); return; }
     if (d < bd.r || front > d * 0.82) go({ x: bd.x, z: bd.z }, 'bedin', false);   // on the cushion, or straight in front: in she goes
     else if (front < bd.outer * 0.6) {                     // beside or behind it: round the nearer side first, not through it
       const side = (dx * -bd.ez + dz * bd.ex) >= 0 ? 1 : -1;
@@ -271,7 +278,7 @@ export function createBrain(o = {}) {
 
   /** Go somewhere: from sitting she stands up first, from lying she wakes up first. */
   function go(target, goal, fast) {
-    b.target = inside(target);
+    b.target = inside(b.keep ? b.keep(target) : target);
     b.goal = goal;
     b.fast = fast;
     if (lying()) { wake(null); return; }
@@ -290,6 +297,7 @@ export function createBrain(o = {}) {
 
   function wake(after) {                                 // a nap ends with a big stretch
     b.after = after;
+    b.snuggle = false;
     enter('stretch', KITTY.clips.Stretch);
     emit('wake');
     emit('yawn', { delay: 0.75 });
@@ -538,6 +546,27 @@ export function createBrain(o = {}) {
 
   b.walkTo = (x, z) => go({ x, z }, null, false);
   b.nap = () => { if (sitting()) { enter('liedown', 1.4); emit('sigh'); } };
+  // Day 8: bedtime. You got into your bed: she goes to hers and sleeps there until you get up (b.snuggle).
+  // Not while she is eating or in the middle of a game. Returns whether she is going (or already there).
+  b.snuggle = false;
+  b.toBed = ({ snuggle = true } = {}) => {
+    if (!b.bed) return false;
+    if (['eat', 'pounce', 'bat'].includes(b.mode) || b.goal === 'eat') return false;
+    if (b.mode === 'purr') emit('purr-end');
+    dropAsk();
+    const onIt = Math.hypot(b.x - b.bed.x, b.z - b.bed.z) < b.bed.r * 0.5;
+    if (!(lying() && onIt)) { b.after = null; b.face = null; goBed(); }
+    b.snuggle = snuggle;                                   // (after goBed: waking from a nap elsewhere clears it)
+    return true;
+  };
+  /** Day 8: you got up: so does she (a stretch and a yawn, no grudge: nobody woke her rudely) */
+  b.wakeUp = () => {
+    b.snuggle = false;
+    if (!lying()) return false;
+    if (mind) mind.feel('rested');
+    wake(null);
+    return true;
+  };
   // Day 6: her friend (friendbrain.js). It rubs its cheek on hers or touches noses: she looks at it, and if she is
   // sitting quietly she purrs for as long as it lasts (pal: true, so it earns you nothing: it was not you).
   b.palLook = null;
@@ -570,8 +599,11 @@ export function createBrain(o = {}) {
   }
 
   function steer(dt, speedMax, turnRate) {
-    const dx = b.target.x - b.x, dz = b.target.z - b.z;
-    const dist = Math.hypot(dx, dz);
+    // Day 8: with a house on the plate, the way there may be round a corner or through its door (b.route)
+    const way = b.route ? b.route(b.x, b.z, b.target.x, b.target.z) : b.target;
+    const viaDoor = way !== b.target && (way.x !== b.target.x || way.z !== b.target.z);
+    const dx = way.x - b.x, dz = way.z - b.z;
+    const dist = viaDoor ? Math.hypot(b.target.x - b.x, b.target.z - b.z) : Math.hypot(dx, dz);
     const want = Math.atan2(dx, dz);
     const diff = wrap(want - b.heading);
     b.heading = wrap(b.heading + clamp(diff, -turnRate * dt, turnRate * dt));
@@ -579,9 +611,16 @@ export function createBrain(o = {}) {
     const slow = clamp(dist / (speedMax * 0.55), 0.35, 1);
     const goal = speedMax * align * slow;
     b.speed += (goal - b.speed) * (1 - Math.exp(-dt * 6));
-    const stepLen = Math.min(b.speed * dt, dist);         // never overshoot the spot
+    const stepLen = Math.min(b.speed * dt, viaDoor ? Math.hypot(dx, dz) + 1 : dist);   // never overshoot the spot
+    const x0 = b.x, z0 = b.z;
     b.x += Math.sin(b.heading) * stepLen;
     b.z += Math.cos(b.heading) * stepLen;
+    if (b.collide) {
+      [b.x, b.z] = b.collide(b.x, b.z);                  // (and never into a wall)
+      // a wall or a bed in the way of the spot itself: she gives up after a moment rather than walk on the spot
+      const moved = Math.hypot(b.x - x0, b.z - z0);
+      b.stuck = stepLen > 0.02 && moved < stepLen * 0.25 ? (b.stuck || 0) + dt : 0;
+    }
     return dist;
   }
 
@@ -868,6 +907,7 @@ export function createBrain(o = {}) {
         break;
       case 'sleep':
         b.energy = clamp(b.energy + dt / (mind ? 30 : 15), 0, 1);
+        if (b.snuggle) break;                              // Day 8: bedtime with you: she sleeps until you get up
         if (!mind) { if (b.timer <= 0) wake(null); break; }
         // she sleeps until she has had enough (or it has been long enough)
         if (b.timer <= 0 && ((b.energy >= 0.999 && mind.sleepy < 0.12) || b.timer < -75)) {
@@ -908,7 +948,7 @@ export function createBrain(o = {}) {
         const exact = b.goal === 'eat' || b.goal === 'yarn' || b.goal === 'bed' || b.goal === 'bedin' || b.goal === 'bedside';
         const top = b.mode === 'run' ? KITTY.runSpeed : fast ? KITTY.trotSpeed : KITTY.walkSpeed;
         const dist = steer(dt, top, b.mode === 'run' ? 2.6 : fast ? 3.2 : 2.0);
-        if (dist < (exact ? 0.5 : fast ? 4.5 : 3.0)) arrive();
+        if (dist < (exact ? 0.5 : fast ? 4.5 : 3.0) || b.stuck > 2) { b.stuck = 0; arrive(); }
         break;
       }
       case 'face': {

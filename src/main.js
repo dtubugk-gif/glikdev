@@ -395,14 +395,31 @@ async function start() {
   // Day 7 (idea by @elenaabrosimova1968): the garden and the parrots' perch (the garden itself loads further down)
   let gardenMod = null;
   if (kitty) try { gardenMod = await import('./garden.js'); } catch (err) { console.warn('Glikdev: the garden did not load', err); }
+  // Day 8 (idea by @Darkbacon155): the home. Its rules (walls, the way in and out) are homelogic.js; home.js draws it.
+  // Until the model is in, nothing changes: no walls, no detours (and if it never loads, there is no house at all).
+  let homeMod = null, house = null;
+  const playerBoxes = [...(town ? [town.SHOP_BOX] : []), ...(gardenMod ? [gardenMod.BED_BOX] : [])];
+  if (kitty) try { homeMod = await import('./home.js'); } catch (err) { console.warn('Glikdev: the home did not load', err); }
+  const homeRoute = (x, z, tx, tz, r) => (house ? homeMod.route(x, z, tx, tz, r) : { x: tx, z: tz });
+  const homing = homeMod ? homeMod.createHome({ scene: world.scene, url: stamped('models/home.glb'), renderer })
+    .then((h) => {
+      house = h;
+      playerBoxes.push(...homeMod.WALL_BOXES, homeMod.OWNER_BED_BOX);
+      kitty?.setHome({ route: (x, z, tx, tz) => homeMod.route(x, z, tx, tz, 2.4),
+        collide: (x, z) => homeMod.collide(x, z, 2.4, { bed: true, basket: true }), keep: (p) => homeMod.outOfHome(p.x, p.z, 3.2) });
+    }).catch((err) => { console.warn('Glikdev: the home did not load', err); house = null; }) : null;
+  if (!live) await homing;
   if (kitty && (live || pd)) {
     try {
       const { createPlayer, PLAYER } = await import('./player.js');
       PLAYER_EYE = PLAYER.eye;
-      player = await createPlayer({ scene: world.scene, url: stamped('models/player.glb'),
+      player = await createPlayer({ scene: world.scene, url: stamped('models/player.glb'), sleepEyesUrl: stamped('models/player_eye_closed.webp'),
         start: pd ? pd.start : (params.get('view') === 'first' ? { x: 6, z: 17.5, heading: Math.atan2(-6, -17.5) } : { x: 7.5, z: 7, heading: home.az }),
-        boxes: [...(town ? [town.SHOP_BOX] : []), ...(gardenMod ? [gardenMod.BED_BOX] : [])],
+        boxes: playerBoxes,                                // (Day 8: the home's walls join once it is in)
+        route: homeRoute,
+        bed: homeMod ? { lie: homeMod.OWNER_BED.lie, side: homeMod.OWNER_BED.side, heading: homeMod.OWNER_BED.heading, top: homeMod.OWNER_BED.top } : null,
         circles: [() => ({ x: kitty.brain.x, z: kitty.brain.z, r: 2.8 }), ...(town ? [() => town.BED_CIRCLE] : []),
+          () => (house ? homeMod.BASKET_CIRCLE : { x: 0, z: 0, r: 0 }),
           ...(gardenMod ? [() => gardenMod.PERCH_CIRCLE] : []),
           () => (friend ? friend.circle() : { x: 0, z: 0, r: 0 }),
           ...[0, 1, 2].map((i) => () => (atomBox ? atomBox.circle(i) : { x: 0, z: 0, r: 0 }))],
@@ -410,7 +427,8 @@ async function start() {
         onStep: (running) => { audio?.event({ type: 'footstep', strong: running }); if (running && kitty) fx?.dust(kitty.t, player.x, player.z, 0.42, 3, player.heading + Math.PI); },
         // Day 7: the jump: a push off the ground, and a thump and a puff of dust as you land
         onJump: (what) => {
-          if (what === 'up') { audio?.event({ type: 'footstep', strong: true }); audio?.event({ type: 'leap' }); }
+          if (what === 'bed-land') { audio?.event({ type: 'land' }, 0.7); return; }   // (a soft flop onto the mattress: no dust)
+          if (what === 'up' || what === 'bed-up') { audio?.event({ type: 'footstep', strong: true }); audio?.event({ type: 'leap' }); }
           else { audio?.event({ type: 'footstep', strong: true }); audio?.event({ type: 'land' }); if (kitty) fx?.dust(kitty.t, player.x, player.z, 0.9, 6); }
         } });
       rig.moveKeys = false;
@@ -461,6 +479,10 @@ async function start() {
       player: player ? { x: player.x, z: player.z } : null,
       bed: town && bedThing ? town.BED_SPOT : null,
       keepOut: town || gardenMod ? (x, z) => { let p = town ? town.outOfShop(x, z, 10) : { x, z }; if (gardenMod) p = gardenMod.outOfGarden(p.x, p.z, 4); return [p.x, p.z]; } : null,
+      // Day 8: its basket in the home, the way in and out, never through a wall
+      basket: house ? homeMod.BASKET : null,
+      route: house ? (x, z, tx, tz) => homeMod.route(x, z, tx, tz, 1.6) : null,
+      collide: house ? (x, z, r, basketOK) => homeMod.collide(x, z, r, { bed: true, basket: !basketOK }) : null,
     };
   };
   const friending = kitty && (live || fd) ? (async () => {
@@ -557,6 +579,7 @@ async function start() {
     if (town) keep.push({ x: town.SHOP_BOX.x, z: town.SHOP_BOX.z, r: 15 }, { x: town.BED_CIRCLE.x, z: town.BED_CIRCLE.z, r: town.BED_CIRCLE.r + 4 });
     for (const i of [0, 1, 2]) { const c = atomBox.circle(i); if (c.r) keep.push({ x: c.x, z: c.z, r: 7.5 }); }
     if (gardenMod) keep.push(...gardenMod.KEEP_OUT);
+    if (house) keep.push(...homeMod.HOME_KEEP);
     const p = atomMod.landSpot(player.x, player.z, keep);
     if (!atomBox.drop(t, p.x, p.z)) return false;
     dropped++;
@@ -1134,6 +1157,97 @@ async function start() {
     }
   });
 
+  // ------------------------------------------------------------ the home (Day 8, idea by @Darkbacon155)
+  // Tap your bed: you walk in and flop into it, and it is bedtime: she goes to her bed, Mochi to its basket, and
+  // everyone sleeps; after a cosy while together it pays a few coins. Move (or tap anywhere) to get up.
+  const nap = { on: false, at: 0, paidAt: -1e9, state: null };
+  const duskEl = $('dusk');
+  const homeHead = new THREE.Vector3(), homeFocus = new THREE.Vector3();
+  let homeHinted = !!saved?.homeSeen;
+  function goToBed() {
+    if (!player || !house) return;
+    if (player.inBed) return;
+    backToHer();
+    wantShop = false; wantBox = -1; wantGarden = null; wantParrot = false; wantPacket = -1;
+    player.goToBed();
+    if (live) flashHint('Bedtime!', 2200);
+  }
+  /** you tapped something of the home */
+  function tapHome(what) {
+    audio?.unlock();
+    if (what === 'ownerbed') { goToBed(); return; }
+    if (what === 'herbed') {
+      if (kitty.brain.isAsleep()) { flashHint(`${care.name} is fast asleep`, 2200); return; }
+      if (kitty.brain.toBed({ snuggle: false })) flashHint(`${care.name} is off for a nap`, 2400);
+      return;
+    }
+    if (what === 'basket') {
+      if (friend?.brain.toBasket(30)) flashHint(`${care.friendName} curls up in its basket`, 2400);
+      return;
+    }
+    if (what === 'house' && player) { backToHer(); walkTo(homeMod.DOOR_IN.x, homeMod.DOOR_IN.z); }
+  }
+  /** each step: bedtime starts when you flop into bed, pays once you have all slept a while, ends when you get up */
+  function bedtimeStep(t) {
+    if (!player || !house) return;
+    const st = player.bedState;
+    if (st !== nap.state) {
+      // (a recording scripts the cats itself, so that any frame of it can be drawn on its own)
+      if (st === 'flop') {                                   // into bed: bedtime for everyone
+        nap.on = true; nap.at = t;
+        if (!demo) { kitty.brain.toBed({ snuggle: true }); friend?.brain.toBasket(1e6); }
+        // the camera steps back to the middle of the room, so all three of you are in the picture
+        if (!demo && !firstPerson) { nap.dist = rig.goal.dist; rig.goal.dist = Math.min(rig.maxDist, Math.max(rig.goal.dist, innerWidth < innerHeight ? 58 : 44)); }
+      }
+      if (st === 'hop' && nap.on) {                          // up you get: so do they
+        nap.on = false;
+        if (!demo) { kitty.brain.wakeUp(); friend?.brain.endBasket(); }
+        if (nap.dist != null) { rig.goal.dist = nap.dist; nap.dist = null; }
+        if (live) flashHint(`Good morning, ${care.name}!`, 2600);
+      }
+      nap.state = st;
+    }
+    if (nap.on && player.asleep && t - nap.paidAt > homeMod.NAP.every) {
+      const sheAsleep = kitty.brain.isAsleep() && kitty.brain.snuggle;
+      const itAsleep = !friend || friend.brain.isAsleep();
+      if (sheAsleep && itAsleep) {
+        if (nap.both == null) nap.both = t;
+        if (t - nap.both >= homeMod.NAP.after) {
+          nap.paidAt = t; nap.both = null;
+          wallet.earn(homeMod.NAP.coins);
+          tokenFX?.spawn(t, homeHead, homeMod.NAP.coins);
+          audio?.event({ type: 'token', n: homeMod.NAP.coins });
+          repaintShop();
+          if (live) { saveWallet(wallet); flashHint(`A nap together: +${homeMod.NAP.coins} coins`, 3200); }
+        }
+      } else nap.both = null;
+    }
+    // the first time you are by your home: what it is for
+    if (live && !homeHinted && homeMod.byHouse(player.x, player.z, 4)) {
+      homeHinted = true; care.homeSeen = true; persist();
+      flashHint(`Home! ${coarse ? 'Tap' : 'Click'} your bed for bedtime, or a cat's bed to send it for a nap`, 7000);
+    }
+  }
+  /** the house each frame: the roof off while you (or, filming, the cat in the shot) are inside; walls in the way fade */
+  function paintHome(t, dt) {
+    const demoFocus = demo && kd?.homeFocus ? kd.homeFocus : null;
+    if (demoFocus === 'friend' && friend) homeFocus.set(friend.brain.x, 1.5, friend.brain.z);
+    else if (player && demoFocus !== 'kitty') homeFocus.set(player.x, 2.6 + player.walker.y(), player.z);
+    else if (kitty) homeFocus.set(kitty.brain.x, 2.4, kitty.brain.z);
+    // (a recording: the demo may say from when the roof is off; and nothing eases, so any frame can be drawn alone)
+    const open = kd?.homeOpen != null ? t >= kd.homeOpen : homeMod.inHouse(homeFocus.x, homeFocus.z, -1.5);
+    // (filming: the roof's lift is a function of the clock, from homeOpen on)
+    const liftAt = kd?.homeOpen != null ? Math.min(1, Math.max(0, (t - kd.homeOpen) / 1.1)) : null;
+    house.update(demo ? 10 : dt, camera.position, homeFocus, open, liftAt == null ? null : liftAt * liftAt * (3 - 2 * liftAt));
+    // your z's
+    if (player?.asleep) {
+      const h = homeMod.OWNER_BED, f = [Math.sin(h.heading), Math.cos(h.heading)];
+      homeHead.set(h.lie.x + f[0] * 1.1, h.top + 1.6, h.lie.z + f[1] * 1.1);   // (your head: 1.1 m toward the headboard)
+      house.zzz(t, homeHead);
+    } else house.zzz(t, null);
+    if (duskEl) duskEl.classList.toggle('is-on', !!player?.inBed && nap.on);
+  }
+
   const kittyState = () => {
     const b = kitty.brain, h = kitty.headPosition();
     return { x: b.x, z: b.z, heading: b.heading, head: [h.x, h.y, h.z],
@@ -1237,6 +1351,8 @@ async function start() {
       const gi = garden ? garden.pick(r) : -1;
       if (gi >= 0) { tapPlot(gi); dismissHint(); return; }
       if (store && store.pick(r)) { goShop(); dismissHint(); return; }
+      const hp = house ? house.pick(r) : null;             // Day 8: your bed, her bed, Mochi's basket, the house itself
+      if (hp) { tapHome(hp); dismissHint(); return; }
       if (r.intersectPlane(groundPlane, hit) && Math.abs(hit.x) < PLATE.half - 4 && Math.abs(hit.z) < PLATE.half - 4) {
         if (player) { backToHer(); walkTo(hit.x, hit.z); }
         else { const p = town ? town.outOfShop(hit.x, hit.z) : hit; kitty.call(p.x, p.z); }
@@ -1250,7 +1366,7 @@ async function start() {
         if (e.buttons || carry) return;
         const r = rayAt(e.clientX, e.clientY);
         const what = kitty.pick(r);
-        canvas.style.cursor = what === 'yarn' ? 'grab' : what || friend?.pick(r) || (atomBox && atomBox.pick(r) >= 0) || (store && store.pick(r)) || parrots?.pick(r) || (garden && garden.pick(r) >= 0) ? 'pointer' : '';
+        canvas.style.cursor = what === 'yarn' ? 'grab' : what || friend?.pick(r) || (atomBox && atomBox.pick(r) >= 0) || (store && store.pick(r)) || parrots?.pick(r) || (garden && garden.pick(r) >= 0) || house?.pick(r) ? 'pointer' : '';
       });
     }
   }
@@ -1380,6 +1496,7 @@ async function start() {
     saveCare({ name: care.name, muted: care.muted, cat: care.cat, hunger: +b.hunger.toFixed(3), happy: +b.happy.toFixed(3), at: Date.now(),
       friendName: care.friendName, ...(care.friendMet || friendMet ? { friendMet: true } : {}),
       ...(care.mindHint ? { mindHint: true } : {}),
+      ...(care.homeSeen || saved?.homeSeen ? { homeSeen: true } : {}),
       ...(mind && !mindParam ? { mind: mind.toJSON() } : saved?.mind ? { mind: saved.mind } : {}) });
   }
   if (kitty && (filmTag || (showUI && !demo))) {
@@ -1825,7 +1942,10 @@ async function start() {
   // hint, until the first tap that does something
   if (showUI && !demo && !short) {
     hintEl.textContent = kitty && player
-      ? (gardenMod && !wallet.seedTotal && !savedGarden                    // the day's new thing (Day 7): parrots, seeds, a garden
+      ? (homeMod && !saved?.homeSeen                                        // the day's new thing (Day 8): the home
+        ? (coarse ? 'Tap the ground to walk there · New: a home for all three of you! Tap the house to go in'
+          : 'Click the ground or use WASD to walk · New: a home for all three of you! Click the house to go in')
+        : gardenMod && !wallet.seedTotal && !savedGarden                    // the day's new thing (Day 7): parrots, seeds, a garden
         ? (coarse ? 'Tap the ground to walk there · New: parrots bring seeds! Plant them in the garden'
           : 'Click the ground or use WASD to walk · New: parrots bring seeds! Plant them in the garden')
         : !friendMet                                                        // the day's new thing (Day 6): her friend
@@ -1947,17 +2067,19 @@ async function start() {
         if (atomBox && live) {
           if (nextDrop == null) nextDrop = kitty.t + ATOM_BOX.first;
           if (kitty.t >= nextDrop) {
-            const calm = !document.querySelector('dialog[open]') && !(town && town.atShop(player.x, player.z));
+            const calm = !document.querySelector('dialog[open]') && !(town && town.atShop(player.x, player.z)) && !nap.on && !(house && homeMod.byHouse(player.x, player.z, 6));
             nextDrop = kitty.t + (calm && dropBomb() ? ATOM_BOX.every + (dropped % 3) * 2 : 2);
           }
         }
       }
       if (wandOn) aimRod();
+      bedtimeStep(kitty.t);                                // Day 8
     }
     if (kitty && !demo && follow) {                        // the camera keeps you in the middle (before Day 3: the kitty)
       const f = kitty.interest(interest);
       if (player) {
         f.set(player.x, 0, player.z);                       // third person: locked on you
+        if (nap.on && house) { const m = homeMod.homeFrame(3, -5); f.x += (m.x - f.x) * 0.8; f.z += (m.z - f.z) * 0.8; }   // Day 8: bedtime: the room
         // ...leaning toward your fish while it is out on its line, so the chase stays in the picture
         const y = wandOn ? kitty.brain.yarn : null;
         let lx = 0, lz = 0;
@@ -2008,6 +2130,7 @@ async function start() {
       paintGarden(kitty.t);
     }
     if (kitty) fx?.update(kitty.t);
+    if (house) paintHome(kitty ? kitty.t : t, dt);       // Day 8: the roof lifts while you are inside; walls in the way fade
     world.update(t);
     world.render();
   }
@@ -2028,7 +2151,7 @@ async function start() {
     const dt = Math.min(0.05, Math.max(0, (ts - last) / 1000));
     if (dialog.open) { last = ts; return; }                // nothing to see behind the Day log
     // when nobody is touching the camera, 30 fps is plenty
-    if (!demo && rig.idle() && !player?.busy() && !(kitty && (kitty.busy() || friend?.busy() || fx?.busy() || tokenFX?.busy() || atomFX?.busy() || atomBox?.busy(kitty.t) || parrots?.busy() || garden?.busy(kitty.t) || blast?.active(kitty.t) || wardrobe?.busy(kitty.t) || (wandOn && wand.busy())))) { skip = !skip; if (skip) return; }
+    if (!demo && rig.idle() && !player?.busy() && !(kitty && (kitty.busy() || friend?.busy() || fx?.busy() || tokenFX?.busy() || atomFX?.busy() || atomBox?.busy(kitty.t) || parrots?.busy() || garden?.busy(kitty.t) || blast?.active(kitty.t) || wardrobe?.busy(kitty.t) || house?.busy() || nap.on || (wandOn && wand.busy())))) { skip = !skip; if (skip) return; }
     last = ts;
     step((ts - t0) / 1000, dt);
     // Day 6: a device that cannot keep up with the finished picture (glow, grade) gets the plain one; checked over

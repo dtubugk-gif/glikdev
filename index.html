@@ -3,18 +3,18 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Glikdev – Day 7: parrots, seeds and atomic fruit</title>
-  <meta name="description" content="A game built one YouTube comment at a time. Day 7: parrots fly in with seeds. Plant pineapples, dragon fruit and mangosteens, and let an atom bomb land nearby to mutate them: Irradiated, Cherenkov Glow or Atomic fruit is worth more. Comment what Day 8 should add.">
+  <title>Glikdev – Day 8: a home for the cats and you</title>
+  <meta name="description" content="A game built one YouTube comment at a time. Day 8: a home for both cats and you. Walk in through its arched door: her bed, Mochi's basket and your own bed are inside. Tap your bed for bedtime and everyone curls up to sleep. Comment what Day 9 should add.">
   <meta name="theme-color" content="#a9cfee">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Glikdev">
-  <meta property="og:title" content="Glikdev – Day 7: parrots, seeds and atomic fruit">
-  <meta property="og:description" content="A game built one YouTube comment at a time. Day 7: parrots bring seeds, and atom bombs mutate what grows. What should Day 8 add?">
+  <meta property="og:title" content="Glikdev – Day 8: a home for the cats and you">
+  <meta property="og:description" content="A game built one YouTube comment at a time. Day 8: a home for both cats and you, with a bed for each of you. Bedtime! What should Day 9 add?">
   <meta property="og:url" content="https://dtubugk-gif.github.io/glikdev/">
   <meta property="og:image" content="https://dtubugk-gif.github.io/glikdev/poster.jpg">
   <meta property="og:image:width" content="1440">
   <meta property="og:image:height" content="900">
-  <meta property="og:image:alt" content="A raised garden bed of pineapples, dragon fruit and mangosteen trees, some mutated deep blue, acid green and jade, with a red parrot on a wooden perch beside it">
+  <meta property="og:image:alt" content="A cosy cream cottage with a timber frame, a tiled roof and a wide arched door, a big ginger kitty and a small cream kitten in front of it">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" href="logo.svg?v=1bc5c85a3a6e" type="image/svg+xml">
   <link rel="preload" href="fonts/fredoka-700.woff2" as="font" type="font/woff2" crossorigin>
@@ -47,6 +47,8 @@
       "./src/fx.js": "./src/fx.js?v=1bc5c85a3a6e",
       "./src/gardenlogic.js": "./src/gardenlogic.js?v=1bc5c85a3a6e",
       "./src/garden.js": "./src/garden.js?v=1bc5c85a3a6e",
+      "./src/homelogic.js": "./src/homelogic.js?v=1bc5c85a3a6e",
+      "./src/home.js": "./src/home.js?v=1bc5c85a3a6e",
       "./src/parrots.js": "./src/parrots.js?v=1bc5c85a3a6e",
       "./vendor/three/three.module.js": "./vendor/three/three.module.js?v=1bc5c85a3a6e",
       "./vendor/three/addons/loaders/GLTFLoader.js": "./vendor/three/addons/loaders/GLTFLoader.js?v=1bc5c85a3a6e",
@@ -73,9 +75,9 @@
         <img class="logo" src="logo.svg?v=1bc5c85a3a6e" alt="Glikdev" width="36" height="36">
         <span>A game built by YouTube comments</span>
       </p>
-      <h1><span class="title-day">Day 7.</span> <span class="title-line">Parrots bring seeds. Bombs mutate them.</span></h1>
+      <h1><span class="title-day">Day 8.</span> <span class="title-line">A home for all three of you.</span></h1>
       <!-- static fallback; main.js rewrites the day, the headline and the bubble from the newest days.json entry -->
-      <p class="bubble">What should Day 8 add? Comment it.</p>
+      <p class="bubble">What should Day 9 add? Comment it.</p>
     </header>
 
     <p class="status" id="status" role="status" aria-live="polite">Loading the world…</p>
@@ -142,6 +144,8 @@
   </button>
   <!-- Day 5: an atom bomb landed on you: the picture goes white for a moment (blast.js) -->
   <div class="boom" id="boom" aria-hidden="true" hidden><span id="boom-word">BOOM!</span></div>
+  <!-- Day 8: bedtime: the light goes soft and warm while you sleep in your bed -->
+  <div class="dusk" id="dusk" aria-hidden="true"></div>
   <!-- Day 5: atom tokens from the atom box; tap to see the fur skins they buy -->
   <button class="chip tokens atoms" id="atoms" type="button" aria-haspopup="dialog" aria-controls="catpick" aria-label="Atom tokens: 0. See the fur skins" hidden>
     <img id="atoms-icon" src="models/shop/atomtoken.webp?v=1bc5c85a3a6e" alt="" width="34" height="34">
